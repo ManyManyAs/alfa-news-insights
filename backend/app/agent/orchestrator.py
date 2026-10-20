@@ -13,6 +13,7 @@ import json
 import logging
 
 from app.agent import prompts
+from app.agent.llm_schemas import CriticOut, InsightDraftOut, PlanOut
 from app.agent.rules import critique_rules, draft_rules, repair_rules
 from app.agent.schemas import Insight, SourceRef
 from app.agent.tools import TOOLS, AgentContext, ToolNotAllowed, call_tool
@@ -29,11 +30,15 @@ from app.storage import db
 
 log = logging.getLogger(__name__)
 MAX_ITERATIONS = 2
-MANDATORY = ["get_event", "get_company_profile", "get_bank_theses"]
+MANDATORY = ["get_event_brief", "get_company_profile", "get_bank_theses"]
 
 
 def _record_llm(rec: dict, res: LLMResult) -> None:
     rec.update(model=res.model, tokens_in=res.tokens_in, tokens_out=res.tokens_out, cost_rub=res.cost_rub)
+    if res.cached:
+        rec["cached"] = True
+    if res.repaired:
+        rec["repaired"] = True  # первый ответ не прошёл схему — модель исправила его сама
 
 
 def _rule_plan(ctx: AgentContext) -> dict:
@@ -60,10 +65,13 @@ def plan(ctx: AgentContext, tracer: Tracer) -> dict:
                                  "factors": [f.model_dump() for f in ctx.event.classification.factors]},
                        "company_reasons": ctx.scored.reasons[:5]}, ensure_ascii=False)}]
             try:
-                res = llm.complete("plan", msg, json_mode=True, max_tokens=500)
+                data, res = llm.complete_json("plan", msg, PlanOut, max_tokens=500)
                 _record_llm(rec, res)
-                p = res.json()
-                p["steps"] = [s for s in p.get("steps", []) if s.get("tool") in TOOLS][:7]
+                p = data
+                rejected = [s["tool"] for s in p["steps"] if s.get("tool") not in TOOLS]
+                if rejected:
+                    rec["rejected_tools"] = rejected  # allowlist: неизвестные инструменты не выполняются
+                p["steps"] = [s for s in p["steps"] if s.get("tool") in TOOLS][:7]
                 have = {s["tool"] for s in p["steps"]}
                 p["steps"] = [{"tool": t, "args": {}, "why": "обязательный шаг"} for t in MANDATORY if t not in have] + p["steps"]
             except (LLMUnavailable, ValueError, KeyError, AttributeError) as e:
@@ -81,14 +89,21 @@ def execute(ctx: AgentContext, p: dict, tracer: Tracer) -> None:
                 rec["output"] = call_tool(ctx, s["tool"], s.get("args"))
             except ToolNotAllowed as e:
                 rec["output"] = {"denied": str(e)}
+            res = ctx.memory.pop("_brief_llm", None)
+            if res is not None:
+                _record_llm(rec, res)
 
 
 def _context_for_llm(ctx: AgentContext) -> str:
-    mem = dict(ctx.memory)
-    ev = mem.get("get_event", {})
+    mem = {k: v for k, v in ctx.memory.items() if not k.startswith("_")}
+    # Двухуровневая генерация: если есть общий разбор события, полные тексты новостей не нужны — экономим токены
+    text_limit = 600 if "get_event_brief" in mem else 2500
+    ev = dict(mem.get("get_event", {}))
+    ev["news"] = []
     for n in ctx.event.news:  # новости — как данные внутри тегов
         n_text, _ = sanitize_untrusted(n.text)
-        ev.setdefault("news", []).append({"id": f"news:{n.id}", "source": n.source_title, "title": n.title, "text": n_text[:2500]})
+        ev["news"].append({"id": f"news:{n.id}", "source": n.source_title, "title": sanitize_untrusted(n.title)[0],
+                           "text": n_text[:text_limit]})
     mem["get_event"] = ev
     for k in list(mem):
         if k.startswith("get_bank_theses"):
@@ -119,9 +134,9 @@ def draft(ctx: AgentContext, tracer: Tracer) -> Insight:
             msg = [{"role": "system", "content": prompts.INTERPRET_SYSTEM.format(notice=UNTRUSTED_NOTICE)},
                    {"role": "user", "content": _context_for_llm(ctx)}]
             try:
-                res = llm.complete("interpret", msg, json_mode=True, max_tokens=2000)
+                data, res = llm.complete_json("interpret", msg, InsightDraftOut, max_tokens=2200)
                 _record_llm(rec, res)
-                ins = _parse_insight(res.json(), ctx, f"llm:{res.model}")
+                ins = _parse_insight(data, ctx, f"llm:{res.model}")
                 rec["output"] = ins.model_dump()
                 return ins
             except (LLMUnavailable, ValueError) as e:
@@ -144,11 +159,15 @@ def critique(ins: Insight, ctx: AgentContext, tracer: Tracer, iteration: int) ->
             msg = [{"role": "system", "content": prompts.CRITIC_SYSTEM.format(notice=UNTRUSTED_NOTICE)},
                    {"role": "user", "content": _context_for_llm(ctx) + "\n<draft>\n" + ins.model_dump_json() + "\n</draft>"}]
             try:
-                res = llm.complete("critique", msg, json_mode=True, max_tokens=600)
+                data, res = llm.complete_json("critique", msg, CriticOut, max_tokens=700)
                 _record_llm(rec, res)
-                data = res.json()
-                if data.get("verdict") == "revise":
-                    issues += [f"LLM-критик: {i}" for i in data.get("issues", [])][:5]
+                if data["scores"]:
+                    ins.scores = {k: int(v) for k, v in data["scores"].items()}
+                low = [k for k, v in ins.scores.items() if v < 4]
+                if data["verdict"] == "revise" or low:
+                    issues += [f"LLM-критик: {i}" for i in data["issues"]][:5]
+                    if low and not data["issues"]:
+                        issues.append(f"LLM-критик: низкие оценки по осям {', '.join(low)}")
                 rec["output"] = data
             except (LLMUnavailable, ValueError) as e:
                 rec["output"] = {"skipped": str(e)}
@@ -172,9 +191,11 @@ def adapt(ins: Insight, ctx: AgentContext, issues: list[str], tracer: Tracer) ->
                    {"role": "user", "content": _context_for_llm(ctx) + "\n<draft>\n" + ins.model_dump_json()
                     + "\n</draft>\n<issues>\n" + "\n".join(issues) + "\n</issues>"}]
             try:
-                res = llm.complete("revise", msg, json_mode=True, max_tokens=2000)
+                data, res = llm.complete_json("revise", msg, InsightDraftOut, max_tokens=2200)
                 _record_llm(rec, res)
-                ins = _parse_insight(res.json(), ctx, f"llm:{res.model}")
+                scores = ins.scores
+                ins = _parse_insight(data, ctx, f"llm:{res.model}")
+                ins.scores = scores
                 rec["output"] = ins.model_dump()
             except Exception as e:
                 rec["output"] = {"fallback": str(e)}
@@ -233,8 +254,8 @@ def _profile_label(sid: str, p: CompanyProfile) -> str:
     return labels.get(ref, ref)
 
 
-def run_agent(event: Event, profile: CompanyProfile, role: str | None = None) -> Insight:
-    tracer = Tracer()
+def run_agent(event: Event, profile: CompanyProfile, role: str | None = None, listener=None) -> Insight:
+    tracer = Tracer(listener=listener)
     exposures = compute_exposures(profile, role)
     scored = score_event(event, profile, exposures)
     ctx = AgentContext(event=event, profile=profile, role=role, exposures=exposures, scored=scored)
@@ -268,13 +289,21 @@ def run_agent(event: Event, profile: CompanyProfile, role: str | None = None) ->
     return ins
 
 
-def get_or_create_insight(event: Event, profile: CompanyProfile, role: str | None, force: bool = False) -> Insight:
-    key = f"{event.id}|{profile.uid}|{role or '-'}"
-    if not force:
-        row = db.query_one("SELECT payload FROM insights WHERE key=?", (key,))
-        if row:
-            return Insight.model_validate_json(row["payload"])
-    ins = run_agent(event, profile, role)
+def insight_key(event_id: str, company_uid: str, role: str | None) -> str:
+    return f"{event_id}|{company_uid}|{role or '-'}"
+
+
+def cached_insight(event_id: str, company_uid: str, role: str | None) -> Insight | None:
+    row = db.query_one("SELECT payload FROM insights WHERE key=?", (insight_key(event_id, company_uid, role),))
+    return Insight.model_validate_json(row["payload"]) if row else None
+
+
+def get_or_create_insight(event: Event, profile: CompanyProfile, role: str | None, force: bool = False,
+                          listener=None) -> Insight:
+    key = insight_key(event.id, profile.uid, role)
+    if not force and (hit := cached_insight(event.id, profile.uid, role)):
+        return hit
+    ins = run_agent(event, profile, role, listener=listener)
     with db.tx() as conn:
         conn.execute("INSERT OR REPLACE INTO insights(key, event_id, company_uid, role, payload, trace_id) VALUES (?,?,?,?,?,?)",
                      (key, event.id, profile.uid, role, ins.model_dump_json(), ins.trace_id))

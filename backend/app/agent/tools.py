@@ -46,6 +46,15 @@ def t_get_event(ctx: AgentContext) -> dict:
             "security_flags": c.security_flags}
 
 
+def t_get_event_brief(ctx: AgentContext) -> dict:
+    """Общий для всех клиентов разбор события (уровень 1, кэшируется)."""
+    from app.agent.event_brief import get_event_brief
+
+    brief, by, res = get_event_brief(ctx.event)
+    ctx.memory["_brief_llm"] = res  # для трассировки (модель, токены, стоимость)
+    return {"generated_by": by, **brief.model_dump()}
+
+
 def t_get_bank_theses(ctx: AgentContext, factors: list[str] | None = None, include_stale: bool = False) -> dict:
     factors = factors or ctx.scored.matched_factors
     kb = get_knowledge()
@@ -115,7 +124,8 @@ def t_check_consistency(ctx: AgentContext) -> dict:
 
 TOOLS: dict[str, tuple[Callable[..., dict], str]] = {
     "get_company_profile": (t_get_company_profile, "Профиль компании и её чувствительность к факторам"),
-    "get_event": (t_get_event, "Факты, прогнозы, числа и источники события"),
+    "get_event": (t_get_event, "Факты, прогнозы, числа и источники события (классификация)"),
+    "get_event_brief": (t_get_event_brief, "Общий разбор события: факты, каналы влияния, сверка с позицией банка"),
     "get_bank_theses": (t_get_bank_theses, "Тезисы позиции Альфа-Банка по факторам (args: factors)"),
     "search_bank_analytics": (t_search_bank_analytics, "Поиск по аналитике Альфа-Банка (args: query)"),
     "search_related_news": (t_search_related_news, "Связанные события из базы новостей"),

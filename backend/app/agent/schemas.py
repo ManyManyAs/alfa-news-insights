@@ -72,6 +72,7 @@ class Insight(BaseModel):
     relevance: dict = Field(default_factory=dict)
     effect: str = "watch"
     quality: list[QualityCheck] = Field(default_factory=list)
+    scores: dict[str, int] = Field(default_factory=dict)  # LLM-критик: оценки 1–5 по осям
     iterations: int = 1
     generated_by: str = "rules"
     trace_id: str

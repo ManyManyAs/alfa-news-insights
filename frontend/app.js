@@ -16,6 +16,34 @@ async function api(path, opts = {}) {
   return r.json();
 }
 
+// SSE поверх fetch (EventSource не умеет заголовки X-User-Id)
+async function sse(path, opts, onEvent) {
+  const headers = { "Content-Type": "application/json", "X-User-Id": state.user };
+  const r = await fetch(path, { ...opts, headers });
+  if (!r.ok) { throw new Error(`${r.status}: ${await r.text()}`); }
+  const reader = r.body.getReader(); const dec = new TextDecoder(); let buf = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let i;
+    while ((i = buf.indexOf("\n\n")) >= 0) {
+      const line = buf.slice(0, i).trim(); buf = buf.slice(i + 2);
+      if (line.startsWith("data:")) onEvent(JSON.parse(line.slice(5)));
+    }
+  }
+}
+
+const STEP_RU = { relevance: "Оценка релевантности", plan: "План анализа", draft: "Черновик интерпретации", finalize: "Итог",
+  "repair:rules": "Удаление неподтверждённого", revise: "Правка по замечаниям" };
+function stepTitle(name) {
+  if (STEP_RU[name]) return STEP_RU[name];
+  if (name.startsWith("tool:")) return "Инструмент: " + name.slice(5);
+  if (name.startsWith("critique:llm")) return "Проверка LLM-критиком";
+  if (name.startsWith("critique:rules")) return "Самопроверка правилами";
+  return name;
+}
+
 function q(params) { return new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== "")).toString(); }
 
 // ---------------------------------------------------------------- init / сессия
@@ -111,10 +139,21 @@ async function loadFeed() {
 async function openInsight(eventId, refresh = false) {
   state.current = eventId;
   document.querySelectorAll(".feed-item").forEach((el) => el.classList.toggle("active", el.dataset.ev === eventId));
-  $("#insightPanel").innerHTML = `<div class="insight loading">Агент анализирует событие: план → инструменты → черновик → самопроверка…</div>`;
+  $("#insightPanel").innerHTML = `<div class="insight"><div class="eyebrow">Агент анализирует событие</div>
+    <ol class="progress" id="agentProgress"></ol></div>`;
+  const prog = () => document.getElementById("agentProgress");
   try {
-    state.insight = await api(`/api/insights/${eventId}?${q({ company_id: state.company, role: state.role, refresh })}`);
-    renderInsight("analysis");
+    await sse(`/api/insights/${eventId}/stream?${q({ company_id: state.company, role: state.role, refresh })}`, {}, (e) => {
+      if (state.current !== eventId || !prog()) return;
+      if (e.type === "step_start") {
+        prog().insertAdjacentHTML("beforeend", `<li class="run" data-step="${esc(e.name)}">${esc(stepTitle(e.name))}<span class="muted small"></span></li>`);
+      } else if (e.type === "step_end") {
+        const li = [...prog().querySelectorAll("li.run")].reverse().find((x) => x.dataset.step === e.name);
+        if (li) { li.className = e.fallback ? "fallback" : "ok"; li.querySelector("span").textContent = ` · ${e.model ? e.model + " · " : ""}${e.duration_ms} мс${e.fallback ? " · без LLM" : ""}`; }
+      } else if (e.type === "done") {
+        state.insight = e.insight; renderInsight("analysis");
+      } else if (e.type === "error") { throw new Error(e.detail); }
+    });
   } catch (e) { $("#insightPanel").innerHTML = `<div class="insight bad">Ошибка: ${esc(e.message)}</div>`; }
 }
 
@@ -194,10 +233,14 @@ function bindChat() {
     if (!text) return;
     $("#chatLog").insertAdjacentHTML("beforeend", `<div class="msg user">${esc(text)}</div>`);
     $("#chatInput").value = "";
+    $("#chatLog").insertAdjacentHTML("beforeend", `<div class="msg bot typing"></div>`);
+    const bubble = [...document.querySelectorAll("#chatLog .msg.bot")].pop();
     try {
-      const r = await api("/api/chat", { method: "POST", body: JSON.stringify({ event_id: state.current, company_id: state.company, role: state.role, question: text }) });
-      $("#chatLog").insertAdjacentHTML("beforeend", `<div class="msg bot">${esc(r.answer)}</div>`);
-    } catch (e) { $("#chatLog").insertAdjacentHTML("beforeend", `<div class="msg bot bad">${esc(e.message)}</div>`); }
+      await sse("/api/chat/stream", { method: "POST", body: JSON.stringify({ event_id: state.current, company_id: state.company, role: state.role, question: text }) }, (e) => {
+        if (e.type === "delta") { bubble.classList.remove("typing"); bubble.textContent += e.text; }
+        if (e.type === "meta") bubble.title = "режим: " + e.mode;
+      });
+    } catch (e) { bubble.classList.add("bad"); bubble.textContent = e.message; }
   };
   $("#chatSend").onclick = () => send($("#chatInput").value.trim());
   $("#chatInput").onkeydown = (e) => { if (e.key === "Enter") send($("#chatInput").value.trim()); };
@@ -231,8 +274,8 @@ async function loadMetrics() {
   const m = await api("/api/metrics");
   const card = (t, v, s = "") => `<div class="card metric"><div class="muted small">${t}</div><div class="v">${v}</div><div class="muted small">${s}</div></div>`;
   $("#metricsBox").innerHTML = [
-    card("Режим LLM", m.llm.mode, "mock — без вызовов моделей"),
-    card("Потрачено сегодня", `${m.llm.spent_today_rub} ₽`, `лимит ${m.llm.daily_budget_rub} ₽`),
+    card("Режим LLM", m.llm.mode, { live: "вызовы разрешённых моделей", replay: "ответы моделей из снапшота, без ключа", mock: "без LLM" }[m.llm.mode] || ""),
+    card("Потрачено сегодня (МСК)", `${m.llm.spent_rub} ₽`, `лимит ${m.llm.budget_rub} ₽ · резерв для пользователей после ${m.llm.background_limit_rub} ₽`),
     card("Инсайтов построено", m.insights.total),
     card("Прошли самопроверку", m.insights.quality_passed_share != null ? Math.round(m.insights.quality_passed_share * 100) + "%" : "—"),
     card("Обратная связь", `👍 ${m.feedback.pos} · 👎 ${m.feedback.neg}`),

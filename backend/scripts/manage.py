@@ -2,7 +2,8 @@
 
   uv run python scripts/manage.py bootstrap [--force]   # пересобрать профили и демо-новости
   uv run python scripts/manage.py ingest [--source cbr] # собрать новости из источников config/sources.yaml
-  uv run python scripts/manage.py warmup                # прогреть инсайты демо-пользователей
+  uv run python scripts/manage.py warmup [--top 5] [--max-rub 100] [--background] [--roles]
+                                                        # предрасчёт разборов событий и инсайтов демо-персон
   uv run python scripts/manage.py snapshot-export       # сохранить результаты LLM в data/snapshot (для жюри)
   uv run python scripts/manage.py snapshot-import       # подгрузить снапшот в текущую БД
 """
@@ -19,17 +20,45 @@ from app.bootstrap import bootstrap, load_demo_users
 from app.news.ingest import list_events, run_ingest
 
 
-def warmup(top: int = 5) -> None:
+def warmup(top: int = 5, max_rub: float | None = None, background: bool = False, roles: bool = False) -> None:
+    """Предрасчёт: разборы всех событий (уровень 1) + инсайты демо-персон по топ-событиям ленты (уровень 2).
+
+    --background: приоритет «фон» — не трогает резерв бюджета под пользователей.
+    --roles: дополнительно строить инсайты для всех ролей (персонализация по роли в снапшоте).
+    """
+    from app.agent.event_brief import get_event_brief
     from app.agent.orchestrator import get_or_create_insight
     from app.data.profiles import get_profile
+    from app.data.sensitivity import role_titles
+    from app.llm.client import LLMUnavailable, get_llm, llm_priority
     from app.ranking.scorer import rank_feed
 
+    llm = get_llm()
+    start = llm.budget_status()["spent_rub"]
+
+    def over() -> bool:
+        return max_rub is not None and llm.budget_status()["spent_rub"] - start >= max_rub
+
     events = list_events(300)
-    for u in load_demo_users():
-        p = get_profile(u["primary_company"])
-        for s in rank_feed(events, p, u["role"], limit=top):
-            ins = get_or_create_insight(s.event, p, u["role"])
-            print(f"{u['label'][:30]:30s} | {s.event.title[:50]:50s} | {ins.generated_by} | quality={all(c.passed for c in ins.quality)}")
+    with llm_priority("background" if background else "interactive"):
+        try:
+            for e in events:
+                if over():
+                    break
+                _, by, _ = get_event_brief(e)
+                print(f"brief  | {e.title[:60]:60s} | {by}")
+            for u in load_demo_users():
+                p = get_profile(u["primary_company"])
+                for role in ([u["role"], *[r for r in role_titles() if r != u["role"]]] if roles else [u["role"]]):
+                    for s in rank_feed(events, p, role, limit=top):
+                        if over():
+                            raise LLMUnavailable(f"лимит прогона {max_rub} ₽")
+                        ins = get_or_create_insight(s.event, p, role)
+                        print(f"insight| {u['label'][:28]:28s} | {role:10s} | {s.event.title[:44]:44s} | {ins.generated_by} | "
+                              f"quality={all(c.passed for c in ins.quality)} | scores={ins.scores}")
+        except LLMUnavailable as e:
+            print("Остановлено:", e)
+    print("Потрачено за прогон:", round(llm.budget_status()["spent_rub"] - start, 2), "₽")
 
 
 def main() -> None:
@@ -37,13 +66,17 @@ def main() -> None:
     ap.add_argument("cmd", choices=["bootstrap", "ingest", "warmup", "snapshot-export", "snapshot-import"])
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--source", action="append")
+    ap.add_argument("--top", type=int, default=5)
+    ap.add_argument("--max-rub", type=float)
+    ap.add_argument("--background", action="store_true")
+    ap.add_argument("--roles", action="store_true")
     a = ap.parse_args()
     if a.cmd == "bootstrap":
         print(json.dumps(bootstrap(force=a.force), ensure_ascii=False, indent=2))
     elif a.cmd == "ingest":
         print(json.dumps(run_ingest(a.source), ensure_ascii=False, indent=2))
     elif a.cmd == "warmup":
-        warmup()
+        warmup(a.top, a.max_rub, a.background, a.roles)
     elif a.cmd == "snapshot-export":
         from app.storage.snapshot import export_snapshot
 

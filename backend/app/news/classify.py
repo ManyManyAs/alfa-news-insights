@@ -7,6 +7,7 @@ from __future__ import annotations
 import logging
 import re
 
+from app.agent.llm_schemas import ClassificationOut
 from app.config import load_yaml
 from app.llm.client import LLMUnavailable, get_llm
 from app.news.models import EventClassification, FactorHit, NewsItem
@@ -120,21 +121,26 @@ direction — направление изменения самого факто�
 {factors}"""
 
 
+def classification_messages(item: NewsItem) -> tuple[list[dict], list[str]]:
+    factors_cfg = load_yaml("factors.yaml")["factors"]
+    factor_list = "\n".join(f"- {k}: {v['title']}" for k, v in factors_cfg.items())
+    clean, flags = sanitize_untrusted(item.text)
+    title, _ = sanitize_untrusted(item.title)
+    return [
+        {"role": "system", "content": SYSTEM_PROMPT.format(notice=UNTRUSTED_NOTICE, factors=factor_list)},
+        {"role": "user", "content": f"<news>\nЗаголовок: {title}\n{clean}\n</news>"},
+    ], flags
+
+
 def classify(item: NewsItem) -> EventClassification:
     rules = classify_rules(item.title, item.text)
     llm = get_llm()
     if not llm.enabled:
         return rules
     factors_cfg = load_yaml("factors.yaml")["factors"]
-    factor_list = "\n".join(f"- {k}: {v['title']}" for k, v in factors_cfg.items())
-    clean, flags = sanitize_untrusted(item.text)
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT.format(notice=UNTRUSTED_NOTICE, factors=factor_list)},
-        {"role": "user", "content": f"<news>\nЗаголовок: {item.title}\n{clean}\n</news>"},
-    ]
+    messages, flags = classification_messages(item)
     try:
-        res = llm.complete("classify_news", messages, json_mode=True, max_tokens=700)
-        data = res.json()
+        data, res = llm.complete_json("classify_news", messages, ClassificationOut, max_tokens=800)
         data["factors"] = [f for f in data.get("factors", []) if f.get("factor") in factors_cfg]
         cls = EventClassification.model_validate({**data, "classifier": f"llm:{res.model}"})
         cls.security_flags = sorted(set(cls.security_flags) | set(flags))
