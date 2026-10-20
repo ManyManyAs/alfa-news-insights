@@ -72,7 +72,11 @@ def score_event(event: Event, profile: CompanyProfile, exposures: dict[str, Expo
     # («спрос», «стройка») описывают ту отрасль — их вклад ослабляем
     related = {(profile.okved or "")[:2]} | {m["okved2"] for m in profile.industry_mix if m["share"] >= 0.15}
     other_industry = bool(cls.industries) and not (set(cls.industries) & related)
+    seen: set[str] = set()
     for hit in cls.factors:
+        if hit.factor in seen:  # старые разборы модели могли содержать повтор фактора
+            continue
+        seen.add(hit.factor)
         exp = exposures.get(hit.factor)
         if not exp or exp.weight <= 0:  # тема скрыта пользователем
             continue
