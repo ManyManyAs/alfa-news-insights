@@ -44,9 +44,9 @@ def _record_llm(rec: dict, res: LLMResult) -> None:
 def _rule_plan(ctx: AgentContext) -> dict:
     steps = [{"tool": t, "args": {}, "why": "обязательный шаг"} for t in MANDATORY]
     steps.append({"tool": "search_bank_analytics", "args": {}, "why": "найти релевантные фрагменты аналитики банка"})
-    if any(r.get("basis") and any(b.startswith("graph:") for b in r["basis"]) for r in ctx.scored.reasons) or \
-            (ctx.profile.top_buyer_share or 0) > 0.3:
-        steps.append({"tool": "get_counterparties", "args": {}, "why": "проверить эффекты через контрагентов"})
+    if ctx.profile.industry_mix or ctx.profile.counterparties:
+        steps.append({"tool": "get_counterparties", "args": {}, "why": "проверить эффекты через отрасли контрагентов"})
+    steps.append({"tool": "get_peer_benchmark", "args": {}, "why": "сравнить с похожими компаниями"})
     steps += [{"tool": "get_bank_forecast", "args": {}, "why": "числовые прогнозы банка и их пересмотры"},
               {"tool": "get_playbook", "args": {}, "why": "типовые каналы влияния и действия"},
               {"tool": "search_related_news", "args": {}, "why": "контекст связанных событий"},
@@ -233,7 +233,7 @@ def build_sources(ins: Insight, ctx: AgentContext) -> list[SourceRef]:
                                   page=(th or {}).get("page") or (chunk.page if chunk else None),
                                   quote=(th or {}).get("quote") or (chunk.text[:200] if chunk else None),
                                   stale=bool((th or {}).get("stale"))))
-        elif kind in ("profile", "graph"):
+        elif kind in ("profile", "graph", "peers"):
             refs.append(SourceRef(id=sid, type=kind, title=_profile_label(sid, ctx.profile)))
     return refs
 
@@ -249,9 +249,18 @@ def _profile_label(sid: str, p: CompanyProfile) -> str:
         return f"Страны ВЭД: {', '.join(p.fts_countries)}"
     if sid.startswith("graph:"):
         _, direction, okved = sid.split(":", 2)
+        who = "покупателей" if direction == "in" else "поставщиков"
+        mix = next((m for m in p.industry_mix if m["direction"] == direction and m["okved2"] == okved[:2]), None)
+        if mix:
+            return f"Граф платежей: {mix['share']:.0%} платежей {who} — отрасль «{mix['name']}»"
         cp = next((c for c in p.counterparties if c.direction == direction and c.okved == okved), None)
-        who = "Покупатель" if direction == "in" else "Поставщик"
-        return f"{who} из графа платежей: {cp.okved_name if cp else okved} ({cp.share:.0%} потока)" if cp else f"{who}: {okved}"
+        return f"Граф платежей: {cp.okved_name} ({cp.share:.0%} потока {who})" if cp else f"Граф платежей: отрасль {okved}"
+    if sid.startswith("peers:"):
+        from app.data.peers import PRODUCT_TITLES, peer_stats
+
+        st = peer_stats(p.peer_key) or {}
+        share = (st.get("products") or {}).get(ref, 0)
+        return f"Похожие компании ({st.get('n', '?')}): {PRODUCT_TITLES.get(ref, ref)} есть у {share:.0%}"
     return labels.get(ref, ref)
 
 

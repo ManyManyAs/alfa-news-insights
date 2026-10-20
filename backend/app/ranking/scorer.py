@@ -81,6 +81,9 @@ def score_event(event: Event, profile: CompanyProfile, exposures: dict[str, Expo
             "factor": hit.factor, "factor_title": titles.get(hit.factor, hit.factor), "direction": hit.direction,
             "effect": eff, "contribution": round(contrib, 3), "basis": [r["basis"] for r in exp.reasons],
             "why": top_reason["why"], "evidence": hit.evidence,
+            # каналы через контрагентов и похожие компании (эффекты второго порядка, холодный старт)
+            "indirect": [{"basis": r["basis"], "why": r["why"]} for r in exp.reasons
+                         if r["basis"].startswith(("graph:", "peers:"))][:2],
         })
     countries = {c.upper() for c in profile.fts_countries}
     common = [c for c in cls.countries if c.upper() in countries]

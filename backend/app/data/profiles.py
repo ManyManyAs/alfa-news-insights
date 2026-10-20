@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from app.data.graph import compute_graph_features
 from app.data.models import CompanyProfile, Counterparty
 from app.storage import db
 
@@ -67,8 +68,7 @@ def read_companies(path: Path, limit: int = 0) -> pd.DataFrame:
     return df.reset_index(drop=True)
 
 
-def compute_counterparties(pay_path: Path, uids: set[str], okved: dict[str, tuple[str, str]]) -> dict[str, list[Counterparty]]:
-    pay = pd.read_csv(pay_path, sep=";", dtype={"BENEFICIARY": str, "PAYER": str})
+def compute_counterparties(pay: pd.DataFrame, uids: set[str], okved: dict[str, tuple[str, str]]) -> dict[str, list[Counterparty]]:
     pay = pay[pay["PAYER"] != pay["BENEFICIARY"]]
     result: dict[str, list[Counterparty]] = {}
 
@@ -101,7 +101,11 @@ def build_profiles(raw_dir: Path, limit: int = 0) -> list[CompanyProfile]:
     df["_group_size"] = df.groupby("GROUP_ID")["SYNTHETIC_U"].transform("count")
 
     pay_path = find_table(raw_dir, "df_Uid_payment_hack")
-    cps = compute_counterparties(pay_path, set(df["SYNTHETIC_U"]), okved_map) if pay_path else {}
+    pay = pd.read_csv(pay_path, sep=";", dtype={"BENEFICIARY": str, "PAYER": str}) if pay_path else None
+    cps = compute_counterparties(pay, set(df["SYNTHETIC_U"]), okved_map) if pay is not None else {}
+    links_path = find_table(raw_dir, "df_Fid_Uid_link_hack")
+    links = pd.read_csv(links_path, sep=";", dtype=str) if links_path else None
+    graph = compute_graph_features(pay, df, links)
 
     profiles: list[CompanyProfile] = []
     for r in df.to_dict("records"):
@@ -155,8 +159,32 @@ def build_profiles(raw_dir: Path, limit: int = 0) -> list[CompanyProfile]:
             top_buyer_share=max(buyers) if buyers else None,
             top_supplier_share=max(suppliers) if suppliers else None,
             data_gaps=gaps,
+            **{k: v for k, v in graph.get(uid, {}).items() if k != "affiliates"},
+            affiliates=graph.get(uid, {}).get("affiliates", [])[:20],
         ))
     return profiles
+
+
+def data_quality_report(raw_dir: Path) -> dict:
+    """Отчёт о качестве данных кейса (ограничение 05: неполные и зашумлённые данные)."""
+    df = pd.read_csv(find_table(raw_dir, "df_Uid_data_hack"), sep=";", dtype=str)
+    rev = pd.to_numeric(df["REVENUE_COMPANY"], errors="coerce")
+    fts = df["FTS_FLAG"].astype(float) == 1.0
+    return {
+        "rows": int(len(df)), "unique_companies": int(df["SYNTHETIC_U"].nunique()),
+        "duplicate_ids": int(len(df) - df["SYNTHETIC_U"].nunique()),
+        "revenue_stub_1000": int((rev == 1000).sum()), "revenue_missing": int(rev.isna().sum()),
+        "lifecycle_missing": int(df["ECO_MARK_LABEL"].isna().sum()),
+        "workers_spark_missing_share": round(float(df["AMOUNT_WORKERS_SPARK_GRADATION"].isna().mean()), 3),
+        "fts_without_country": int((fts & df["FTS_COUNTRY_NAME"].isna()).sum()),
+        "client_types": df["CL_TYPE"].value_counts().to_dict(),
+        "handling": {
+            "duplicate_ids": "оставляем строку с максимумом заполненных полей",
+            "revenue_stub_1000": "не участвует в долях рынка и группы, в профиле — «выручка недостоверна»",
+            "fts_without_country": "ВЭД учитывается, страна — пробел в данных (показывается пользователю)",
+            "counterparties_outside_sample": "доля платежей с контрагентами вне выборки показывается как «отрасль неизвестна»",
+        },
+    }
 
 
 def save_profiles(profiles: list[CompanyProfile]) -> None:

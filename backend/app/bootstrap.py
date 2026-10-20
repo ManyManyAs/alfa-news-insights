@@ -6,12 +6,15 @@ import logging
 from pathlib import Path
 
 from app.config import get_settings
-from app.data.profiles import build_profiles, find_table, load_user_links, save_profiles
+from app.data.peers import assign_peer_groups, save_peer_groups
+from app.data.profiles import build_profiles, data_quality_report, find_table, load_user_links, save_profiles
 from app.news.ingest import run_ingest
 from app.storage import db
 from app.storage.snapshot import import_snapshot
 
 log = logging.getLogger(__name__)
+# Версия схемы профилей: увеличивать при изменении признаков компании (сервер пересоберёт профили сам)
+PROFILES_VERSION = "3-graph-peers"
 
 # Демо-сценарии: подбираем реальных пользователей из данных под разные типы бизнеса
 DEMO_CRITERIA = [
@@ -75,10 +78,22 @@ def bootstrap(force: bool = False) -> dict:
     s = get_settings()
     stats: dict = {}
     has_companies = db.query_one("SELECT COUNT(*) AS n FROM companies")["n"]
-    if force or not has_companies:
+    ver = db.query_one("SELECT value FROM meta WHERE key='profiles_version'")
+    outdated = has_companies and (not ver or ver["value"] != PROFILES_VERSION)
+    if outdated:  # схема профилей поменялась (на сервере БД живёт между деплоями) — пересобираем
+        log.warning("Профили устарели (версия %s → %s) — пересборка", ver["value"] if ver else None, PROFILES_VERSION)
+        with db.tx() as conn:
+            conn.execute("DELETE FROM insights WHERE payload LIKE '%\"generated_by\":\"rules\"%'")
+        stats["profiles_rebuilt"] = True
+    if force or not has_companies or outdated:
         src = data_source_dir()
         profiles = build_profiles(src, limit=s.max_companies)
+        save_peer_groups(assign_peer_groups(profiles))
         save_profiles(profiles)
+        with db.tx() as conn:
+            conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('data_quality', ?)",
+                         (json.dumps(data_quality_report(src), ensure_ascii=False),))
+            conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('profiles_version', ?)", (PROFILES_VERSION,))
         stats["companies"] = len(profiles)
         links = find_table(src, "df_Fid_Uid_link_hack")
         stats["user_links"] = load_user_links(links) if links else 0

@@ -34,7 +34,7 @@ class ProductOffer(BaseModel):
 
 class SourceRef(BaseModel):
     id: str
-    type: Literal["news", "bank", "profile", "graph"]
+    type: Literal["news", "bank", "profile", "graph", "peers"]
     title: str
     url: str | None = None
     date: str | None = None

@@ -60,6 +60,19 @@ def main() -> None:
         print(f"{cid:12s} P@3={p3:.2f} nDCG@5={n5:.2f}  top3={[x for x in rels[:3]]}")
     print(f"\nСРЕДНЕЕ: P@3={sum(p3s) / len(p3s):.3f}  nDCG@5={sum(ndcgs) / len(ndcgs):.3f}")
 
+    # Граф: доля пунктов топ-5 лент демо-персон, объяснённых через контрагентов/похожие компании (DoD этапа 3: ≥ 30%)
+    from app.bootstrap import load_demo_users
+    from app.data.profiles import get_profile
+
+    tot = graph_hits = 0
+    for u in load_demo_users():
+        prof = get_profile(u["primary_company"])
+        for s in rank_feed(events, prof, u["role"], limit=5):
+            tot += 1
+            graph_hits += any(b.startswith(("graph:", "peers:")) for r in s.reasons for b in r.get("basis", []))
+    if tot:
+        print(f"\nГраф: {graph_hits}/{tot} ({graph_hits / tot:.0%}) пунктов лент демо-персон объяснены через контрагентов/похожих")
+
     # Поиск по аналитике банка: recall@5 на 40 запросах «событие → нужный тезис/прогноз»
     from app.evaluation import retrieval_recall
 
