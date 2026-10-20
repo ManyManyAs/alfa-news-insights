@@ -57,13 +57,16 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.ref }}
+          fetch-depth: 0  # нужна история для слияния с live-results
       - name: Продолжить с ветки live-results, если она есть (накопленный снапшот)
         working-directory: .
         run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git fetch origin live-results || true
           if git rev-parse --verify origin/live-results >/dev/null 2>&1; then
             git checkout -B live-results
-            git merge --no-edit origin/live-results || git merge --abort
+            git merge --no-edit origin/live-results || { git merge --abort; echo "::warning::live-results не слился — начинаем с текущей ветки"; }
           else
             git checkout -B live-results
           fi
