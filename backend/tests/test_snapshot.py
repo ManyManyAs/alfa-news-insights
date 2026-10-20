@@ -43,3 +43,19 @@ def test_snapshot_roundtrip(tmp_path):
     assert res and res["imported"]["events"] == manifest["counts"]["events"]
     (tmp_path / "manifest.json").write_text(json.dumps({**manifest, "data_fingerprint": "other"}), encoding="utf-8")
     assert import_snapshot(tmp_path) is None  # снапшот с других данных не применяется
+
+
+def test_secrets_are_stripped_and_redacted(monkeypatch):
+    from app.llm.client import LLMUnavailable, redact
+
+    monkeypatch.setenv("LLM_API_KEY", "sk-TESTSECRET123456 \n")
+    get_settings.cache_clear()
+    try:
+        assert get_settings().llm_api_key == "sk-TESTSECRET123456"
+        msg = "Illegal header value b'Bearer sk-TESTSECRET123456 '"
+        assert "TESTSECRET" not in redact(msg)
+        assert "TESTSECRET" not in str(LLMUnavailable(f"Ошибка LLM API: {msg}"))
+        assert "sk-***" in redact("ключ sk-OTHERKEY987654321 в тексте")
+    finally:
+        monkeypatch.setenv("LLM_API_KEY", "")
+        get_settings.cache_clear()

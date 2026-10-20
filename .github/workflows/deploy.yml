@@ -68,6 +68,8 @@ jobs:
             LLM_MODEL_QWEN_VL=${{ vars.LLM_MODEL_QWEN_VL }}
             LLM_MODEL_KIMI=${{ vars.LLM_MODEL_KIMI }}
         run: |
+          LLM_API_KEY="$(printf '%s' "$LLM_API_KEY" | tr -d '[:space:]')"
+          LLM_BASE_URL="$(printf '%s' "$LLM_BASE_URL" | tr -d '[:space:]')"
           if [ -z "$LLM_BASE_URL" ]; then
             echo "::warning::Секрет LLM_BASE_URL не задан — сайт работает в режиме replay (сохранённые ответы моделей без вызовов API)"
             LLM_API_KEY=""
