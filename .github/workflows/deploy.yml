@@ -87,7 +87,7 @@ jobs:
       - name: Проверка снаружи
         if: steps.cfg.outputs.skip != 'true'
         run: |
-          for i in $(seq 1 20); do curl -sf "http://$HOST/api/health" && echo && exit 0; sleep 5; done
+          for _ in $(seq 1 20); do curl -sf "http://$HOST/api/health" && echo && exit 0; sleep 5; done
           echo "::error::http://$HOST/api/health не отвечает"; exit 1
       - name: Ссылка
         if: steps.cfg.outputs.skip != 'true'
