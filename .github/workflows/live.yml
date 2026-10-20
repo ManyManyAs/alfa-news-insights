@@ -89,7 +89,7 @@ jobs:
         run: python scripts/manage.py snapshot-export
       - name: Итоги в summary
         run: |
-          python - <<'EOF' >> $GITHUB_STEP_SUMMARY
+          python - <<'EOF' >> "$GITHUB_STEP_SUMMARY"
           import json, pathlib
           m = json.loads(pathlib.Path("../data/snapshot/manifest.json").read_text())
           print("### Снапшот"); print(f"- вызовов LLM всего: {m['llm_calls']}, расход всего: {m['llm_cost_rub']} ₽")

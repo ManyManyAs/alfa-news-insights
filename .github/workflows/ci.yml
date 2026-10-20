@@ -43,10 +43,10 @@ jobs:
           LLM_MODE: mock
           USE_SNAPSHOT: "false"
         run: |
-          echo '### Метрики на синтетике + демо-новостях' >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          python scripts/evaluate.py --insights | grep -v WARNING | tee -a $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo '### Метрики на синтетике + демо-новостях' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          python scripts/evaluate.py --insights | grep -v WARNING | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
       - name: Smoke на данных кейса (85 тыс. компаний)
         env:
           DATA_SOURCE_DIR: ../data/case
@@ -80,7 +80,7 @@ jobs:
       - name: Запуск контейнера и health-check
         run: |
           docker compose up -d app
-          for i in $(seq 1 60); do curl -sf localhost:8000/api/health && break; sleep 3; done
+          for _ in $(seq 1 60); do curl -sf localhost:8000/api/health && break; sleep 3; done
           curl -sf localhost:8000/api/health
           curl -sf localhost:8000/api/demo-users | head -c 300
           docker compose logs app | tail -20
