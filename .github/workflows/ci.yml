@@ -2,8 +2,22 @@ name: CI
 on:
   push:
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/ruff-action@v3
+        with:
+          version: "0.8.4"
+          src: backend
+
   test:
     runs-on: ubuntu-latest
     defaults:
@@ -14,15 +28,55 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.lock
       - run: pip install -r requirements.lock
       - run: python -m pytest -q
-      - run: python scripts/evaluate.py
+      - name: Офлайн-метрики (синтетика)
         env:
           DATA_SOURCE_DIR: ../data/sample
-          DB_PATH: /tmp/eval.db
+          DB_PATH: /tmp/eval-sample.db
+          LLM_MODE: mock
+          USE_SNAPSHOT: "false"
+        run: |
+          echo '### Метрики на синтетике + демо-новостях' >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          python scripts/evaluate.py --insights | grep -v WARNING | tee -a $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+      - name: Smoke на данных кейса (85 тыс. компаний)
+        env:
+          DATA_SOURCE_DIR: ../data/case
+          DB_PATH: /tmp/case.db
+          LLM_MODE: auto
+        run: python -c "from app.bootstrap import bootstrap; s=bootstrap(); print(s); assert s['companies'] > 80000"
+
+  lock:
+    # uv.lock генерируется в CI (в песочнице разработки нет доступа к PyPI) и коммитится в ветку
+    if: github.event_name == 'push' && github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: cd backend && uv lock
+      - name: Commit uv.lock if changed
+        run: |
+          if [ -n "$(git status --porcelain backend/uv.lock)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add backend/uv.lock
+            git commit -m "chore: обновить backend/uv.lock"
+            git push
+          fi
 
   docker:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - run: docker compose build
+      - name: Запуск контейнера и health-check
+        run: |
+          docker compose up -d app
+          for i in $(seq 1 60); do curl -sf localhost:8000/api/health && break; sleep 3; done
+          curl -sf localhost:8000/api/health
+          curl -sf localhost:8000/api/demo-users | head -c 300
+          docker compose logs app | tail -20

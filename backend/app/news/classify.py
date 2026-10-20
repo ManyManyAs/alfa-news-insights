@@ -123,7 +123,7 @@ direction — направление изменения самого факто�
 def classify(item: NewsItem) -> EventClassification:
     rules = classify_rules(item.title, item.text)
     llm = get_llm()
-    if not llm.live:
+    if not llm.enabled:
         return rules
     factors_cfg = load_yaml("factors.yaml")["factors"]
     factor_list = "\n".join(f"- {k}: {v['title']}" for k, v in factors_cfg.items())

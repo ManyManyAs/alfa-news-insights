@@ -12,7 +12,7 @@ services:
     environment:
       DB_PATH: /app/data/processed/app.db
     volumes:
-      # исходные CSV кейса (если нет — используется синтетика из data/sample)
+      # свои CSV (необязательно; по умолчанию используются данные кейса из data/case)
       - ./data/raw:/app/data/raw:ro
       # БД, кэш LLM, демо-пользователи
       - ./data/processed:/app/data/processed
@@ -26,3 +26,4 @@ services:
     command: ["python", "-m", "pytest", "-q"]
     environment:
       LLM_MODE: mock
+      USE_SNAPSHOT: "false"

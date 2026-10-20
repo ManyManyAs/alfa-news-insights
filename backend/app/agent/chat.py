@@ -30,8 +30,12 @@ def answer_rules(q: str, ins: Insight, profile: CompanyProfile) -> dict:
         return {"answer": "Возможные действия (вывод сервиса):\n" + _fmt(ins.actions, "Действия"), "mode": "rules"}
     if any(w in ql for w in ("контрагент", "покупател", "поставщик", "разрез", "групп")):
         cps = profile.counterparties
-        lines = [f"• {'Покупатель' if c.direction == 'in' else 'Поставщик'}: {c.okved_name or c.okved} — {c.share:.0%} потока [graph:{c.direction}:{c.okved}]" for c in cps]
-        grp = f"\nГруппа компаний: {profile.group_size} юрлиц, доля компании в выручке группы — {profile.group_revenue_share:.0%}." if profile.group_revenue_share else ""
+        lines = [f"• {'Покупатель' if c.direction == 'in' else 'Поставщик'}: {c.okved_name or c.okved} — "
+                 f"{c.share:.0%} потока [graph:{c.direction}:{c.okved}]" for c in cps]
+        grp = ""
+        if profile.group_revenue_share:
+            grp = (f"\nГруппа компаний: {profile.group_size} юрлиц, "
+                   f"доля компании в выручке группы — {profile.group_revenue_share:.0%}.")
         return {"answer": "Разрез по контрагентам:\n" + ("\n".join(lines) or "нет данных о платежах") + grp, "mode": "rules"}
     hits = get_knowledge().search(q, k=2)
     if hits:
@@ -44,7 +48,7 @@ def answer_rules(q: str, ins: Insight, profile: CompanyProfile) -> dict:
 def answer(q: str, ins: Insight, profile: CompanyProfile) -> dict:
     q_clean, flags = sanitize_untrusted(q)
     llm = get_llm()
-    if not llm.live:
+    if not llm.enabled:
         return answer_rules(q_clean, ins, profile) | {"security_flags": flags}
     kb_hits = get_knowledge().search(q_clean, k=3)
     ctx = {"insight": json.loads(ins.model_dump_json()), "company": profile.llm_view(), "bank_search": kb_hits}

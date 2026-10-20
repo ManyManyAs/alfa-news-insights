@@ -121,7 +121,8 @@ def draft_rules(ctx: AgentContext) -> Insight:
         play = pb[top["factor"]]
         key = {"risk": "risk", "opportunity": "opportunity", "mixed": "risk"}.get(effect, "stable")
         text = f"Для компании ({_company_short(ctx)}) это {EFFECT_RU[effect].lower()}: {play[key]}"
-        t_src = [b for b in top.get("basis", []) if b != "baseline"][:2] + news_src[:1] + ([bank_ids[top['factor']]] if top["factor"] in bank_ids else [])
+        bank_ref = [bank_ids[top["factor"]]] if top["factor"] in bank_ids else []
+        t_src = [b for b in top.get("basis", []) if b != "baseline"][:2] + news_src[:1] + bank_ref
     else:
         text, t_src = f"Событие слабо связано с бизнесом компании ({_company_short(ctx)}).", news_src[:1]
     takeaway = Claim(text=text, kind="ai_inference", sources=t_src, confidence="medium")

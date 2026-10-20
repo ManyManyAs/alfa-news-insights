@@ -1,0 +1,14 @@
+{
+  "name": "Бизнес-радар",
+  "image": "mcr.microsoft.com/devcontainers/python:1-3.12-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+  "postCreateCommand": "pip install -r backend/requirements.lock && pip install ruff==0.8.4 pre-commit && sudo apt-get update && sudo apt-get install -y poppler-utils",
+  "postAttachCommand": "cd backend && nohup python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 > /tmp/app.log 2>&1 &",
+  "forwardPorts": [8000],
+  "portsAttributes": {"8000": {"label": "Бизнес-радар", "onAutoForward": "openBrowser"}},
+  "customizations": {
+    "vscode": {"extensions": ["ms-python.python", "charliermarsh.ruff"]}
+  }
+}

@@ -23,7 +23,7 @@ def stems(text: str, prefix: int = 5) -> set[str]:
     out = set()
     for w in _word_re.findall(text.lower()):
         w = w.strip(".,")
-        if not w or w in STOP or len(w) < 3 and not any(ch.isdigit() for ch in w):
+        if not w or w in STOP or (len(w) < 3 and not any(ch.isdigit() for ch in w)):
             continue
         out.add(w[:prefix])
     return out

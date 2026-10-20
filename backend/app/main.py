@@ -61,7 +61,7 @@ def authorized_profile(company_id: str, user: str):
     try:
         check_company_access(user, company_id)
     except AccessDenied as e:
-        raise HTTPException(403, str(e))
+        raise HTTPException(403, str(e)) from e
     p = get_profile(company_id)
     if not p:
         raise HTTPException(404, "Компания не найдена")
@@ -71,7 +71,7 @@ def authorized_profile(company_id: str, user: str):
 # ------------------------------------------------------------------ служебное
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "llm_mode": "live" if get_llm().live else "mock"}
+    return {"status": "ok", "llm_mode": get_llm().mode}
 
 
 @app.get("/api/demo-users")
@@ -153,7 +153,7 @@ def analyze(req: AnalyzeRequest, user: str = Depends(current_user)):
         try:
             item = fetch_url(req.url)
         except Exception as e:
-            raise HTTPException(400, f"Не удалось загрузить страницу: {e}")
+            raise HTTPException(400, f"Не удалось загрузить страницу: {e}") from e
     elif req.text:
         title = req.title or req.text.strip().split(".")[0][:150]
         import hashlib
@@ -225,7 +225,7 @@ def metrics():
     passed = sum(1 for r in rows if all(c["passed"] for c in json.loads(r["payload"]).get("quality", [])))
     fb = db.query_one("SELECT COUNT(*) n, COALESCE(SUM(rating>0),0) pos, COALESCE(SUM(rating<0),0) neg FROM feedback")
     return {
-        "llm": {"mode": "live" if get_llm().live else "mock", "spent_today_rub": round(spent_today(), 2),
+        "llm": {"mode": get_llm().mode, "spent_today_rub": round(spent_today(), 2),
                 "daily_budget_rub": load_yaml("models.yaml")["daily_budget_rub"], "by_model": usage},
         "insights": {"total": total, "quality_passed_share": round(passed / total, 3) if total else None},
         "feedback": dict(fb), "events": db.query_one("SELECT COUNT(*) n FROM events")["n"],

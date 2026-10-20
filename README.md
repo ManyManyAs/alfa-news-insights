@@ -9,25 +9,30 @@
 
 ## Быстрый старт
 
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/ManyManyAs/alfa-news-insights)
+
 ```bash
-cp .env.example .env              # по умолчанию LLM_MODE=mock — работает без ключа и без затрат
-# (опционально) положить CSV кейса в data/raw/ — иначе используется синтетика из data/sample/
 docker compose up --build
 # открыть http://localhost:8000      (Swagger: http://localhost:8000/docs)
 ```
 
-Первый старт на полном наборе (85 тыс. компаний, 1,4 млн платежей) занимает около 20–30 секунд: строятся профили и граф контрагентов. После этого БД лежит в `data/processed/`.
+Ничего настраивать не нужно:
+- **данные кейса уже в репозитории** (`data/case/*.csv.gz`) — первый старт строит профили 85 тыс. компаний и граф платежей примерно за 20–30 секунд;
+- **ключ к LLM не нужен**: режим `LLM_MODE=auto` без ключа работает как `replay` — результаты моделей, полученные командой в режиме `live`, подгружаются из `data/snapshot/`, а для новых запросов (своя новость, новый вопрос) сервис переходит на детерминированный режим и честно показывает это в карточке («генерация: rules»);
+- с ключом (`cp .env.example .env` и заполнить `LLM_API_KEY`, `LLM_BASE_URL`) всё работает вживую на разрешённых моделях.
+
+Или в браузере: кнопка **Open in Codespaces** выше — окружение поднимется само, сервис откроется на порту 8000.
 
 Тесты: `docker compose --profile test run --rm tests`
 
-Локально без Docker (Python 3.12, [uv](https://docs.astral.sh/uv/)):
+Локально без Docker (Python 3.12): `make install && make run` (или `make help` — все команды).
 
 ```bash
 cd backend
-uv venv && uv pip install -r requirements.lock
-uv run uvicorn app.main:app --reload       # http://localhost:8000
-uv run pytest -q
-uv run python scripts/evaluate.py --insights   # метрики качества
+pip install -r requirements.lock           # или: uv sync (uv.lock генерируется в CI)
+python -m uvicorn app.main:app --reload    # http://localhost:8000
+python -m pytest -q
+python scripts/evaluate.py --insights      # метрики качества
 ```
 
 ## Сценарий проверки для жюри
@@ -91,7 +96,7 @@ flowchart LR
 | Суммаризация и извлечение тезисов из документов | Kimi-K2.6 | Qwen3.6 |
 | OCR сканов аналитики | Qwen3-VL-30B-A3B-Instruct | — |
 
-Роутинг и цены лежат в `config/models.yaml`. При 80% дневного лимита включаются запасные модели. При 100% сервис переходит в детерминированный режим (правила и шаблоны): продолжает работать и не тратит деньги. Ответы LLM кэшируются.
+Роутинг и цены лежат в `config/models.yaml`. При 80% дневного лимита включаются запасные модели. При 100% сервис переходит в детерминированный режим (правила и шаблоны): продолжает работать и не тратит деньги. Ответы LLM кэшируются и сохраняются в снапшот — так жюри видит результат моделей и после отключения ключа. Как HTTP-клиент используется собственный клиент на `httpx` к OpenAI-совместимому эндпоинту организаторов.
 
 Готовые мультиагентные фреймворки не используются: оркестратор, инструменты, критик и поиск написаны командой (`backend/app/agent/`).
 
@@ -99,12 +104,13 @@ flowchart LR
 
 | Переменная | По умолчанию | Описание |
 |---|---|---|
-| `LLM_MODE` | `mock` | `live` — вызывать разрешённые LLM; `mock` — детерминированный режим без затрат |
+| `LLM_MODE` | `auto` | `auto` — `live` при наличии ключа, иначе `replay`; `live` — вызывать разрешённые LLM; `replay` — только ответы из снапшота (без ключа); `mock` — без LLM |
 | `LLM_BASE_URL` | — | OpenAI-совместимый эндпоинт организаторов (`…/v1`) |
 | `LLM_API_KEY` | — | Общий ключ команды |
 | `LLM_TIMEOUT_S` | `60` | Таймаут запроса к LLM |
 | `DB_PATH` | `data/processed/app.db` | SQLite (схема переносится в PostgreSQL) |
-| `DATA_SOURCE_DIR` | авто | Каталог CSV: `data/raw`, если файлы есть, иначе `data/sample` |
+| `DATA_SOURCE_DIR` | авто | Каталог CSV: `data/raw` (свои) → `data/case` (кейс, в репозитории) → `data/sample` (синтетика) |
+| `USE_SNAPSHOT` | `true` | Подгружать снапшот результатов LLM из `data/snapshot` при первом старте |
 | `MAX_COMPANIES` | `0` | Ограничить число компаний (0 — все) |
 | `ENABLE_SCHEDULER` | `false` | Фоновый сбор RSS каждые `schedule_minutes` из `config/sources.yaml` |
 | `ALLOW_URL_FETCH` | `true` | Разрешить анализ новости по ссылке |
@@ -132,6 +138,7 @@ Id моделей у провайдера уточните у организат
 ## Служебные скрипты
 
 ```bash
+uv run python scripts/manage.py snapshot-export      # сохранить результаты LLM для проверки без ключа
 uv run python scripts/manage.py bootstrap --force    # пересобрать профили и демо-новости
 uv run python scripts/manage.py ingest               # собрать RSS
 uv run python scripts/manage.py warmup               # прогреть инсайты демо-пользователей перед защитой
