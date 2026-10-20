@@ -44,10 +44,10 @@ sources:
     type: rss
     url: https://tass.ru/rss/v2.xml
     trust: agency
-  - id: ria_economy
-    title: РИА Новости — экономика
+  - id: ria
+    title: РИА Новости
     type: rss
-    url: https://ria.ru/export/rss2/economy/index.xml
+    url: https://ria.ru/export/rss2/archive/index.xml
     trust: agency
   - id: prime
     title: ПРАЙМ
