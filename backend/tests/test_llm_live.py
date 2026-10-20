@@ -137,3 +137,23 @@ def test_sse_streams_agent_steps_and_chat(live):
         assert chat[0]["type"] == "meta" and "Альфа-Банка" in text and chat[-1]["type"] == "done"
         st = c.get("/api/llm/status").json()
         assert st["mode"] == "live" and "event_brief" in st["tasks"]
+
+
+def test_reasoning_model_extras_and_empty_content_retry(live, monkeypatch):
+    import httpx
+
+    seen = []
+
+    def post(self, payload, attempts=3):
+        seen.append(payload)
+        if "reasoning" in payload:  # эндпоинт не принимает параметр — клиент должен повторить без него
+            req = httpx.Request("POST", "http://llm.invalid/v1/chat/completions")
+            raise httpx.HTTPStatusError("bad", request=req, response=httpx.Response(400, request=req))
+        if payload["max_tokens"] < 1000:  # «думающая» модель исчерпала лимит на рассуждения
+            return {"choices": [{"message": {"content": ""}, "finish_reason": "length"}]}
+        return {"choices": [{"message": {"content": "ОК"}, "finish_reason": "stop"}], "usage": {}}
+
+    monkeypatch.setattr(llm_client.LLMClient, "_post", post)
+    res = live.complete("chat", [{"role": "user", "content": "проверка думающей модели"}], max_tokens=50, model_key="glm")
+    assert res.text == "ОК"
+    assert any("reasoning" in p for p in seen) and seen[-1]["max_tokens"] >= 1000

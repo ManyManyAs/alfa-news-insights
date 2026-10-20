@@ -210,18 +210,17 @@ class LLMClient:
         model = candidates[0]
         payload = self._payload(model["id"], messages, json_mode, max_tokens, temperature)
         t0 = time.perf_counter()
-        try:
-            resp = self._post(payload)
-        except httpx.HTTPError as e:
-            if json_mode:  # не все эндпоинты поддерживают response_format — повторяем без него
-                payload.pop("response_format", None)
-                try:
-                    resp = self._post(payload)
-                except httpx.HTTPError as e2:
-                    raise LLMUnavailable(f"Ошибка LLM API: {e2}") from e2
-            else:
-                raise LLMUnavailable(f"Ошибка LLM API: {e}") from e
-        text = (resp.get("choices") or [{}])[0].get("message", {}).get("content") or ""
+        resp = self._post_tolerant(payload, model)
+        choice = (resp.get("choices") or [{}])[0]
+        text = (choice.get("message") or {}).get("content") or ""
+        if not text.strip() and choice.get("finish_reason") == "length":
+            # «думающая» модель потратила лимит на рассуждения — один повтор с запасом токенов
+            bigger = {**payload, "max_tokens": min(max(max_tokens * 4, 1024), 6000)}
+            resp = self._post_tolerant(bigger, model)
+            choice = (resp.get("choices") or [{}])[0]
+            text = (choice.get("message") or {}).get("content") or ""
+        if not text.strip():
+            raise LLMUnavailable(f"Пустой ответ модели {model['id']} (finish_reason={choice.get('finish_reason')})")
         usage = resp.get("usage") or {}
         res = self._finish(task, model, messages, payload, text, usage)
         res.duration_ms = int((time.perf_counter() - t0) * 1000)
@@ -269,7 +268,8 @@ class LLMClient:
         if not self.live:
             raise LLMUnavailable("replay: ответа нет в снапшоте")
         model = candidates[0]
-        payload = {**self._payload(model["id"], messages, False, max_tokens, temperature), "stream": True}
+        base = self._payload(model["id"], messages, False, max_tokens, temperature)
+        payload = {**base, **(model.get("extra") or {}), "stream": True}
         url = self.settings.llm_base_url.rstrip("/") + "/chat/completions"
         parts: list[str] = []
         usage: dict = {}
@@ -298,8 +298,7 @@ class LLMClient:
                 yield res.text
                 return
             raise LLMUnavailable(f"Обрыв стрима: {e}") from e
-        payload.pop("stream", None)
-        self._finish(task, model, messages, payload, "".join(parts), usage)
+        self._finish(task, model, messages, base, "".join(parts), usage)
 
     # --- служебное ------------------------------------------------------
     def _finish(self, task: str, model: dict, messages, payload: dict, text: str, usage: dict) -> LLMResult:
@@ -312,12 +311,32 @@ class LLMClient:
                          (cache_key(payload), task, model["id"], db.dumps({"text": text})))
         return LLMResult(text=text, model=model["id"], tokens_in=tin, tokens_out=tout, cost_rub=cost)
 
-    @staticmethod
-    def _payload(model_id: str, messages: list[dict], json_mode: bool, max_tokens: int, temperature: float) -> dict:
+    def _payload(self, model_id: str, messages: list[dict], json_mode: bool, max_tokens: int, temperature: float) -> dict:
         payload: dict[str, Any] = {"model": model_id, "messages": messages, "max_tokens": max_tokens, "temperature": temperature}
         if json_mode:
             payload["response_format"] = {"type": "json_object"}
         return payload
+
+    def _post_tolerant(self, payload: dict, model: dict) -> dict:
+        """Запрос с доп. параметрами модели (extra); если эндпоинт их не принимает — без них,
+        если не принимает response_format — без него."""
+        extra = model.get("extra") or {}
+        attempts = [{**payload, **extra}] if extra else []
+        attempts.append(payload)
+        if "response_format" in payload:
+            attempts.append({k: v for k, v in payload.items() if k != "response_format"})
+        last: Exception | None = None
+        for p in attempts:
+            try:
+                return self._post(p)
+            except httpx.HTTPStatusError as e:
+                last = e
+                if e.response is not None and e.response.status_code in (400, 422):
+                    continue  # неподдерживаемый параметр — пробуем проще
+                raise LLMUnavailable(f"Ошибка LLM API: {e}") from e
+            except httpx.HTTPError as e:
+                raise LLMUnavailable(f"Ошибка LLM API: {e}") from e
+        raise LLMUnavailable(f"Ошибка LLM API: {last}")
 
     def _headers(self) -> dict:
         return {"Authorization": f"Bearer {self.settings.llm_api_key}"}
