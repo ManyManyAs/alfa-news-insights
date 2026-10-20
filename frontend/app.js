@@ -136,7 +136,8 @@ async function loadBank() {
 
 // ---------------------------------------------------------------- профиль
 async function loadProfile() {
-  const { profile: p, exposures, peers } = await api(`/api/companies/${state.company}?${q({ role: state.role })}`);
+  const { profile: p, exposures, peers, overrides, factors } = await api(`/api/companies/${state.company}?${q({ role: state.role })}`);
+  state.factors = factors;
   const money = (v) => v == null ? "нет данных" : (v >= 1e9 ? (v / 1e9).toFixed(1) + " млрд ₽" : (v / 1e6).toFixed(1) + " млн ₽");
   const products = { CL_PRODUCT_RKO_MARK: "РКО", CL_PRODUCT_LOA_MARK: "Кредит", CL_PRODUCT_LEA_MARK: "Лизинг", CL_PRODUCT_DEP_MARK: "Депозит", CL_PRODUCT_ZPP_MARK: "Зарплатный проект", CL_PRODUCT_GAR_MARK: "Гарантии", FACTORING_MARK: "Факторинг", FTS_FLAG: "ВЭД" };
   $("#profileCard").innerHTML = `
@@ -153,12 +154,15 @@ async function loadProfile() {
       <dt>Группа</dt><dd>${p.group_size} юрлиц${p.group_revenue_share != null ? ", доля " + (p.group_revenue_share * 100).toFixed(0) + "%" : ""}</dd>
     </dl>
     <div class="chips">${p.products.map((x) => `<span class="chip">${products[x] || x}</span>`).join("")}</div>
-    <div class="muted small" style="margin-top:10px">Чувствительность к факторам:</div>
-    <div class="chips">${exposures.slice(0, 6).map((e) => `<span class="chip" title="${esc(e.reasons.map((r) => r.why).join("; "))}">${esc(e.title)} · ${e.weight}</span>`).join("")}</div>
+    <div class="sub-h">Чувствительность к факторам <span class="muted small">— нажмите, чтобы сделать тему важнее или скрыть</span></div>
+    <div class="chips">${exposures.slice(0, 8).map((e) => interestChip(e.factor, e.title, e.weight, e.override, e.reasons)).join("")}</div>
+    ${overrides.length ? `<div class="overrides">${overrides.map((o) => `<span class="ov ${o.multiplier === 0 ? "mute" : o.multiplier > 1 ? "more" : "less"}">${esc(o.title)}: ${o.multiplier === 0 ? "скрыто" : o.source === "manual" ? "важнее" : "×" + o.multiplier}<span class="muted"> · ${o.source === "manual" ? "вы настроили" : "по вашим оценкам"}</span></span>`).join("")}
+      <button class="btn ghost small" id="resetPrefs">Сбросить настройки</button></div>` : ""}
     ${supplyChain(p)}
     ${peersBlock(peers)}
     ${p.data_gaps.length ? `<div class="notice">Неполные данные: ${esc(p.data_gaps.join("; "))}</div>` : ""}
     <div class="muted small">* оценка по выборке клиентов с тем же ОКВЭД</div>`;
+  bindInterests();
 }
 
 function mixBars(rows, unknown) {
@@ -166,6 +170,31 @@ function mixBars(rows, unknown) {
   if (unknown > 0.03) all.push({ name: "вне выборки (отрасль неизвестна)", share: unknown, unknown: true });
   return all.map((m) => `<div class="mix-row${m.unknown ? " unk" : ""}"><span>${esc(m.name)}</span><i style="width:${Math.max(3, m.share * 100)}%"></i><b>${Math.round(m.share * 100)}%</b></div>`).join("");
 }
+const LEVEL_NEXT = { normal: "more", more: "mute", mute: "normal" };
+const LEVEL_ICON = { more: "⬆ ", mute: "🔇 ", normal: "" };
+function levelOf(o) { return !o ? "normal" : o.source !== "manual" ? "normal" : o.multiplier === 0 ? "mute" : "more"; }
+function interestChip(factor, title, weight, o, reasons) {
+  const lvl = levelOf(o);
+  const tip = `${(reasons || []).filter((r) => r.why).map((r) => r.why).join("; ")}\nКлик: ${{ normal: "сделать важнее", more: "скрыть тему", mute: "вернуть как было" }[lvl]}`;
+  return `<button class="chip interest ${lvl}" data-factor="${esc(factor)}" data-level="${lvl}" title="${esc(tip)}">${LEVEL_ICON[lvl]}${esc(title)} · ${weight}</button>`;
+}
+function bindInterests() {
+  document.querySelectorAll(".chip.interest").forEach((el) => el.onclick = async () => {
+    const level = LEVEL_NEXT[el.dataset.level];
+    await api(`/api/companies/${state.company}/preferences`, { method: "PUT", body: JSON.stringify({ factor: el.dataset.factor, level }) });
+    toast(level === "mute" ? "Тема скрыта из ленты" : level === "more" ? "Будем показывать эту тему выше" : "Тема снова как обычно");
+    await Promise.all([loadProfile(), loadFeed()]);
+  });
+  const r = document.getElementById("resetPrefs");
+  if (r) r.onclick = async () => { await api(`/api/companies/${state.company}/preferences`, { method: "DELETE" }); toast("Настройки ленты сброшены"); await Promise.all([loadProfile(), loadFeed()]); };
+}
+function toast(text) {
+  let t = document.getElementById("toast");
+  if (!t) { t = document.createElement("div"); t.id = "toast"; document.body.appendChild(t); }
+  t.textContent = text; t.className = "show";
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => { t.className = ""; }, 3500);
+}
+
 function supplyChain(p) {
   const buyers = p.industry_mix.filter((m) => m.direction === "in"), suppliers = p.industry_mix.filter((m) => m.direction === "out");
   if (!buyers.length && !suppliers.length && !p.n_buyers && !p.n_suppliers) return "";
@@ -188,8 +217,8 @@ function peersBlock(b) {
 // ---------------------------------------------------------------- лента
 async function loadFeed() {
   $("#widgetList").innerHTML = `<div class="skeleton"></div>`;
-  const { items } = await api(`/api/feed?${q({ company_id: state.company, role: state.role })}`);
-  state.feed = items;
+  const { items, quiet } = await api(`/api/feed?${q({ company_id: state.company, role: state.role })}`);
+  state.feed = items; state.feedKey = `${state.company}|${state.role}`;
   $("#navBadge").textContent = items.filter((i) => i.effect === "risk").length || "";
   const reasonText = (it) => it.reasons.slice(0, 2).map((r) => `${r.factor_title}${r.direction && r.direction !== "unknown" ? " " + DIR[r.direction] : ""}`).join(" · ");
   $("#widgetList").innerHTML = items.slice(0, 4).map((it) => `
@@ -199,6 +228,9 @@ async function loadFeed() {
       <div class="why">Почему вам: ${esc(it.reasons[0]?.why || "")}</div>
       ${it.effective ? `<div>${effectiveTag(it.effective)}</div>` : ""}
     </div>`).join("") || `<div class="muted">Значимых событий для компании нет.</div>`;
+  if (quiet) {
+    $("#widgetList").insertAdjacentHTML("afterbegin", `<div class="quiet">За последние ${quiet.days} дней значимых для вашей компании событий не было — это тоже ответ: менять планы не нужно.${quiet.last ? ` Последнее важное — ниже.` : ""}</div>`);
+  }
   $("#feedList").innerHTML = items.map((it) => `
     <div class="feed-item" data-ev="${it.event_id}">
       <div><span class="pill ${it.effect}">${EFFECT[it.effect]}</span>${it.has_bank_view ? `<span class="pill bank">есть позиция банка</span>` : ""}${effectiveTag(it.effective)}</div>
@@ -206,10 +238,35 @@ async function loadFeed() {
       <div class="meta">${fmtDate(it.published_at)} · ${esc([...new Set(it.sources.map((s) => s.source))].join(", "))}${it.sources.length > 1 ? ` · ${it.sources.length} ${plural(it.sources.length, "публикация", "публикации", "публикаций")}` : ""} · релевантность ${it.score}</div>
       <div class="chips">${entityChips(it)}</div>
       <div class="reasons">${esc(reasonText(it))}</div>
+      ${it.reasons.find((r) => r.personal) ? `<div class="personal">⚙ ${esc(it.reasons.find((r) => r.personal).personal.why)}</div>` : ""}
+      <div class="ai-note" hidden></div>
       ${it.story ? `<div class="story-badge">Сюжет · ${it.story.count} ${plural(it.story.count, "событие", "события", "событий")}: ${esc(fmtDate(it.story.timeline[0].published_at))} → ${esc(fmtDate(it.story.timeline[it.story.timeline.length - 1].published_at))}</div>` : ""}
       <div class="score-bar"><i style="width:${Math.min(100, it.score * 60)}%"></i></div>
     </div>`).join("") || `<div class="empty">Значимых событий нет.</div>`;
   document.querySelectorAll("[data-ev]").forEach((el) => el.onclick = () => { show("radar"); openInsight(el.dataset.ev); });
+  applyRerank(state.feedKey);
+}
+
+// ИИ уточняет порядок верха ленты в фоне: карточки плавно переставляются, у каждой — короткая причина модели
+async function applyRerank(key) {
+  if (state.llmMode === "mock" || !state.feed.length) return;
+  $("#rerankNote").textContent = "ИИ уточняет порядок…";
+  let r;
+  try { r = await api(`/api/feed/rerank?${q({ company_id: state.company, role: state.role })}`); } catch (e) { r = { applied: false }; }
+  if (key !== state.feedKey) return;  // пользователь уже сменил компанию или роль
+  if (!r.applied) { $("#rerankNote").textContent = ""; return; }
+  const list = $("#feedList");
+  const before = new Map([...list.children].map((el) => [el.dataset.ev, el.getBoundingClientRect().top]));
+  r.order.forEach((id) => { const el = list.querySelector(`.feed-item[data-ev="${CSS.escape(id)}"]`); if (el) list.appendChild(el); });
+  for (const el of list.children) {
+    const n = r.notes[el.dataset.ev];
+    const box = el.querySelector(".ai-note");
+    if (n && box) { box.hidden = false; box.innerHTML = `<b>ИИ:</b> ${esc(n.why)} <span class="rel r${n.relevance}">${"●".repeat(n.relevance)}${"○".repeat(3 - n.relevance)}</span>`; }
+    const dy = (before.get(el.dataset.ev) ?? 0) - el.getBoundingClientRect().top;
+    if (dy) el.animate([{ transform: `translateY(${dy}px)` }, { transform: "none" }], { duration: 450, easing: "ease-out" });
+  }
+  state.feed.sort((a, b) => r.order.indexOf(a.event_id) - r.order.indexOf(b.event_id));
+  $("#rerankNote").innerHTML = `✨ Порядок уточнён ИИ <span class="muted">(${esc(r.model || "")}${r.cached ? ", из кэша" : ""})</span>`;
 }
 
 // ---------------------------------------------------------------- инсайт
@@ -260,7 +317,11 @@ function renderInsight(tab) {
         <ul class="quality">${i.quality.map((c) => `<li class="${c.passed ? "ok" : "bad"}">${c.passed ? "✓" : "✗"} ${esc(c.name)}${c.passed ? "" : " — " + esc(c.detail)}</li>`).join("")}</ul>
         ${(i.relevance.consistency_issues || []).map((x) => `<div class="notice">${esc(x)}</div>`).join("")}
       </div>
-      <div class="feedback">Полезно? <button class="btn ghost small" data-fb="1">👍</button><button class="btn ghost small" data-fb="-1">👎</button><span id="fbDone"></span></div>
+      <div class="feedback">Полезно? <button class="btn ghost small" data-fb="1">👍</button><button class="btn ghost small" data-fb="-1">👎</button>
+        <span id="fbReasons" hidden>Что не так?
+          <button class="btn ghost small" data-fbr="not_relevant">Не про мой бизнес</button>
+          <button class="btn ghost small" data-fbr="known">Уже знал(а)</button>
+          <button class="btn ghost small" data-fbr="inaccurate">Неточный вывод</button></span><span id="fbDone"></span></div>
       ${chatBlock()}`;
   } else if (tab === "sources") {
     body = `<ol class="sources-list">${i.sources.map((s) => `<li id="src-${CSS.escape(s.id)}"><b>[${esc(s.type === "bank" ? "Альфа-Банк" : s.type === "news" ? "Новость" : s.type === "graph" ? "Граф платежей" : "Профиль")}]</b> ${esc(s.title)}
@@ -286,7 +347,8 @@ function renderInsight(tab) {
   document.querySelectorAll("[data-story-ev]").forEach((el) => el.onclick = () => { if (el.dataset.storyEv !== state.current) openInsight(el.dataset.storyEv); });
   document.querySelectorAll("[data-src]").forEach((el) => el.onclick = () => { renderInsight("sources"); const li = document.getElementById("src-" + CSS.escape(el.dataset.src)); if (li) { li.classList.add("hl"); li.scrollIntoView({ block: "center" }); } });
   $("#refreshBtn").onclick = () => openInsight(state.current, true);
-  document.querySelectorAll("[data-fb]").forEach((el) => el.onclick = () => sendFeedback(+el.dataset.fb));
+  document.querySelectorAll("[data-fb]").forEach((el) => el.onclick = () => +el.dataset.fb > 0 ? sendFeedback(1) : ($("#fbReasons").hidden = false));
+  document.querySelectorAll("[data-fbr]").forEach((el) => el.onclick = () => sendFeedback(-1, el.dataset.fbr));
   bindChat();
 }
 
@@ -326,9 +388,12 @@ function bindChat() {
   document.querySelectorAll("[data-q]").forEach((b) => b.onclick = () => send(b.dataset.q));
 }
 
-async function sendFeedback(rating) {
-  await api("/api/feedback", { method: "POST", body: JSON.stringify({ event_id: state.current, company_id: state.company, role: state.role, rating }) });
-  $("#fbDone").textContent = "Спасибо, учтём!";
+async function sendFeedback(rating, reason = null) {
+  const r = await api("/api/feedback", { method: "POST", body: JSON.stringify({ event_id: state.current, company_id: state.company, role: state.role, rating, reason }) });
+  $("#fbReasons").hidden = true;
+  const names = (r.changed || []).map((c) => `«${c.title}»`).join(", ");
+  $("#fbDone").textContent = names ? (rating < 0 ? `Спасибо! Новости про ${names} будут ниже в ленте.` : `Спасибо! Новости про ${names} будут выше.`) : "Спасибо, учтём!";
+  if (names) { toast("Лента обновлена с учётом вашей оценки — изменить можно в профиле"); loadProfile(); loadFeed(); }
 }
 
 // ---------------------------------------------------------------- проверка новой новости
@@ -389,6 +454,7 @@ async function loadSources() {
 async function loadBudget() {
   try {
     const b = await api("/api/llm/budget");
+    state.llmMode = b.mode;
     const el = $("#budgetBadge");
     if (b.mode !== "live") { el.textContent = `ИИ: ${b.mode === "replay" ? "сохранённые ответы, без ключа" : "выключен"}`; el.className = "budget-badge off"; return; }
     const share = b.budget_rub ? b.left_rub / b.budget_rub : 0;

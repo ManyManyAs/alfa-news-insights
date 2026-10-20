@@ -199,6 +199,36 @@ def get_event(event_id: str) -> Event | None:
                  story_id=row["story_id"])
 
 
+_events_cache: dict = {"sig": None, "events": []}
+_NEWS_COLS = ("id", "source", "source_title", "url", "title", "text", "published_at")
+
+
+def _events_signature() -> tuple:
+    r = db.query_one("SELECT COUNT(*) n, MAX(created_at) m, COUNT(story_id) s, "
+                     "SUM(LENGTH(classification)) c, SUM(LENGTH(news_ids)) k FROM events WHERE classification IS NOT NULL")
+    return tuple(r)
+
+
 def list_events(limit: int = 200) -> list[Event]:
-    rows = db.query("SELECT id FROM events WHERE classification IS NOT NULL ORDER BY published_at DESC LIMIT ?", (limit,))
-    return [e for r in rows if (e := get_event(r["id"]))]
+    """Последние события одним пакетом (2 запроса вместо 2N) с кэшем до изменения таблицы событий.
+
+    Лента строится на каждый запрос пользователя, а события меняются только при сборе — кэш снимает
+    основную задержку ленты при сотнях событий.
+    """
+    sig = (_events_signature(), limit, str(db.get_settings().db_path))
+    if _events_cache["sig"] == sig:
+        return _events_cache["events"]
+    rows = db.query("SELECT id, title, published_at, classification, story_id FROM events "
+                    "WHERE classification IS NOT NULL ORDER BY published_at DESC LIMIT ?", (limit,))
+    ids = [r["id"] for r in rows]
+    news: dict[str, list[NewsItem]] = {}
+    for i in range(0, len(ids), 500):
+        chunk = ids[i:i + 500]
+        q = f"SELECT event_id, {', '.join(_NEWS_COLS)} FROM news WHERE event_id IN ({','.join('?' * len(chunk))}) ORDER BY published_at"
+        for r in db.query(q, chunk):
+            news.setdefault(r["event_id"], []).append(NewsItem(**{k: r[k] for k in _NEWS_COLS}))
+    out = [Event(id=r["id"], title=r["title"], published_at=r["published_at"], news=news[r["id"]],
+                 classification=EventClassification.model_validate_json(r["classification"]), story_id=r["story_id"])
+           for r in rows if news.get(r["id"])]
+    _events_cache.update(sig=sig, events=out)
+    return out

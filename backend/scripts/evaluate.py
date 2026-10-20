@@ -33,6 +33,7 @@ def ndcg(rels: list[int], ideal: list[int], k: int) -> float:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--insights", action="store_true", help="также построить инсайты и посчитать долю прошедших самопроверку")
+    ap.add_argument("--rerank", action="store_true", help="сравнить базовый порядок с LLM-реранком (нужен live/replay)")
     args = ap.parse_args()
     bootstrap()
     path = get_settings().data_dir / "eval" / "relevance_labels.csv"
@@ -47,7 +48,7 @@ def main() -> None:
     # Лента сворачивает сюжет в одну карточку, поэтому оцениваем на уровне «карточек»: событие вне сюжета
     # или сюжет целиком (метка сюжета — максимум меток его событий)
     news_to_event = {n.id: (e.story_id or e.id) for e in events for n in e.news}
-    p3s, ndcgs = [], []
+    p3s, ndcgs, rr_p3s, rr_ndcgs = [], [], [], []
     for cid, r in cases.items():
         prof = CompanyProfile(uid=f"EVAL_{cid}", okved=r["okved"], okved_name=r["okved_name"],
                               products=[p for p in r["products"].split("|") if p],
@@ -57,14 +58,30 @@ def main() -> None:
             if n in news_to_event:
                 key = news_to_event[n]
                 ev_label[key] = max(ev_label.get(key, 0), lab)
-        ranked = [s.event.story_id or s.event.id for s in rank_feed(events, prof, r["role"] or None, limit=20)]
+        feed = rank_feed(events, prof, r["role"] or None, limit=20)
+        ranked = [s.event.story_id or s.event.id for s in feed]
         rels = [ev_label.get(e, 0) for e in ranked]
+        if args.rerank:
+            from app.ranking.rerank import rerank
+
+            rr = rerank(feed, prof, r["role"] or None)
+            if rr["applied"]:
+                key = {s.event.id: s.event.story_id or s.event.id for s in feed}
+                rr_rels = [ev_label.get(key[e], 0) for e in rr["order"]]
+                rr_p3s.append(sum(1 for x in rr_rels[:3] if x > 0) / 3)
+                rr_ndcgs.append(ndcg(rr_rels, list(ev_label.values()), 5))
         p3 = sum(1 for x in rels[:3] if x > 0) / 3
         n5 = ndcg(rels, list(ev_label.values()), 5)
         p3s.append(p3)
         ndcgs.append(n5)
         print(f"{cid:12s} P@3={p3:.2f} nDCG@5={n5:.2f}  top3={[x for x in rels[:3]]}")
     print(f"\nСРЕДНЕЕ: P@3={sum(p3s) / len(p3s):.3f}  nDCG@5={sum(ndcgs) / len(ndcgs):.3f}")
+    if args.rerank:
+        if rr_p3s:
+            print(f"С LLM-реранком ({len(rr_p3s)}/{len(p3s)} профилей): P@3={sum(rr_p3s) / len(rr_p3s):.3f}  "
+                  f"nDCG@5={sum(rr_ndcgs) / len(rr_ndcgs):.3f}")
+        else:
+            print("LLM-реранк не применён (нет доступа к модели)")
 
     # Граф: доля пунктов топ-5 лент демо-персон, объяснённых через контрагентов/похожие компании (DoD этапа 3: ≥ 30%)
     from app.bootstrap import load_demo_users

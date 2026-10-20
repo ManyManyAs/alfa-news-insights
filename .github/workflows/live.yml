@@ -83,7 +83,10 @@ jobs:
         run: python scripts/llm_check.py
       - name: Бенчмарк моделей
         if: inputs.task == 'benchmark' || inputs.task == 'all'
-        run: python scripts/benchmark_models.py --max-rub ${{ inputs.max_rub }}
+        run: |
+          python scripts/benchmark_models.py --max-rub ${{ inputs.max_rub }}
+          { echo '# Персонализация: базовый скоринг vs LLM-реранк'; echo; echo '```'; python scripts/evaluate.py --rerank 2>/dev/null | grep -E "P@3|nDCG|реранк"; echo '```'; } > ../docs/llm/rerank_eval.md
+          cat ../docs/llm/rerank_eval.md >> "$GITHUB_STEP_SUMMARY"
       - name: Предрасчёт разборов и инсайтов
         if: inputs.task == 'warmup' || inputs.task == 'all'
         run: |

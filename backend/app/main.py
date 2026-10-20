@@ -29,7 +29,10 @@ from app.news.ingest import add_news, get_event, list_events, run_ingest, source
 from app.news.models import NewsItem
 from app.news.sources import fetch_url
 from app.news.stories import get_story
-from app.ranking.scorer import rank_feed
+from app.ranking.personal import apply_feedback, apply_overrides, get_overrides, set_manual
+from app.ranking.personal import reset as reset_overrides
+from app.ranking.rerank import rerank
+from app.ranking.scorer import rank_feed, score_event
 from app.security.guard import AccessDenied, audit, check_company_access
 from app.storage import db
 from app.storage.snapshot import snapshot_dir
@@ -109,12 +112,38 @@ def me(user: str = Depends(current_user)):
 def company(company_id: str, role: str | None = None, user: str = Depends(current_user)):
     p = authorized_profile(company_id, user)
     titles = {k: v["title"] for k, v in load_yaml("factors.yaml")["factors"].items()}
-    exp = sorted(compute_exposures(p, role).values(), key=lambda e: e.weight, reverse=True)
+    exp = sorted(apply_overrides(p.uid, compute_exposures(p, role)).values(), key=lambda e: e.weight, reverse=True)
+    overrides = get_overrides(p.uid)
     from app.data.peers import peer_benchmark
 
     return {"profile": p.model_dump(), "peers": peer_benchmark(p), "exposures": [
         {"factor": e.factor, "title": titles.get(e.factor, e.factor), "weight": round(e.weight, 2), "sign": e.sign,
-         "reasons": e.reasons} for e in exp[:10]]}
+         "reasons": e.reasons, "override": overrides.get(e.factor)} for e in exp if e.weight > 0 or e.factor in overrides][:12],
+        "overrides": [{**o, "title": titles.get(f, f)} for f, o in overrides.items()],
+        "factors": [{"factor": k, "title": v} for k, v in titles.items()]}
+
+
+class PreferenceRequest(BaseModel):
+    factor: str
+    level: str = Field(..., pattern="^(more|normal|mute)$")
+
+
+@app.put("/api/companies/{company_id}/preferences")
+def set_preference(company_id: str, req: PreferenceRequest, user: str = Depends(current_user)):
+    """Ручная настройка интересов: тема «важнее», «как обычно» или «не показывать». Видна в причинах ленты."""
+    p = authorized_profile(company_id, user)
+    if req.factor not in load_yaml("factors.yaml")["factors"]:
+        raise HTTPException(400, "Неизвестный фактор")
+    set_manual(p.uid, req.factor, req.level)
+    audit(user, "preference", f"{p.uid}:{req.factor}={req.level}", True)
+    return {"ok": True, "overrides": get_overrides(p.uid)}
+
+
+@app.delete("/api/companies/{company_id}/preferences")
+def reset_preferences(company_id: str, user: str = Depends(current_user)):
+    p = authorized_profile(company_id, user)
+    reset_overrides(p.uid)
+    return {"ok": True}
 
 
 @app.get("/api/feed")
@@ -138,12 +167,27 @@ def feed(company_id: str, role: str | None = None, limit: int = Query(20, le=50)
             "industries": [{"code": c, "name": okved_class_name(c)} for c in cls.industries],
             "effective": ({"date": upcoming[0], "days": (date.fromisoformat(upcoming[0]) - today).days}
                           if upcoming else None),
-            "story": ({"id": st["id"], "count": len(st["events"]),
+            "story": ({"id": st["id"], "count": len(st["events"]), "updated": st["last_at"] or "",
                        "timeline": [{k: e[k] for k in ("event_id", "title", "published_at", "direction")}
                                     for e in st["events"]]} if st and len(st["events"]) > 1 else None),
             "has_bank_view": bool(kb.theses_for([f.factor for f in cls.factors]))}
 
-    return {"company_id": company_id, "role": role, "items": [card(s) for s in items]}
+    # «Тишина — тоже ответ»: за неделю ничего значимого — говорим прямо и показываем последнее важное
+    week_ago = (datetime.now(UTC) - timedelta(days=QUIET_DAYS)).isoformat()
+    fresh = [s for s in items if (s.event.published_at or "") >= week_ago[:10]]
+    quiet = None if fresh else {"days": QUIET_DAYS, "last": ({"event_id": items[0].event.id, "title": items[0].event.title,
+                                                              "published_at": items[0].event.published_at} if items else None)}
+    return {"company_id": company_id, "role": role, "quiet": quiet, "items": [card(s) for s in items]}
+
+
+QUIET_DAYS = 7
+
+
+@app.get("/api/feed/rerank")
+def feed_rerank(company_id: str, role: str | None = None, limit: int = Query(20, le=50), user: str = Depends(current_user)):
+    """Уточнение порядка верха ленты моделью (Gemma). Фронтенд вызывает после показа ленты и плавно переставляет карточки."""
+    p = authorized_profile(company_id, user)
+    return rerank(rank_feed(list_events(300), p, role, limit), p, role)
 
 
 @app.get("/api/stories/{story_id}")
@@ -306,12 +350,19 @@ class FeedbackRequest(BaseModel):
 
 @app.post("/api/feedback")
 def feedback(req: FeedbackRequest, user: str = Depends(current_user)):
-    authorized_profile(req.company_id, user)
+    """👍/👎 с причиной. «Не про мой бизнес» ослабляет главные факторы события для этой компании, 👍 — усиливает."""
+    p = authorized_profile(req.company_id, user)
     key = f"{req.event_id}|{req.company_id}|{req.role or '-'}"
     with db.tx() as conn:
         conn.execute("INSERT INTO feedback(user_id, insight_key, rating, reason) VALUES (?,?,?,?)",
                      (user, key, req.rating, req.reason))
-    return {"ok": True}
+    ev = get_event(req.event_id)
+    changed = []
+    if ev:
+        sc = score_event(ev, p, compute_exposures(p, req.role))
+        matched = [r["factor"] for r in sc.reasons if r["factor"] not in ("country", "industry", "region")]
+        changed = apply_feedback(p.uid, ev, matched, req.rating, req.reason)
+    return {"ok": True, "changed": changed}
 
 
 @app.get("/api/metrics")

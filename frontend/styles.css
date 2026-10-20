@@ -221,3 +221,22 @@ table.sources td { padding: 9px 10px; border-bottom: 1px solid var(--line); vert
 @media (max-width: 640px) {
   table.sources th:nth-child(n+4), table.sources td:nth-child(n+4) { display: none; }
 }
+
+/* --- этап 5: персонализация v2 --- */
+button.chip { border: 0; font: inherit; font-size: 12px; cursor: pointer; color: var(--ink); }
+.chip.interest:hover { outline: 1px solid var(--ink); }
+.chip.interest.more { background: var(--opp-bg); color: var(--opp); font-weight: 600; }
+.chip.interest.mute { background: var(--bg); color: var(--muted); text-decoration: line-through; }
+.overrides { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; font-size: 12px; }
+.ov { border-radius: 8px; padding: 2px 8px; background: var(--bg); }
+.ov.more { background: var(--opp-bg); }
+.ov.less, .ov.mute { background: var(--risk-bg); }
+.personal { font-size: 12px; color: var(--mixed); margin-top: 4px; }
+.ai-note { font-size: 12px; color: var(--ai); margin-top: 4px; }
+.ai-note .rel { letter-spacing: 1px; margin-left: 4px; }
+.rerank-note { min-height: 18px; color: var(--ai); margin: -4px 0 6px; }
+.quiet { background: var(--opp-bg); color: var(--opp); border-radius: 10px; padding: 10px 12px; font-size: 14px; margin-bottom: 10px; }
+#fbReasons { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+#fbReasons[hidden] { display: none; }
+#toast { position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 20px); background: var(--ink); color: #fff; padding: 10px 16px; border-radius: 10px; font-size: 14px; opacity: 0; transition: .25s; pointer-events: none; z-index: 20; max-width: calc(100vw - 32px); }
+#toast.show { opacity: 1; transform: translate(-50%, 0); }
