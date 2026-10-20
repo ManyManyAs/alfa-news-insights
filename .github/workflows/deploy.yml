@@ -91,4 +91,7 @@ jobs:
           echo "::error::http://$HOST/api/health не отвечает"; exit 1
       - name: Ссылка
         if: steps.cfg.outputs.skip != 'true'
-        run: echo "### Развёрнуто: http://${{ vars.DEPLOY_DOMAIN || secrets.DEPLOY_HOST }}/" >> "$GITHUB_STEP_SUMMARY"
+        env:
+          SITE: ${{ vars.DEPLOY_DOMAIN || secrets.DEPLOY_HOST }}
+        run: |
+          echo "### Развёрнуто: http://$SITE/" >> "$GITHUB_STEP_SUMMARY"

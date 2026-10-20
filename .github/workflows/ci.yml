@@ -17,6 +17,10 @@ jobs:
         with:
           version: "0.8.4"
           src: backend
+      - name: actionlint (проверка workflow)
+        run: |
+          bash <(curl -sSL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.4/scripts/download-actionlint.bash) 1.7.4
+          ./actionlint -color
 
   test:
     runs-on: ubuntu-latest
