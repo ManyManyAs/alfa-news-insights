@@ -17,7 +17,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.config import REPO_ROOT
-from app.llm.client import LLMUnavailable, get_llm, parse_json
+from app.llm.client import LLMUnavailable, get_llm, parse_json, redact
 
 OUT = REPO_ROOT / "docs" / "llm"
 
@@ -55,7 +55,7 @@ def timed(fn):
     try:
         return fn(), round(time.perf_counter() - t0, 2), None
     except Exception as e:
-        return None, round(time.perf_counter() - t0, 2), str(e)[:300]
+        return None, round(time.perf_counter() - t0, 2), redact(str(e))[:300]
 
 
 def main() -> None:

@@ -108,6 +108,11 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add data/snapshot docs/llm || true
           if git diff --cached --quiet; then echo "Нет изменений"; exit 0; fi
+          # Защита от утечки: если ключ хоть где-то оказался в файлах — ничего не коммитим
+          KEY_TRIM="$(printf '%s' "$LLM_API_KEY" | tr -d '[:space:]')"
+          if [ -n "$KEY_TRIM" ] && git grep --cached -F -q -e "$KEY_TRIM"; then
+            echo "::error::В результатах найден ключ API — коммит отменён"; git reset -q; exit 1
+          fi
           git commit -m "live: ${{ inputs.task }} (run ${{ github.run_id }})"
           git push origin live-results
           if [ -z "$(gh pr list --head live-results --state open --json number -q '.[0].number')" ]; then

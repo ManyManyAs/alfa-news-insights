@@ -49,7 +49,20 @@ def llm_priority(value: str):
 
 
 class LLMUnavailable(RuntimeError):
-    pass
+    def __init__(self, message: str = ""):
+        super().__init__(redact(str(message)))
+
+
+_BEARER = re.compile(r"(Bearer\s+)[^\s'\"]+", re.I)
+_SK = re.compile(r"sk-[A-Za-z0-9_\-]{8,}")
+
+
+def redact(text: str) -> str:
+    """Убирает ключ из любых текстов (ошибки, логи, отчёты): ключ не должен попасть в репозиторий."""
+    key = (get_settings().llm_api_key or "").strip()
+    if key:
+        text = text.replace(key, "***")
+    return _SK.sub("sk-***", _BEARER.sub(r"\1***", text))
 
 
 @dataclass

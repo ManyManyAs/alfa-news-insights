@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -38,6 +39,12 @@ class Settings(BaseSettings):
     enable_scheduler: bool = False
     # Разрешить загрузку произвольного URL новости через /api/news/analyze
     allow_url_fetch: bool = True
+
+    @field_validator("llm_api_key", "llm_base_url", mode="before")
+    @classmethod
+    def _strip(cls, v):
+        """Секреты часто копируются с пробелом/переводом строки — это ломает заголовок Authorization."""
+        return v.strip() if isinstance(v, str) else v
 
     @property
     def raw_dir(self) -> Path:
