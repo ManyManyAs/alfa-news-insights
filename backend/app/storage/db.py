@@ -143,6 +143,17 @@ CREATE TABLE IF NOT EXISTS llm_usage (
     PRIMARY KEY (day, model)
 );
 
+-- Персональные поправки к весам факторов: из 👍/👎 (feedback) или заданные пользователем (manual)
+CREATE TABLE IF NOT EXISTS profile_overrides (
+    company_uid TEXT,
+    factor TEXT,
+    multiplier REAL,
+    source TEXT,
+    note TEXT,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (company_uid, factor)
+);
+
 CREATE TABLE IF NOT EXISTS feedback (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id TEXT,
