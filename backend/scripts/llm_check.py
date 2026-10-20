@@ -77,12 +77,12 @@ def main() -> None:
     for key, m in llm.cfg["models"].items():
         r: dict = {"configured_id": m["id"]}
         ping, r["ping_s"], r["ping_error"] = timed(lambda key=key: llm.complete(
-            "chat", [{"role": "user", "content": "Ответь одним словом: ОК"}], max_tokens=10, model_key=key))
+            "chat", [{"role": "user", "content": "Ответь одним словом: ОК"}], max_tokens=300, model_key=key))
         r["ping"] = ping.text.strip()[:40] if ping else None
         res, r["json_s"], r["json_error"] = timed(lambda key=key: llm.complete(
             "classify_news", [{"role": "system", "content": "Верни только JSON."},
                               {"role": "user", "content": 'Верни JSON {"factor": "key_rate", "direction": "up"}'}],
-            json_mode=True, max_tokens=60, model_key=key))
+            json_mode=True, max_tokens=400, model_key=key))
         try:
             r["json_ok"] = bool(res) and isinstance(parse_json(res.text), dict)
         except ValueError:
@@ -91,7 +91,7 @@ def main() -> None:
             msg = [{"role": "user", "content": [
                 {"type": "text", "text": "Какого цвета квадрат на картинке? Ответь одним словом."},
                 {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{red_square_png()}"}}]}]
-            vis, r["vision_s"], r["vision_error"] = timed(lambda msg=msg: llm.complete("ocr_page", msg, max_tokens=10, model_key="qwen_vl"))
+            vis, r["vision_s"], r["vision_error"] = timed(lambda msg=msg: llm.complete("ocr_page", msg, max_tokens=300, model_key="qwen_vl"))
             r["vision"] = vis.text.strip()[:40] if vis else None
             r["vision_ok"] = bool(vis) and "крас" in vis.text.lower()
         report["models"][key] = r
