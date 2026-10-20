@@ -1,0 +1,115 @@
+name: LLM live run
+
+# Живые прогоны на разрешённых моделях с секретом LLM_API_KEY (ключ не попадает ни в код, ни в логи).
+# Результаты (отчёты, снапшот для жюри) коммитятся в ветку live-results и предлагаются PR в main.
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: "check — проверка моделей; benchmark — сравнение моделей; warmup — предрасчёт + снапшот; all — всё"
+        type: choice
+        options: [check, benchmark, warmup, all]
+        default: check
+      max_rub:
+        description: "Лимит расходов на прогон, ₽ (дневной лимит команды — 500 ₽)"
+        default: "100"
+      top:
+        description: "warmup: сколько событий ленты на персону"
+        default: "5"
+      roles:
+        description: "warmup: строить инсайты для всех ролей"
+        type: boolean
+        default: false
+
+concurrency:
+  group: llm-live
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      LLM_MODE: live
+      LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+      LLM_BASE_URL: ${{ secrets.LLM_BASE_URL || vars.LLM_BASE_URL }}
+      LLM_MODEL_GEMMA: ${{ vars.LLM_MODEL_GEMMA }}
+      LLM_MODEL_GLM: ${{ vars.LLM_MODEL_GLM }}
+      LLM_MODEL_QWEN: ${{ vars.LLM_MODEL_QWEN }}
+      LLM_MODEL_DEEPSEEK: ${{ vars.LLM_MODEL_DEEPSEEK }}
+      LLM_MODEL_QWEN_VL: ${{ vars.LLM_MODEL_QWEN_VL }}
+      LLM_MODEL_KIMI: ${{ vars.LLM_MODEL_KIMI }}
+      DB_PATH: /tmp/live.db
+      DATA_SOURCE_DIR: ../data/case
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Проверка секретов
+        run: |
+          if [ -z "$LLM_API_KEY" ]; then echo "::error::Добавьте секрет LLM_API_KEY (Settings → Secrets and variables → Actions)"; exit 1; fi
+          if [ -z "$LLM_BASE_URL" ]; then echo "::error::Добавьте секрет или переменную LLM_BASE_URL"; exit 1; fi
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+      - name: Продолжить с ветки live-results, если она есть (накопленный снапшот)
+        working-directory: .
+        run: |
+          git fetch origin live-results || true
+          if git rev-parse --verify origin/live-results >/dev/null 2>&1; then
+            git checkout -B live-results
+            git merge --no-edit origin/live-results || git merge --abort
+          else
+            git checkout -B live-results
+          fi
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.lock
+      - run: pip install -r requirements.lock
+      - name: Bootstrap (данные кейса + снапшот)
+        run: python scripts/manage.py bootstrap
+      - name: Проверка моделей
+        if: inputs.task == 'check' || inputs.task == 'all'
+        run: python scripts/llm_check.py
+      - name: Бенчмарк моделей
+        if: inputs.task == 'benchmark' || inputs.task == 'all'
+        run: python scripts/benchmark_models.py --max-rub ${{ inputs.max_rub }}
+      - name: Предрасчёт разборов и инсайтов
+        if: inputs.task == 'warmup' || inputs.task == 'all'
+        run: |
+          ROLES=""; if [ "${{ inputs.roles }}" = "true" ]; then ROLES="--roles"; fi
+          python scripts/manage.py warmup --top ${{ inputs.top }} --max-rub ${{ inputs.max_rub }} --background $ROLES
+      - name: Экспорт снапшота
+        run: python scripts/manage.py snapshot-export
+      - name: Итоги в summary
+        run: |
+          python - <<'EOF' >> $GITHUB_STEP_SUMMARY
+          import json, pathlib
+          m = json.loads(pathlib.Path("../data/snapshot/manifest.json").read_text())
+          print("### Снапшот"); print(f"- вызовов LLM всего: {m['llm_calls']}, расход всего: {m['llm_cost_rub']} ₽")
+          print(f"- записей: {m['counts']}")
+          for f in ["../docs/llm/llm_check.md", "../docs/llm/BENCHMARK.md"]:
+              p = pathlib.Path(f)
+              if p.exists(): print(); print(p.read_text())
+          EOF
+      - name: Commit и PR
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/snapshot docs/llm || true
+          if git diff --cached --quiet; then echo "Нет изменений"; exit 0; fi
+          git commit -m "live: ${{ inputs.task }} (run ${{ github.run_id }})"
+          git push origin live-results
+          if [ -z "$(gh pr list --head live-results --state open --json number -q '.[0].number')" ]; then
+            gh pr create --head live-results --base main --title "LLM live: снапшот и отчёты" \
+              --body "Автоматические результаты живых прогонов (workflow «LLM live run»). Проверьте docs/llm и data/snapshot/manifest.json."
+          fi

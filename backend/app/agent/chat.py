@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 
 from app.agent import prompts
 from app.agent.schemas import Insight
@@ -45,18 +46,44 @@ def answer_rules(q: str, ins: Insight, profile: CompanyProfile) -> dict:
                       "позицию банка, контрагентов или источники.", "mode": "rules"}
 
 
-def answer(q: str, ins: Insight, profile: CompanyProfile) -> dict:
-    q_clean, flags = sanitize_untrusted(q)
-    llm = get_llm()
-    if not llm.enabled:
-        return answer_rules(q_clean, ins, profile) | {"security_flags": flags}
+def _messages(q_clean: str, ins: Insight, profile: CompanyProfile) -> list[dict]:
     kb_hits = get_knowledge().search(q_clean, k=3)
     ctx = {"insight": json.loads(ins.model_dump_json()), "company": profile.llm_view(), "bank_search": kb_hits}
-    msg = [{"role": "system", "content": prompts.CHAT_SYSTEM.format(notice=UNTRUSTED_NOTICE)},
-           {"role": "user", "content": f"<context>{json.dumps(ctx, ensure_ascii=False)[:20000]}</context>\n"
-                                       f"<user_question>{q_clean}</user_question>"}]
-    try:
-        res = llm.complete("chat", msg, max_tokens=600)
-        return {"answer": res.text, "mode": f"llm:{res.model}", "security_flags": flags}
-    except LLMUnavailable:
-        return answer_rules(q_clean, ins, profile) | {"security_flags": flags}
+    return [{"role": "system", "content": prompts.CHAT_SYSTEM.format(notice=UNTRUSTED_NOTICE)},
+            {"role": "user", "content": f"<context>{json.dumps(ctx, ensure_ascii=False)[:20000]}</context>\n"
+                                        f"<user_question>{q_clean}</user_question>"}]
+
+
+CHAT_PARAMS = {"max_tokens": 600, "temperature": 0.2}
+
+
+def answer_stream(q: str, ins: Insight, profile: CompanyProfile) -> Iterator[dict]:
+    """События для SSE: {"type": "meta"}, затем {"type": "delta", "text"}..., затем {"type": "done"}."""
+    q_clean, flags = sanitize_untrusted(q)
+    llm = get_llm()
+    if llm.enabled:
+        try:
+            gen = llm.stream("chat", _messages(q_clean, ins, profile), **CHAT_PARAMS)
+            first = next(gen)  # если ответа нет (replay-промах) — исключение до отправки meta
+            yield {"type": "meta", "mode": f"llm:{llm.mode}", "security_flags": flags}
+            yield {"type": "delta", "text": first}
+            for chunk in gen:
+                yield {"type": "delta", "text": chunk}
+            yield {"type": "done"}
+            return
+        except (LLMUnavailable, StopIteration):
+            pass
+    res = answer_rules(q_clean, ins, profile)
+    yield {"type": "meta", "mode": res["mode"], "security_flags": flags}
+    yield {"type": "delta", "text": res["answer"]}
+    yield {"type": "done"}
+
+
+def answer(q: str, ins: Insight, profile: CompanyProfile) -> dict:
+    meta, parts = {}, []
+    for ev in answer_stream(q, ins, profile):
+        if ev["type"] == "meta":
+            meta = ev
+        elif ev["type"] == "delta":
+            parts.append(ev["text"])
+    return {"answer": "".join(parts), "mode": meta.get("mode", "rules"), "security_flags": meta.get("security_flags", [])}

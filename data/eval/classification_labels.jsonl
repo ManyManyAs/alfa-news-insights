@@ -1,0 +1,12 @@
+{"news_id": "seed-01", "factors": {"key_rate": "stable", "inflation": "up"}}
+{"news_id": "seed-02", "factors": {"key_rate": "stable", "inflation": "up"}}
+{"news_id": "seed-03", "factors": {"inflation": "down", "fuel": "up", "agriculture": "down"}}
+{"news_id": "seed-04", "factors": {"bond_market": "up", "budget_policy": null}}
+{"news_id": "seed-05", "factors": {"auto_market": "down", "credit_conditions": "down", "consumer_demand": "down"}}
+{"news_id": "seed-06", "factors": {"labor_market": "up"}}
+{"news_id": "seed-07", "factors": {"china_trade": "up", "gold": "up"}}
+{"news_id": "seed-08", "factors": {"tax_regulation": null, "it_tech": null, "budget_policy": null}}
+{"news_id": "seed-09", "factors": {"real_estate": "up", "construction": "down", "key_rate": null}}
+{"news_id": "seed-10", "factors": {"consumer_demand": "up", "auto_market": "down"}}
+{"news_id": "seed-11", "factors": {"sanctions_trade": "up"}}
+{"news_id": "seed-12", "factors": {"commodity_metals": "down", "construction": "down", "key_rate": null}}

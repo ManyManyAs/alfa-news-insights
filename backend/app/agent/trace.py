@@ -19,16 +19,25 @@ def _short(obj: Any) -> str:
 
 
 class Tracer:
-    def __init__(self, trace_id: str | None = None):
+    def __init__(self, trace_id: str | None = None, listener=None):
         self.trace_id = trace_id or f"tr-{uuid.uuid4().hex[:12]}"
         self.step_no = 0
         self.steps: list[dict] = []
+        self.listener = listener  # callback(event: dict) — для стриминга прогресса агента в UI
+
+    def _emit(self, event: dict) -> None:
+        if self.listener:
+            try:
+                self.listener(event)
+            except Exception:  # слушатель не должен ломать агента
+                pass
 
     @contextmanager
     def step(self, name: str, kind: str, input: Any = None, model: str | None = None) -> Iterator[dict]:
         rec: dict = {"name": name, "kind": kind, "input": input, "model": model, "output": None,
                      "tokens_in": 0, "tokens_out": 0, "cost_rub": 0.0}
         t0 = time.perf_counter()
+        self._emit({"type": "step_start", "name": name, "kind": kind})
         try:
             yield rec
         except Exception as e:
@@ -39,6 +48,9 @@ class Tracer:
             self.step_no += 1
             rec["step_no"] = self.step_no
             self.steps.append(rec)
+            self._emit({"type": "step_end", "name": name, "kind": rec.get("kind", kind), "model": rec.get("model"),
+                        "duration_ms": rec["duration_ms"], "fallback": rec.get("fallback"),
+                        "cost_rub": round(rec.get("cost_rub") or 0, 4)})
             with db.tx() as conn:
                 conn.execute(
                     "INSERT OR REPLACE INTO trace_steps(trace_id, step_no, name, kind, model, input, output, tokens_in,"

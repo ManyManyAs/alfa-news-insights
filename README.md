@@ -128,6 +128,9 @@ Id моделей у провайдера уточните у организат
 | GET | `/api/companies/{id}?role=` | Профиль и чувствительность к факторам |
 | GET | `/api/feed?company_id=&role=` | Персональная лента с причинами |
 | GET | `/api/insights/{event_id}?company_id=&role=&refresh=` | Интерпретация (запускает агента или берёт кэш) |
+| GET | `/api/insights/{event_id}/stream?...` | То же с прогрессом шагов агента в реальном времени (SSE) |
+| POST | `/api/chat/stream` | Ответ ассистента потоком (SSE) |
+| GET | `/api/llm/status` | Режим LLM, бюджет дня, роутинг моделей, снапшот |
 | GET | `/api/trace/{trace_id}` | Шаги агента |
 | POST | `/api/news/analyze` | Новость текстом или ссылкой → событие → инсайт |
 | POST | `/api/chat` | Уточняющий вопрос по инсайту |
@@ -135,13 +138,28 @@ Id моделей у провайдера уточните у организат
 | GET | `/api/metrics` | Бюджет LLM, качество, обратная связь |
 | POST | `/api/ingest/run` | Сбор новостей из источников |
 
+## Живые прогоны на моделях (GitHub Actions)
+
+Ключ команды хранится только в секретах репозитория и не попадает в код:
+
+1. Settings → Secrets and variables → Actions → **New repository secret**: `LLM_API_KEY` и `LLM_BASE_URL` (эндпоинт организаторов, `…/v1`).
+2. При необходимости — **Variables** `LLM_MODEL_GEMMA`, `LLM_MODEL_GLM`, `LLM_MODEL_QWEN`, `LLM_MODEL_DEEPSEEK`, `LLM_MODEL_QWEN_VL`, `LLM_MODEL_KIMI` (точные id моделей у провайдера; `check` подскажет их сам).
+3. Actions → **LLM live run** → Run workflow:
+   - `check` — доступность моделей, JSON-режим, vision, латентность → `docs/llm/llm_check.md`;
+   - `benchmark` — сравнение моделей на задачах сервиса → `docs/llm/BENCHMARK.md`;
+   - `warmup` — разборы событий и инсайты демо-персон → снапшот `data/snapshot/` для проверки без ключа.
+
+Результаты приходят PR-ом из ветки `live-results`; лимит расходов на прогон задаётся параметром `max_rub`.
+
 ## Служебные скрипты
 
 ```bash
 uv run python scripts/manage.py snapshot-export      # сохранить результаты LLM для проверки без ключа
 uv run python scripts/manage.py bootstrap --force    # пересобрать профили и демо-новости
 uv run python scripts/manage.py ingest               # собрать RSS
-uv run python scripts/manage.py warmup               # прогреть инсайты демо-пользователей перед защитой
+uv run python scripts/manage.py warmup --max-rub 100 --background   # предрасчёт разборов и инсайтов демо-персон
+uv run python scripts/llm_check.py                   # проверка моделей организаторов
+uv run python scripts/benchmark_models.py --max-rub 60   # сравнение моделей → docs/llm/BENCHMARK.md
 uv run python scripts/extract_bank_theses.py --theses   # OCR PDF банка (Qwen3-VL) + извлечение тезисов (Kimi)
 uv run python scripts/evaluate.py --insights         # P@3, nDCG@5, доля инсайтов, прошедших самопроверку
 uv run python scripts/make_sample_data.py            # синтетические данные в схеме кейса

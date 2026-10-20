@@ -52,6 +52,13 @@ CREATE TABLE IF NOT EXISTS events (
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS event_briefs (
+    event_id TEXT PRIMARY KEY,
+    payload TEXT,
+    generated_by TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS insights (
     key TEXT PRIMARY KEY,
     event_id TEXT,

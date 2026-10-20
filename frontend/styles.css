@@ -151,3 +151,12 @@ dialog .row { display: flex; justify-content: flex-end; gap: 8px; }
   .insight-col { position: static; max-height: none; }
   main { padding: 16px; }
 }
+
+.progress { list-style: none; padding: 0; margin: 10px 0 0; font-size: 14px; }
+.progress li { padding: 5px 0 5px 26px; position: relative; }
+.progress li::before { content: ""; position: absolute; left: 4px; top: 10px; width: 10px; height: 10px; border-radius: 50%; background: var(--line); }
+.progress li.run::before { background: var(--accent); animation: pulse 1s infinite; }
+.progress li.ok::before { background: var(--opp); }
+.progress li.fallback::before { background: var(--mixed); }
+@keyframes pulse { 50% { opacity: .3; } }
+.msg.typing::after { content: "…"; animation: pulse 1s infinite; }

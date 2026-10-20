@@ -1,13 +1,16 @@
 # Роутинг задач по разрешённым моделям (Приложение 3 кейса).
 # Использовать другие LLM запрещено — клиент проверяет, что model id входит в allowed.
 #
-# Реальные id моделей уточните у организаторов (по общему ключу) и пропишите
-# в переменных окружения LLM_MODEL_* или прямо здесь.
+# Реальные id моделей у провайдера: scripts/llm_check.py сверяет их со списком /models эндпоинта.
+# Переопределение без правки файла: env LLM_MODEL_GEMMA, LLM_MODEL_GLM, LLM_MODEL_QWEN, LLM_MODEL_DEEPSEEK,
+# LLM_MODEL_QWEN_VL, LLM_MODEL_KIMI.
 # price_rub_per_1k_* — оценка для учёта дневного лимита 500 ₽ (уточнить у организаторов).
 
 daily_budget_rub: 500
 # Доля бюджета, после которой включается экономичный режим (дешёвые модели + шаблоны)
 soft_limit_share: 0.8
+# Фоновые задачи (предрасчёт) не тратят больше этой доли — остаток резервируется под запросы пользователей
+background_share: 0.6
 
 models:
   gemma:
@@ -47,8 +50,10 @@ tasks:
   rerank:             {model: gemma,    fallback: gemma}
   summarize_doc:      {model: kimi,     fallback: qwen}
   ocr_page:           {model: qwen_vl,  fallback: qwen_vl}
+  event_brief:        {model: deepseek, fallback: qwen}
   plan:               {model: qwen,     fallback: gemma}
   interpret:          {model: glm,      fallback: qwen}
   critique:           {model: deepseek, fallback: gemma}
   revise:             {model: glm,      fallback: qwen}
   chat:               {model: qwen,     fallback: gemma}
+  judge:              {model: deepseek, fallback: glm}
