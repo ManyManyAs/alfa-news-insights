@@ -10,14 +10,16 @@ import re
 from app.agent.llm_schemas import ClassificationOut
 from app.config import load_yaml
 from app.llm.client import LLMUnavailable, get_llm
+from app.news.entities import REGION_PATTERNS, extract_effective_dates, extract_industries, extract_regions
 from app.news.models import EventClassification, FactorHit, NewsItem
 from app.security.guard import UNTRUSTED_NOTICE, sanitize_untrusted
 
 log = logging.getLogger(__name__)
 
-UP = re.compile(r"вырос|выросл|повыс|повыш|увелич|ускор|подорож|рост[а-я]*|раст[уеё]|расти|подня|укрепл|расширя|ужесточ", re.I)
-DOWN = re.compile(r"сниз|упал|упад|замедл|подешев|дефляц|сократ|ослабл|охлажд|падени", re.I)
-STABLE = re.compile(r"сохранил|сохранен|без изменени|оставил|неизменн|пауз", re.I)
+UP = re.compile(r"вырос|выросл|повыс|повыш|увелич|ускор|подорож|рост[а-я]*|раст[уеё]|расти|подня|укрепл|расширя|ужесточ|"
+                r"превыс|обновил[аио]? (?:исторический |новый )?(?:максимум|рекорд)", re.I)
+DOWN = re.compile(r"сниз|упал|упад|замедл|подешев|дефляц|сократ|ослаб|охлажд|падени|опусти|обвал", re.I)
+STABLE = re.compile(r"сохранил|сохранен|сохранив|без изменени|оставил|осталс|осталась|неизменн|пауз", re.I)
 FORECAST = re.compile(r"ожида|прогноз|может|могут|вероятно|полага|считают|по мнению|рассматрива|обсужда|планиру", re.I)
 NUMBER = re.compile(r"\d+(?:[.,]\d+)?\s?(?:%|п\.п\.|б\.п\.|млрд|млн|трлн|руб|\$)", re.I)
 COUNTRIES = ["Китай", "Турция", "ОАЭ", "Индия", "США", "Казахстан", "Узбекистан", "Беларусь", "Гонконг", "Иран"]
@@ -56,7 +58,7 @@ def _kw_re(kws: list[str]) -> re.Pattern:
     return re.compile(r"(?<![а-яёa-z0-9])(?:" + "|".join(re.escape(k.lower().strip()) for k in kws) + ")", re.I)
 
 
-def classify_rules(item_title: str, text: str) -> EventClassification:
+def classify_rules(item_title: str, text: str, published_at: str | None = None) -> EventClassification:
     factors_cfg = load_yaml("factors.yaml")["factors"]
     clean, flags = sanitize_untrusted(text)
     full = f"{item_title}. {clean}"
@@ -87,6 +89,9 @@ def classify_rules(item_title: str, text: str) -> EventClassification:
         forecasts_or_opinions=opinions,
         numbers=numbers,
         importance=min(5, importance),
+        regions=extract_regions(full),
+        industries=extract_industries(full),
+        effective_dates=extract_effective_dates(full, published_at),
         security_flags=flags,
         classifier="rules",
     )
@@ -116,7 +121,9 @@ SYSTEM_PROMPT = """Ты — аналитик новостей корпорати
  "event_type": "monetary_policy|macro_statistics|regulation_budget|trade_geopolitics|commodities|financial_markets|industry|other",
  "factors": [{{"factor": "<id из списка>", "direction": "up|down|stable|unknown", "confidence": 0..1, "evidence": "цитата из текста"}}],
  "countries": [], "facts": ["проверяемые факты из текста"], "forecasts_or_opinions": ["прогнозы, мнения, планы"],
- "numbers": ["ключевые числа с единицами"], "importance": 1..5}}
+ "numbers": ["ключевые числа с единицами"], "importance": 1..5,
+ "regions": ["регионы РФ, если новость региональная"], "industries": ["коды классов ОКВЭД (2 цифры) отраслей, о которых новость"],
+ "effective_dates": ["YYYY-MM-DD — даты вступления в силу / начала действия, если есть"]}}
 direction — направление изменения самого фактора (например, ставка выросла = up). Используй только id факторов:
 {factors}"""
 
@@ -132,10 +139,29 @@ def classification_messages(item: NewsItem) -> tuple[list[dict], list[str]]:
     ], flags
 
 
-def classify(item: NewsItem) -> EventClassification:
-    rules = classify_rules(item.title, item.text)
+def _merge_entities(cls: EventClassification, rules: EventClassification) -> EventClassification:
+    """LLM дополняет, но не ломает сущности: регионы и даты — только валидные, отрасли — 2 цифры ОКВЭД."""
+    known = set(REGION_PATTERNS.values())
+    cls.regions = list(dict.fromkeys(rules.regions + [r for r in cls.regions if r in known]))[:5]
+    cls.industries = list(dict.fromkeys(rules.industries + [i for i in cls.industries if re.fullmatch(r"\d{2}", str(i))]))[:5]
+    dates = [d for d in cls.effective_dates if re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(d))]
+    cls.effective_dates = sorted(set(rules.effective_dates + dates))[:3]
+    return cls
+
+
+# Источники, где LLM-разбор оправдан даже без факторов по правилам: регулятор и запросы пользователя
+ALWAYS_LLM_TRUST = {"official", "user"}
+
+
+def classify(item: NewsItem, trust: str = "media") -> EventClassification:
+    """Сначала дешёвые правила; LLM — только если правила нашли бизнес-факторы или источник официальный.
+
+    Так фоновый сбор не тратит бюджет на новости вне повестки (их в лентах СМИ большинство).
+    """
+    rules = classify_rules(item.title, item.text, item.published_at)
+    rules.trust = trust
     llm = get_llm()
-    if not llm.enabled:
+    if not llm.enabled or (not rules.factors and trust not in ALWAYS_LLM_TRUST):
         return rules
     factors_cfg = load_yaml("factors.yaml")["factors"]
     messages, flags = classification_messages(item)
@@ -146,7 +172,8 @@ def classify(item: NewsItem) -> EventClassification:
         cls.security_flags = sorted(set(cls.security_flags) | set(flags))
         if not cls.factors:  # модель не нашла факторов — берём правила
             cls.factors = rules.factors
-        return cls
+        cls.trust = trust
+        return _merge_entities(cls, rules)
     except (LLMUnavailable, ValueError, KeyError) as e:
         log.info("Классификация через правила: %s", e)
         return rules

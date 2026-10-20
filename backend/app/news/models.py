@@ -29,6 +29,10 @@ class EventClassification(BaseModel):
     forecasts_or_opinions: list[str] = Field(default_factory=list)
     numbers: list[str] = Field(default_factory=list)
     importance: int = 3  # 1..5
+    regions: list[str] = Field(default_factory=list)  # регионы РФ (как в данных кейса)
+    industries: list[str] = Field(default_factory=list)  # классы ОКВЭД (2 знака), о которых новость
+    effective_dates: list[str] = Field(default_factory=list)  # ISO-даты вступления в силу / начала действия
+    trust: str = "media"  # official | agency | media | user | demo
     security_flags: list[str] = Field(default_factory=list)
     classifier: str = "rules"  # rules | llm:<model>
 
@@ -39,6 +43,7 @@ class Event(BaseModel):
     published_at: str | None = None
     news: list[NewsItem]
     classification: EventClassification
+    story_id: str | None = None
 
     @property
     def sources(self) -> list[dict]:

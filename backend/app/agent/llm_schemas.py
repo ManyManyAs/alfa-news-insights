@@ -60,6 +60,9 @@ class ClassificationOut(BaseModel):
     forecasts_or_opinions: list[str] = Field(default_factory=list)
     numbers: list[str] = Field(default_factory=list)
     importance: int = Field(3, ge=1, le=5)
+    regions: list[str] = Field(default_factory=list)
+    industries: list[str] = Field(default_factory=list)
+    effective_dates: list[str] = Field(default_factory=list)
 
 
 class ClaimOut(BaseModel):

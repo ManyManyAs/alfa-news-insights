@@ -188,3 +188,36 @@ dialog .row { display: flex; justify-content: flex-end; gap: 8px; }
 .peer-row .bar i { background: var(--accent); }
 .mix-row b, .peer-row b { text-align: right; }
 .peer-row .ok { color: var(--opp); }
+
+/* --- этап 4: живой поток новостей --- */
+.chip.trust { font-weight: 600; }
+.chip.trust.official { background: #fdecea; color: var(--accent); }
+.chip.trust.agency { background: var(--watch-bg); color: var(--watch); }
+.chip.trust.demo { background: #f1eefb; color: var(--ai); }
+.chip.geo { background: #eef6f1; color: var(--opp); }
+.chip.ind { background: #f6f2ea; color: #6d5422; }
+.pill.due { background: #fff6dc; color: #8a5b00; }
+.pill.due.soon { background: #ffe7c2; color: #8f3d00; font-weight: 600; }
+.story-badge { margin-top: 8px; font-size: 12px; color: var(--watch); background: var(--watch-bg); border-radius: 8px; padding: 4px 10px; display: inline-block; }
+details.story { margin: 12px 0; background: var(--bg); border-radius: 12px; padding: 10px 14px; }
+details.story summary { cursor: pointer; font-weight: 600; }
+.timeline { list-style: none; margin: 10px 0 0; padding: 0 0 0 14px; border-left: 2px solid var(--line); }
+.timeline li { position: relative; padding: 4px 0 8px 10px; cursor: pointer; font-size: 14px; }
+.timeline li::before { content: ""; position: absolute; left: -21px; top: 10px; width: 10px; height: 10px; border-radius: 50%; background: var(--surface); border: 2px solid var(--muted); }
+.timeline li.cur { font-weight: 600; cursor: default; }
+.timeline li.cur::before { background: var(--accent); border-color: var(--accent); }
+.timeline li:hover:not(.cur) { color: var(--watch); }
+.sources-card { margin-top: 14px; }
+.table-wrap { overflow-x: auto; }
+table.sources { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.sources th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 500; padding: 6px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+table.sources td { padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.status { white-space: nowrap; font-weight: 600; }
+.status.ok { color: var(--opp); }
+.status.mid { color: var(--mixed); }
+.status.bad { color: var(--risk); }
+.status.muted { color: var(--muted); font-weight: 400; }
+.err { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 640px) {
+  table.sources th:nth-child(n+4), table.sources td:nth-child(n+4) { display: none; }
+}

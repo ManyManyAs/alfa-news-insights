@@ -7,7 +7,7 @@ import queue
 import threading
 from collections.abc import Iterator
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import UTC, date, datetime, timedelta
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -20,13 +20,15 @@ from app.agent.schemas import Insight
 from app.agent.trace import load_trace
 from app.bootstrap import bootstrap, load_demo_users
 from app.config import REPO_ROOT, get_settings, load_yaml
+from app.data.graph import okved_class_name
 from app.data.profiles import companies_of_user, get_profile
 from app.data.sensitivity import compute_exposures, role_titles
 from app.knowledge.bank import get_knowledge
 from app.llm.client import MSK, budget_day, get_llm
-from app.news.ingest import add_news, get_event, list_events, run_ingest
+from app.news.ingest import add_news, get_event, list_events, run_ingest, sources_health
 from app.news.models import NewsItem
 from app.news.sources import fetch_url
+from app.news.stories import get_story
 from app.ranking.scorer import rank_feed
 from app.security.guard import AccessDenied, audit, check_company_access
 from app.storage import db
@@ -44,8 +46,12 @@ async def lifespan(app: FastAPI):
     if get_settings().enable_scheduler:
         from apscheduler.schedulers.background import BackgroundScheduler
 
+        cfg = load_yaml("sources.yaml")
         scheduler = BackgroundScheduler()
-        scheduler.add_job(run_ingest, "interval", minutes=load_yaml("sources.yaml").get("schedule_minutes", 30))
+        # первый проход сразу после старта (в фоне), дальше — по расписанию
+        scheduler.add_job(run_ingest, "interval", minutes=cfg.get("schedule_minutes", 30),
+                          kwargs={"max_per_source": cfg.get("max_per_source", 40)},
+                          next_run_time=datetime.now(UTC) + timedelta(seconds=20), max_instances=1, coalesce=True)
         scheduler.start()
     yield
     if scheduler:
@@ -114,13 +120,45 @@ def company(company_id: str, role: str | None = None, user: str = Depends(curren
 @app.get("/api/feed")
 def feed(company_id: str, role: str | None = None, limit: int = Query(20, le=50), user: str = Depends(current_user)):
     p = authorized_profile(company_id, user)
+    # Сюжет сворачивается в одну карточку (rank_feed): самое релевантное событие, остальные — в таймлайне
     items = rank_feed(list_events(300), p, role, limit)
     kb = get_knowledge()
-    return {"company_id": company_id, "role": role, "items": [
-        {"event_id": s.event.id, "title": s.event.title, "published_at": s.event.published_at,
-         "summary": s.event.classification.summary, "score": s.score, "effect": s.effect,
-         "reasons": s.reasons[:3], "sources": s.event.sources, "importance": s.event.classification.importance,
-         "has_bank_view": bool(kb.theses_for([f.factor for f in s.event.classification.factors]))} for s in items]}
+    stories = {s.event.story_id: get_story(s.event.story_id) for s in items if s.event.story_id}
+    today = datetime.now(UTC).date()
+
+    def card(s) -> dict:
+        cls = s.event.classification
+        st = stories.get(s.event.story_id) if s.event.story_id else None
+        upcoming = [d for d in cls.effective_dates if d >= today.isoformat()]
+        return {
+            "event_id": s.event.id, "title": s.event.title, "published_at": s.event.published_at,
+            "summary": cls.summary, "score": s.score, "effect": s.effect,
+            "reasons": s.reasons[:3], "sources": s.event.sources, "importance": cls.importance,
+            "trust": cls.trust, "regions": cls.regions,
+            "industries": [{"code": c, "name": okved_class_name(c)} for c in cls.industries],
+            "effective": ({"date": upcoming[0], "days": (date.fromisoformat(upcoming[0]) - today).days}
+                          if upcoming else None),
+            "story": ({"id": st["id"], "count": len(st["events"]),
+                       "timeline": [{k: e[k] for k in ("event_id", "title", "published_at", "direction")}
+                                    for e in st["events"]]} if st and len(st["events"]) > 1 else None),
+            "has_bank_view": bool(kb.theses_for([f.factor for f in cls.factors]))}
+
+    return {"company_id": company_id, "role": role, "items": [card(s) for s in items]}
+
+
+@app.get("/api/stories/{story_id}")
+def story(story_id: str):
+    """Сюжет: хронология связанных событий (решение → реакция рынка → новые прогнозы)."""
+    st = get_story(story_id)
+    if not st:
+        raise HTTPException(404, "Сюжет не найден")
+    return st
+
+
+@app.get("/api/sources/health")
+def sources_health_api():
+    """Источники новостей: уровень доверия, последний запуск, ошибки, сколько новостей и шума принесли."""
+    return sources_health()
 
 
 @app.get("/api/insights/{event_id}", response_model=Insight)

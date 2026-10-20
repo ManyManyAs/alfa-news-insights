@@ -4,6 +4,25 @@ const $ = (s) => document.querySelector(s);
 const EFFECT = { risk: "риск", opportunity: "возможность", mixed: "риски и возможности", watch: "отслеживать" };
 const KIND = { fact: "Факт", assumption: "Предположение источника", bank_view: "Позиция Альфа-Банка", ai_inference: "Вывод сервиса (AI)" };
 const DIR = { up: "↑", down: "↓", stable: "→", unknown: "·" };
+const TRUST = { official: ["официально", "Регулятор или орган власти"], agency: ["агентство", "Информационное агентство"],
+  media: ["СМИ", "Деловое СМИ: мнения и прогнозы помечаются как предположения"], user: ["ваша новость", "Добавлено пользователем"],
+  demo: ["демо", "Синтетический демо-пример"] };
+function plural(n, one, few, many) { const m10 = n % 10, m100 = n % 100; return m10 === 1 && m100 !== 11 ? one : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? few : many; }
+function effectiveTag(e) {
+  if (!e) return "";
+  const when = e.days === 0 ? "сегодня" : `через ${e.days} ${plural(e.days, "день", "дня", "дней")}`;
+  return `<span class="pill due ${e.days <= 30 ? "soon" : ""}" title="Дата вступления в силу: ${esc(e.date)}">⏱ вступает в силу ${when}</span>`;
+}
+function entityChips(it) {
+  const t = TRUST[it.trust] || TRUST.media;
+  return `<span class="chip trust ${esc(it.trust)}" title="${esc(t[1])}">${esc(t[0])}</span>`
+    + (it.regions || []).slice(0, 2).map((r) => `<span class="chip geo">📍 ${esc(r)}</span>`).join("")
+    + (it.industries || []).slice(0, 2).map((x) => `<span class="chip ind" title="ОКВЭД ${esc(x.code)}">${esc(x.name)}</span>`).join("");
+}
+function storyLine(s, current) {
+  return `<ol class="timeline">${s.timeline.map((e) => `<li class="${e.event_id === current ? "cur" : ""}" data-story-ev="${esc(e.event_id)}">
+    <span class="muted small">${fmtDate(e.published_at)}</span> ${e.direction ? `<b>${DIR[e.direction] || ""}</b>` : ""} ${esc(e.title)}</li>`).join("")}</ol>`;
+}
 
 function esc(s) { return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 function fmtDate(s) { if (!s) return ""; const d = new Date(s); return isNaN(d) ? s : d.toLocaleDateString("ru-RU", { day: "numeric", month: "short" }); }
@@ -78,6 +97,7 @@ function show(view) {
   document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.id === `view-${view}`));
   document.querySelectorAll(".nav-item[data-view]").forEach((n) => n.classList.toggle("active", n.dataset.view === view));
   if (view === "metrics") loadMetrics();
+  if (view === "sources") loadSources();
 }
 
 async function reload() {
@@ -171,19 +191,22 @@ async function loadFeed() {
   const { items } = await api(`/api/feed?${q({ company_id: state.company, role: state.role })}`);
   state.feed = items;
   $("#navBadge").textContent = items.filter((i) => i.effect === "risk").length || "";
-  const reasonText = (it) => it.reasons.slice(0, 2).map((r) => `${r.factor_title} ${DIR[r.direction] || ""}`).join(" · ");
+  const reasonText = (it) => it.reasons.slice(0, 2).map((r) => `${r.factor_title}${r.direction && r.direction !== "unknown" ? " " + DIR[r.direction] : ""}`).join(" · ");
   $("#widgetList").innerHTML = items.slice(0, 4).map((it) => `
     <div class="w-item" data-ev="${it.event_id}">
       <span class="pill ${it.effect}">${EFFECT[it.effect]}</span><span class="muted small">${fmtDate(it.published_at)}</span>
       <div class="title"><b>${esc(it.title)}</b></div>
       <div class="why">Почему вам: ${esc(it.reasons[0]?.why || "")}</div>
+      ${it.effective ? `<div>${effectiveTag(it.effective)}</div>` : ""}
     </div>`).join("") || `<div class="muted">Значимых событий для компании нет.</div>`;
   $("#feedList").innerHTML = items.map((it) => `
     <div class="feed-item" data-ev="${it.event_id}">
-      <div><span class="pill ${it.effect}">${EFFECT[it.effect]}</span>${it.has_bank_view ? `<span class="pill bank">есть позиция банка</span>` : ""}</div>
+      <div><span class="pill ${it.effect}">${EFFECT[it.effect]}</span>${it.has_bank_view ? `<span class="pill bank">есть позиция банка</span>` : ""}${effectiveTag(it.effective)}</div>
       <div class="title">${esc(it.title)}</div>
-      <div class="meta">${fmtDate(it.published_at)} · ${esc(it.sources.map((s) => s.source).join(", "))} · релевантность ${it.score}</div>
+      <div class="meta">${fmtDate(it.published_at)} · ${esc([...new Set(it.sources.map((s) => s.source))].join(", "))}${it.sources.length > 1 ? ` · ${it.sources.length} ${plural(it.sources.length, "публикация", "публикации", "публикаций")}` : ""} · релевантность ${it.score}</div>
+      <div class="chips">${entityChips(it)}</div>
       <div class="reasons">${esc(reasonText(it))}</div>
+      ${it.story ? `<div class="story-badge">Сюжет · ${it.story.count} ${plural(it.story.count, "событие", "события", "событий")}: ${esc(fmtDate(it.story.timeline[0].published_at))} → ${esc(fmtDate(it.story.timeline[it.story.timeline.length - 1].published_at))}</div>` : ""}
       <div class="score-bar"><i style="width:${Math.min(100, it.score * 60)}%"></i></div>
     </div>`).join("") || `<div class="empty">Значимых событий нет.</div>`;
   document.querySelectorAll("[data-ev]").forEach((el) => el.onclick = () => { show("radar"); openInsight(el.dataset.ev); });
@@ -256,9 +279,11 @@ function renderInsight(tab) {
     <h2 style="margin-top:8px">${esc(i.headline)}</h2>
     <div class="takeaway"><span class="claim-kind small" style="color:var(--ai)">ВЫВОД СЕРВИСА · </span>${esc(i.takeaway.text)}<div>${srcTags(i.takeaway.sources)}</div></div>
     ${i.data_gaps.length ? `<div class="notice">Учтены пробелы в данных: ${esc(i.data_gaps.join("; "))}</div>` : ""}
+    ${(() => { const f = state.feed.find((x) => x.event_id === state.current); return f && f.story ? `<details class="story" open><summary>Развитие сюжета · ${f.story.count} ${plural(f.story.count, "событие", "события", "событий")}</summary>${storyLine(f.story, state.current)}</details>` : ""; })()}
     <div class="tabs">${tabs.map(([k, t]) => `<div class="tab ${k === tab ? "active" : ""}" data-tab="${k}">${t}</div>`).join("")}</div>
     ${body}</div>`;
   document.querySelectorAll("[data-tab]").forEach((el) => el.onclick = () => renderInsight(el.dataset.tab));
+  document.querySelectorAll("[data-story-ev]").forEach((el) => el.onclick = () => { if (el.dataset.storyEv !== state.current) openInsight(el.dataset.storyEv); });
   document.querySelectorAll("[data-src]").forEach((el) => el.onclick = () => { renderInsight("sources"); const li = document.getElementById("src-" + CSS.escape(el.dataset.src)); if (li) { li.classList.add("hl"); li.scrollIntoView({ block: "center" }); } });
   $("#refreshBtn").onclick = () => openInsight(state.current, true);
   document.querySelectorAll("[data-fb]").forEach((el) => el.onclick = () => sendFeedback(+el.dataset.fb));
@@ -335,6 +360,29 @@ async function loadMetrics() {
     card("Обратная связь", `👍 ${m.feedback.pos} · 👎 ${m.feedback.neg}`),
     card("События / компании", `${m.events} / ${m.companies}`),
   ].join("");
+}
+
+// ---------------------------------------------------------------- источники новостей
+const SRC_STATUS = { ok: ["работает", "ok"], degraded: ["сбои", "mid"], down: ["недоступен", "bad"], never: ["ещё не опрашивался", "muted"], disabled: ["выключен", "muted"] };
+function ago(s) {
+  if (!s) return "—";
+  const m = Math.round((Date.now() - new Date(s)) / 60000);
+  return m < 1 ? "только что" : m < 60 ? `${m} мин назад` : m < 1440 ? `${Math.round(m / 60)} ч назад` : fmtDate(s);
+}
+async function loadSources() {
+  const h = await api("/api/sources/health");
+  const li = h.last_ingest;
+  $("#sourcesHead").innerHTML = `Сбор каждые ${h.schedule_minutes} мин${li ? ` · последний проход ${ago(li.at)}: получено ${li.fetched}, новых событий ${li.new_events}, склеено с уже известными ${li.merged}, отсеяно как шум ${li.noise}` : ""}.
+    Новости вне бизнес-повестки отсекаются до модели; модель разбирает только новости с бизнес-факторами и официальные сообщения.`;
+  $("#sourcesBox").innerHTML = `<div class="table-wrap"><table class="sources"><thead><tr><th>Источник</th><th>Доверие</th><th>Статус</th><th>Последний опрос</th><th title="получено / новых событий / склеено / шум">Последний проход</th><th>Всего событий</th></tr></thead><tbody>
+    ${h.sources.map((s) => { const st = SRC_STATUS[s.status] || [s.status, ""]; const t = TRUST[s.trust] || TRUST.media; return `<tr>
+      <td><b>${esc(s.title)}</b><div class="muted small">${s.type === "rss" ? `<a href="${esc(s.url)}" target="_blank" rel="noopener">RSS ↗</a>` : esc(s.type)}</div></td>
+      <td><span class="chip trust ${esc(s.trust)}" title="${esc(t[1])}">${esc(t[0])}</span></td>
+      <td><span class="status ${st[1]}">● ${st[0]}</span>${s.last_error ? `<div class="muted small err" title="${esc(s.last_error)}">${esc(s.last_error.slice(0, 80))}</div>` : ""}</td>
+      <td>${ago(s.last_run)}${s.latency_ms != null ? `<div class="muted small">${s.latency_ms} мс</div>` : ""}</td>
+      <td>${s.fetched != null ? `${s.fetched} / ${s.new_events} / ${s.merged} / ${s.noise}` : "—"}</td>
+      <td>${s.total_new_events ?? "—"}</td></tr>`; }).join("")}</tbody></table></div>
+    <div class="muted small" style="margin-top:8px">Последний проход: получено / новых событий / склеено с известными / отсеяно как шум.</div>`;
 }
 
 // ---------------------------------------------------------------- бюджет ИИ (временный индикатор)

@@ -59,6 +59,7 @@ models:
 tasks:
   classify_news:      {model: gemma,    fallback: gemma}
   rerank:             {model: gemma,    fallback: gemma}
+  dedup_arbiter:      {model: gemma,    fallback: glm}
   summarize_doc:      {model: kimi,     fallback: qwen}
   ocr_page:           {model: qwen_vl,  fallback: qwen_vl}
   event_brief:        {model: deepseek, fallback: qwen}

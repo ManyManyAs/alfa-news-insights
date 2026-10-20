@@ -59,7 +59,37 @@ CREATE TABLE IF NOT EXISTS events (
     published_at TEXT,
     classification TEXT,
     news_ids TEXT,
+    story_id TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Сюжет: цепочка связанных событий (ставка → реакция рынка → новые прогнозы)
+CREATE TABLE IF NOT EXISTS stories (
+    id TEXT PRIMARY KEY,
+    title TEXT,
+    factor TEXT,
+    event_ids TEXT,
+    first_at TEXT,
+    last_at TEXT
+);
+
+-- Здоровье источников новостей: последний запуск, ошибки, сколько принесли
+CREATE TABLE IF NOT EXISTS source_status (
+    id TEXT PRIMARY KEY,
+    title TEXT,
+    type TEXT,
+    trust TEXT,
+    url TEXT,
+    last_run TEXT,
+    last_ok TEXT,
+    last_error TEXT,
+    failures INTEGER DEFAULT 0,
+    latency_ms INTEGER,
+    fetched INTEGER DEFAULT 0,
+    new_events INTEGER DEFAULT 0,
+    merged INTEGER DEFAULT 0,
+    noise INTEGER DEFAULT 0,
+    total_new_events INTEGER DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS event_briefs (
@@ -143,7 +173,23 @@ def _connect(path: Path) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.executescript(SCHEMA)
+    _migrate(conn)
     return conn
+
+
+# Колонки, добавленные после первых релизов: CREATE TABLE IF NOT EXISTS их в старую БД не добавит
+MIGRATIONS = {"events": {"story_id": "TEXT"}, "news": {"minhash": "TEXT", "noise": "INTEGER DEFAULT 0"}}
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    for table, cols in MIGRATIONS.items():
+        have = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+        for col, typ in cols.items():
+            if col not in have:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_events_story ON events(story_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_events_pub ON events(published_at)")
+    conn.commit()
 
 
 def get_conn() -> sqlite3.Connection:

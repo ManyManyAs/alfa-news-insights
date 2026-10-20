@@ -19,6 +19,7 @@ from app.news.models import Event
 DIR = {"up": 1, "down": -1, "stable": 0, "unknown": 0}
 HALF_LIFE_DAYS = 14
 MIN_SCORE = 0.35
+OTHER_INDUSTRY_DISCOUNT = 0.7
 
 
 @dataclass
@@ -65,11 +66,14 @@ def score_event(event: Event, profile: CompanyProfile, exposures: dict[str, Expo
     titles = {k: v["title"] for k, v in load_yaml("factors.yaml")["factors"].items()}
     cls = event.classification
     total, reasons, matched, effects = 0.0, [], [], []
+    # Новость о чужой отрасли доходит до компании только через макроканал — ослабляем вклад факторов
+    related = {(profile.okved or "")[:2]} | {m["okved2"] for m in profile.industry_mix if m["share"] >= 0.15}
+    discount = OTHER_INDUSTRY_DISCOUNT if cls.industries and not (set(cls.industries) & related) else 1.0
     for hit in cls.factors:
         exp = exposures.get(hit.factor)
         if not exp:
             continue
-        contrib = exp.weight * hit.confidence
+        contrib = exp.weight * hit.confidence * discount
         total += contrib
         matched.append(hit.factor)
         eff = effect_of(exp, hit.direction)
@@ -91,6 +95,7 @@ def score_event(event: Event, profile: CompanyProfile, exposures: dict[str, Expo
         total += 0.5
         reasons.append({"factor": "country", "factor_title": "Страны ВЭД", "effect": "watch", "contribution": 0.5,
                         "basis": ["profile:FTS_COUNTRY_NAME"], "why": f"Компания ведёт ВЭД с: {', '.join(common)}"})
+    total += _industry_region(cls, profile, reasons, has_factors=total > 0)
     if total > 0:
         total += 0.08 * cls.importance
     total *= freshness(event.published_at, now)
@@ -108,10 +113,71 @@ def score_event(event: Event, profile: CompanyProfile, exposures: dict[str, Expo
     return Scored(event=event, score=round(total, 3), effect=effect, reasons=reasons, matched_factors=matched)
 
 
+REGION_BONUS = 0.35
+INDUSTRY_BONUS = 0.45
+
+
+def _industry_region(cls, profile: CompanyProfile, reasons: list[dict], has_factors: bool) -> float:
+    """Прямые совпадения: новость об отрасли компании / её регионе; косвенные — об отрасли или регионе контрагентов."""
+    add = 0.0
+    own2 = (profile.okved or "")[:2]
+    if own2 and own2 in cls.industries:
+        add += INDUSTRY_BONUS
+        reasons.append({"factor": "industry", "factor_title": "Отрасль компании", "effect": "watch", "specific": True,
+                        "contribution": INDUSTRY_BONUS, "basis": [f"profile:OKVED={own2}"],
+                        "why": f"Новость об отрасли компании: {profile.okved_name or own2}"})
+    else:
+        for m in profile.industry_mix:
+            if m["share"] >= 0.15 and m["okved2"] in cls.industries and m["okved2"] != own2:
+                c = round(INDUSTRY_BONUS * min(1.0, m["share"] * 1.5) * 0.6, 3)
+                role = "покупателей" if m["direction"] == "in" else "поставщиков"
+                add += c
+                reasons.append({"factor": "industry", "factor_title": "Отрасль контрагентов", "effect": "watch",
+                                "specific": True, "contribution": c, "basis": [f"graph:{m['direction']}:{m['okved2']}"],
+                                "why": f"Новость об отрасли «{m['name']}» — на неё приходится {m['share']:.0%} "
+                                       f"платежей {role}",
+                                "indirect": [{"basis": f"graph:{m['direction']}:{m['okved2']}",
+                                              "why": f"{m['share']:.0%} платежей {role}"}]})
+                break
+    # регион — усилитель, а не самостоятельная причина: «Москва» в тексте не делает новость деловой
+    if has_factors or add:
+        if profile.region and profile.region in cls.regions:
+            add += REGION_BONUS
+            reasons.append({"factor": "region", "factor_title": "Регион компании", "effect": "watch", "specific": True,
+                            "contribution": REGION_BONUS, "basis": ["profile:REGION"],
+                            "why": f"Событие касается региона компании: {profile.region}"})
+        else:
+            for r in profile.cp_regions:
+                if r["share"] >= 0.2 and r["region"] in cls.regions and r["region"] != profile.region:
+                    c = round(REGION_BONUS * 0.5, 3)
+                    add += c
+                    role = "покупатели" if r["direction"] == "in" else "поставщики"
+                    reasons.append({"factor": "region", "factor_title": "Регион контрагентов", "effect": "watch",
+                                    "specific": True, "contribution": c, "basis": [f"graph:region:{r['region']}"],
+                                    "why": f"В регионе «{r['region']}» находятся {role} компании ({r['share']:.0%} платежей)"})
+                    break
+    return add
+
+
 def rank_feed(events: list[Event], profile: CompanyProfile, role: str | None = None, limit: int = 20,
               now: datetime | None = None) -> list[Scored]:
     exposures = compute_exposures(profile, role)
     scored = [score_event(e, profile, exposures, now) for e in events]
     scored = [s for s in scored if s.score >= MIN_SCORE * freshness(s.event.published_at, now) and s.reasons]
     scored.sort(key=lambda s: s.score, reverse=True)
-    return scored[:limit]
+    return collapse_stories(scored, limit)
+
+
+def collapse_stories(scored: list[Scored], limit: int) -> list[Scored]:
+    """Один сюжет — одна карточка: оставляем самое релевантное событие сюжета, остальные доступны в таймлайне."""
+    out, seen = [], set()
+    for s in scored:
+        sid = s.event.story_id
+        if sid:
+            if sid in seen:
+                continue
+            seen.add(sid)
+        out.append(s)
+        if len(out) >= limit:
+            break
+    return out

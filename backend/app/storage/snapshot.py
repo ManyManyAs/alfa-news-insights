@@ -22,7 +22,8 @@ from app.storage import db
 
 log = logging.getLogger(__name__)
 # llm_usage — чтобы расход за день учитывался между прогонами в CI
-TABLES = ["events", "news", "event_briefs", "insights", "trace_steps", "llm_cache", "llm_usage"]
+TABLES = ["events", "news", "stories", "source_status", "event_briefs", "insights", "trace_steps", "llm_cache",
+          "llm_usage"]
 
 
 def snapshot_dir() -> Path:
