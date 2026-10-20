@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -332,4 +332,13 @@ if FRONTEND.exists():
 
     @app.get("/", include_in_schema=False)
     def index():
-        return FileResponse(FRONTEND / "index.html")
+        """index.html с версией статики в адресах (?v=хэш), чтобы после деплоя браузер не брал старый JS/CSS из кэша."""
+        import hashlib
+
+        from fastapi.responses import HTMLResponse
+
+        html = (FRONTEND / "index.html").read_text(encoding="utf-8")
+        for name in ("app.js", "styles.css"):
+            v = hashlib.sha1((FRONTEND / name).read_bytes()).hexdigest()[:10]
+            html = html.replace(f"/static/{name}", f"/static/{name}?v={v}")
+        return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
