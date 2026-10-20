@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     data_source_dir: Path | None = None
     # Подгружать снапшот результатов LLM из data/snapshot при первом старте
     use_snapshot: bool = True
+    # Локальная embedding-модель для гибридного поиска (пусто — только BM25)
+    embeddings_model: str = ""
     # Сколько компаний загружать (для быстрого старта демо можно ограничить)
     max_companies: int = 0  # 0 = все
     # Фоновый сбор новостей из RSS

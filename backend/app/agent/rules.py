@@ -19,6 +19,22 @@ NO_BANK_VIEW = ("В представленных аналитических ма
                 "выводы ниже сформированы сервисом и требуют проверки экспертом банка.")
 
 
+# Главный числовой прогноз банка для фактора (показатель, период)
+HEADLINE_FORECAST = {
+    "key_rate": ("key_rate_end", "2026"), "inflation": ("inflation_dec", "2026"), "fx_rub": ("usd_rub", "2026"),
+    "china_trade": ("cny_rub", "2026"), "labor_market": ("wages_nominal", "2026"), "consumer_demand": ("retail", "2026"),
+    "credit_conditions": ("corp_loans", "2026"), "budget_policy": ("budget_balance", "2026"), "commodity_oil": ("urals", "2026"),
+    "construction": ("investment", "2026"), "sanctions_trade": ("import", "2026"), "bond_market": ("key_rate_avg", "2027"),
+    "real_estate": ("mortgage", "2026"), "auto_market": ("retail_loans", "2026"),
+}
+
+
+def headline_forecast(factor: str) -> dict | None:
+    if factor not in HEADLINE_FORECAST:
+        return None
+    return get_knowledge().forecast(*HEADLINE_FORECAST[factor]) or None
+
+
 def _company_short(ctx: AgentContext) -> str:
     p = ctx.profile
     name = p.okved_name.split(",")[0].lower()
@@ -70,9 +86,24 @@ def draft_rules(ctx: AgentContext) -> Insight:
             why.append(Claim(text=r["why"], kind="ai_inference", sources=r["basis"] + news_src[:1], confidence="high"))
 
     # 05 Позиция банка
-    theses = kb.theses_for(scored.matched_factors)[:3] or kb.theses_for([f.factor for f in cls.factors])[:2]
+    query = f"{ev.title} {cls.summary}"
+    order = [r["factor"] for r in reasons] + [f for f in scored.matched_factors if f not in {r["factor"] for r in reasons}]
+    theses: list[dict] = []
+    for f in order or [h.factor for h in cls.factors]:  # по 1–2 тезиса на главные каналы влияния
+        for t in kb.theses_for([f], query=query)[: (2 if not theses else 1)]:
+            if t not in theses and len(theses) < 3:
+                theses.append(t)
+    if not theses:
+        theses = kb.theses_for([h.factor for h in cls.factors], query=query)[:2]
     bank_ids = {t["factor"]: f"bank:{t['id']}" for t in theses}
     bank_view = [Claim(text=t["thesis"], kind="bank_view", sources=[f"bank:{t['id']}"], confidence="high") for t in theses]
+    # Числовой прогноз банка по главному фактору — с историей пересмотров («банк повысил прогноз с … до …»)
+    for f in order[:2]:
+        fc = headline_forecast(f)
+        if fc:
+            bank_view.append(Claim(text=fc["text"], kind="bank_view", sources=[fc["ref"]], confidence="high"))
+            bank_ids.setdefault(f, fc["ref"])
+            break
     for res in (ctx.memory.get("search_bank_analytics#retry") or {}).get("results", [])[:1]:
         bank_view.append(Claim(text=res["text"], kind="bank_view", sources=[f"bank:{res['id']}"], confidence="medium"))
     if not bank_view:  # честно говорим, что позиции банка нет, а не выдумываем её

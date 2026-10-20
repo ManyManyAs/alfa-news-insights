@@ -60,6 +60,25 @@ def main() -> None:
         print(f"{cid:12s} P@3={p3:.2f} nDCG@5={n5:.2f}  top3={[x for x in rels[:3]]}")
     print(f"\nСРЕДНЕЕ: P@3={sum(p3s) / len(p3s):.3f}  nDCG@5={sum(ndcgs) / len(ndcgs):.3f}")
 
+    # Поиск по аналитике банка: recall@5 на 40 запросах «событие → нужный тезис/прогноз»
+    from app.evaluation import retrieval_recall
+
+    rr = retrieval_recall(k=5)
+    print(f"\nПоиск позиции банка: recall@5={rr['recall']:.3f} ({rr['hits']}/{rr['n']}), режим: {rr['mode']}")
+    for q, got in rr["misses"]:
+        print(f"  промах: {q} → {got}")
+
+    # Классификация правилами (базовая линия без LLM)
+    from app.evaluation import classification_scores, load_classification_labels
+    from app.news.classify import classify_rules
+    from app.news.sources import JsonlSource
+
+    lab = load_classification_labels()
+    items = {n.id: n for n in JsonlSource({"id": "seed", "url": "data/sample/news_seed.jsonl"}).fetch() if n.id in lab}
+    preds = {nid: {h.factor: h.direction for h in classify_rules(it.title, it.text).factors} for nid, it in items.items()}
+    cs = classification_scores(preds, lab)
+    print(f"Классификация (правила): F1={cs['f1']} precision={cs['precision']} recall={cs['recall']} направление={cs['direction_acc']}")
+
     if args.insights:
         from app.agent.orchestrator import run_agent
 

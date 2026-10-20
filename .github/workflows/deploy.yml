@@ -1,0 +1,94 @@
+name: Deploy
+
+# Автодеплой на сервер при каждом push в main (и вручную). Доступы — только в секретах репозитория:
+#   DEPLOY_HOST            — IP или домен сервера
+#   DEPLOY_USER            — пользователь (по умолчанию root)
+#   DEPLOY_SSH_KEY         — приватный SSH-ключ (рекомендуется) ИЛИ DEPLOY_PASSWORD — пароль
+#   LLM_API_KEY, LLM_BASE_URL — ключ и эндпоинт моделей (пишутся в .env на сервере с правами 600)
+# Необязательно (variables): DEPLOY_DOMAIN + DEPLOY_EMAIL — HTTPS через Let's Encrypt; LLM_MODEL_* — id моделей.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      HOST: ${{ secrets.DEPLOY_HOST }}
+      USER_NAME: ${{ secrets.DEPLOY_USER || 'root' }}
+      SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      SSH_PASSWORD: ${{ secrets.DEPLOY_PASSWORD }}
+      APP_DIR: /opt/alfa-news-insights
+    steps:
+      - name: Есть ли настройки деплоя
+        id: cfg
+        run: |
+          if [ -z "$HOST" ] || { [ -z "$SSH_KEY" ] && [ -z "$SSH_PASSWORD" ]; }; then
+            echo "Секреты DEPLOY_HOST и DEPLOY_SSH_KEY/DEPLOY_PASSWORD не заданы — деплой пропущен."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.cfg.outputs.skip != 'true'
+      - name: SSH-доступ
+        if: steps.cfg.outputs.skip != 'true'
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          ssh-keyscan -T 15 -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          if [ -n "$SSH_KEY" ]; then
+            printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key && chmod 600 ~/.ssh/deploy_key
+            echo "SSH_CMD=ssh -i $HOME/.ssh/deploy_key -o BatchMode=yes" >> "$GITHUB_ENV"
+          else
+            sudo apt-get install -y -qq sshpass >/dev/null
+            echo "SSH_CMD=sshpass -e ssh -o PubkeyAuthentication=no" >> "$GITHUB_ENV"
+            echo "SSHPASS=$SSH_PASSWORD" >> "$GITHUB_ENV"
+          fi
+      - name: Копирование кода
+        if: steps.cfg.outputs.skip != 'true'
+        run: |
+          $SSH_CMD "$USER_NAME@$HOST" "mkdir -p $APP_DIR && command -v rsync >/dev/null || (apt-get update -qq && apt-get install -y -qq rsync)"
+          rsync -az --delete -e "$SSH_CMD" \
+            --exclude .git --exclude .env --exclude 'data/processed/*' --exclude 'data/raw/*.csv' --exclude '__pycache__' \
+            ./ "$USER_NAME@$HOST:$APP_DIR/"
+      - name: Настройки .env из секретов
+        if: steps.cfg.outputs.skip != 'true'
+        env:
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          LLM_BASE_URL: ${{ secrets.LLM_BASE_URL || vars.LLM_BASE_URL }}
+          MODELS: |
+            LLM_MODEL_GEMMA=${{ vars.LLM_MODEL_GEMMA }}
+            LLM_MODEL_GLM=${{ vars.LLM_MODEL_GLM }}
+            LLM_MODEL_QWEN=${{ vars.LLM_MODEL_QWEN }}
+            LLM_MODEL_DEEPSEEK=${{ vars.LLM_MODEL_DEEPSEEK }}
+            LLM_MODEL_QWEN_VL=${{ vars.LLM_MODEL_QWEN_VL }}
+            LLM_MODEL_KIMI=${{ vars.LLM_MODEL_KIMI }}
+        run: |
+          {
+            echo "LLM_MODE=auto"
+            echo "LLM_API_KEY=$LLM_API_KEY"
+            echo "LLM_BASE_URL=$LLM_BASE_URL"
+            echo "ENABLE_SCHEDULER=true"
+            echo "USE_SNAPSHOT=true"
+            printf '%s\n' "$MODELS" | grep -E '^LLM_MODEL_[A-Z_]+=.+$' || true
+          } > .env.deploy
+          $SSH_CMD "$USER_NAME@$HOST" "umask 077 && cat > $APP_DIR/.env" < .env.deploy
+          rm -f .env.deploy
+      - name: Установка / обновление
+        if: steps.cfg.outputs.skip != 'true'
+        env:
+          DOMAIN: ${{ vars.DEPLOY_DOMAIN }}
+          EMAIL: ${{ vars.DEPLOY_EMAIL }}
+        run: $SSH_CMD "$USER_NAME@$HOST" "cd $APP_DIR && DOMAIN='$DOMAIN' EMAIL='$EMAIL' bash deploy/install.sh < /dev/null"
+      - name: Проверка снаружи
+        if: steps.cfg.outputs.skip != 'true'
+        run: |
+          for i in $(seq 1 20); do curl -sf "http://$HOST/api/health" && echo && exit 0; sleep 5; done
+          echo "::error::http://$HOST/api/health не отвечает"; exit 1
+      - name: Ссылка
+        if: steps.cfg.outputs.skip != 'true'
+        run: echo "### Развёрнуто: http://${{ vars.DEPLOY_DOMAIN || secrets.DEPLOY_HOST }}/" >> "$GITHUB_STEP_SUMMARY"

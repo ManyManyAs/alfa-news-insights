@@ -1,0 +1,720 @@
+{
+ "_comment": "Структурированные прогнозы Альфа-Банка из таблиц аналитических материалов кейса. Несколько записей одного показателя за разные даты = эволюция взгляда банка (пересмотры прогноза).",
+ "indicators": {
+  "key_rate_end": {
+   "title": "Ключевая ставка на конец года",
+   "unit": "%",
+   "factor": "key_rate"
+  },
+  "key_rate_avg": {
+   "title": "Ключевая ставка, среднегодовая",
+   "unit": "%",
+   "factor": "key_rate"
+  },
+  "inflation_dec": {
+   "title": "Инфляция, дек./дек.",
+   "unit": "%",
+   "factor": "inflation"
+  },
+  "inflation_avg": {
+   "title": "Инфляция, среднегодовая",
+   "unit": "%",
+   "factor": "inflation"
+  },
+  "gdp": {
+   "title": "Рост ВВП",
+   "unit": "% г/г",
+   "factor": "consumer_demand"
+  },
+  "investment": {
+   "title": "Инвестиции (валовое накопление осн. капитала)",
+   "unit": "% г/г",
+   "factor": "construction"
+  },
+  "retail": {
+   "title": "Оборот розничной торговли",
+   "unit": "% г/г",
+   "factor": "consumer_demand"
+  },
+  "industry": {
+   "title": "Промышленное производство",
+   "unit": "% г/г",
+   "factor": "commodity_metals"
+  },
+  "wages_nominal": {
+   "title": "Номинальные зарплаты",
+   "unit": "% г/г",
+   "factor": "labor_market"
+  },
+  "wages_real": {
+   "title": "Реальные зарплаты",
+   "unit": "% г/г",
+   "factor": "labor_market"
+  },
+  "unemployment": {
+   "title": "Безработица на конец года",
+   "unit": "%",
+   "factor": "labor_market"
+  },
+  "budget_balance": {
+   "title": "Баланс федерального бюджета",
+   "unit": "трлн руб.",
+   "factor": "budget_policy"
+  },
+  "usd_rub": {
+   "title": "Курс рубля на конец года",
+   "unit": "руб./$",
+   "factor": "fx_rub"
+  },
+  "cny_rub": {
+   "title": "Курс юаня на конец года",
+   "unit": "руб./юань",
+   "factor": "china_trade"
+  },
+  "export": {
+   "title": "Экспорт",
+   "unit": "$ млрд",
+   "factor": "sanctions_trade"
+  },
+  "import": {
+   "title": "Импорт товаров и услуг",
+   "unit": "$ млрд",
+   "factor": "sanctions_trade"
+  },
+  "urals": {
+   "title": "Цена нефти Urals",
+   "unit": "$/барр.",
+   "factor": "commodity_oil"
+  },
+  "corp_loans": {
+   "title": "Корпоративный кредитный портфель",
+   "unit": "% г/г",
+   "factor": "credit_conditions"
+  },
+  "mortgage": {
+   "title": "Ипотечный кредитный портфель",
+   "unit": "% г/г",
+   "factor": "construction"
+  },
+  "retail_loans": {
+   "title": "Розничный кредитный портфель",
+   "unit": "% г/г",
+   "factor": "credit_conditions"
+  },
+  "retail_deposits": {
+   "title": "Розничные депозиты",
+   "unit": "% г/г",
+   "factor": "key_rate"
+  },
+  "corp_deposits": {
+   "title": "Корпоративные депозиты",
+   "unit": "% г/г",
+   "factor": "key_rate"
+  }
+ },
+ "rate_path": {
+  "doc_id": "policy_rate_11sep26",
+  "date": "2026-09-11",
+  "page": 3,
+  "points": [
+   [
+    "окт.26",
+    14.0
+   ],
+   [
+    "дек.26",
+    14.0
+   ],
+   [
+    "дек.27",
+    12.0
+   ]
+  ]
+ },
+ "forecasts": [
+  {
+   "indicator": "gdp",
+   "period": "2026",
+   "value": 0.1,
+   "doc_id": "macro_1h26",
+   "date": "2026-07-31",
+   "page": 4
+  },
+  {
+   "indicator": "investment",
+   "period": "2026",
+   "value": -4.0,
+   "doc_id": "macro_1h26",
+   "date": "2026-07-31",
+   "page": 4
+  },
+  {
+   "indicator": "retail",
+   "period": "2026",
+   "value": 3.3,
+   "doc_id": "macro_1h26",
+   "date": "2026-07-31",
+   "page": 4
+  },
+  {
+   "indicator": "industry",
+   "period": "2026",
+   "value": 0.0,
+   "doc_id": "macro_1h26",
+   "date": "2026-07-31",
+   "page": 4
+  },
+  {
+   "indicator": "inflation_dec",
+   "period": "2026",
+   "value": 7.5,
+   "doc_id": "macro_1h26",
+   "date": "2026-07-31",
+   "page": 4
+  },
+  {
+   "indicator": "inflation_avg",
+   "period": "2026",
+   "value": 6.4,
+   "doc_id": "macro_1h26",
+   "date": "2026-07-31",
+   "page": 4
+  },
+  {
+   "indicator": "key_rate_end",
+   "period": "2026",
+   "value": 13.5,
+   "doc_id": "macro_1h26",
+   "date": "2026-07-31",
+   "page": 4
+  },
+  {
+   "indicator": "key_rate_avg",
+   "period": "2026",
+   "value": 14.5,
+   "doc_id": "macro_1h26",
+   "date": "2026-07-31",
+   "page": 4
+  },
+  {
+   "indicator": "wages_nominal",
+   "period": "2026",
+   "value": 10.2,
+   "doc_id": "macro_1h26",
+   "date": "2026-07-31",
+   "page": 4
+  },
+  {
+   "indicator": "wages_real",
+   "period": "2026",
+   "value": 3.6,
+   "doc_id": "macro_1h26",
+   "date": "2026-07-31",
+   "page": 4
+  },
+  {
+   "indicator": "unemployment",
+   "period": "2026",
+   "value": 2.3,
+   "doc_id": "macro_1h26",
+   "date": "2026-07-31",
+   "page": 4
+  },
+  {
+   "indicator": "budget_balance",
+   "period": "2026",
+   "value": -5.8,
+   "doc_id": "macro_1h26",
+   "date": "2026-07-31",
+   "page": 4
+  },
+  {
+   "indicator": "usd_rub",
+   "period": "2026",
+   "value": 87.2,
+   "doc_id": "macro_1h26",
+   "date": "2026-07-31",
+   "page": 4
+  },
+  {
+   "indicator": "cny_rub",
+   "period": "2026",
+   "value": 13.0,
+   "doc_id": "macro_1h26",
+   "date": "2026-07-31",
+   "page": 4
+  },
+  {
+   "indicator": "export",
+   "period": "2026",
+   "value": 480,
+   "doc_id": "macro_1h26",
+   "date": "2026-07-31",
+   "page": 4
+  },
+  {
+   "indicator": "import",
+   "period": "2026",
+   "value": 410,
+   "doc_id": "macro_1h26",
+   "date": "2026-07-31",
+   "page": 4
+  },
+  {
+   "indicator": "urals",
+   "period": "2026",
+   "value": 63,
+   "doc_id": "macro_1h26",
+   "date": "2026-07-31",
+   "page": 4
+  },
+  {
+   "indicator": "retail_loans",
+   "period": "2026",
+   "value": 5,
+   "doc_id": "macro_1h26",
+   "date": "2026-07-31",
+   "page": 4
+  },
+  {
+   "indicator": "mortgage",
+   "period": "2026",
+   "value": 6,
+   "doc_id": "macro_1h26",
+   "date": "2026-07-31",
+   "page": 4
+  },
+  {
+   "indicator": "retail_deposits",
+   "period": "2026",
+   "value": 11,
+   "doc_id": "macro_1h26",
+   "date": "2026-07-31",
+   "page": 4
+  },
+  {
+   "indicator": "corp_loans",
+   "period": "2026",
+   "value": 13,
+   "doc_id": "macro_1h26",
+   "date": "2026-07-31",
+   "page": 4
+  },
+  {
+   "indicator": "corp_deposits",
+   "period": "2026",
+   "value": 13,
+   "doc_id": "macro_1h26",
+   "date": "2026-07-31",
+   "page": 4
+  },
+  {
+   "indicator": "gdp",
+   "period": "2027",
+   "value": 0.3,
+   "doc_id": "macro_1h26",
+   "date": "2026-07-31",
+   "page": 4
+  },
+  {
+   "indicator": "investment",
+   "period": "2027",
+   "value": 0.0,
+   "doc_id": "macro_1h26",
+   "date": "2026-07-31",
+   "page": 4
+  },
+  {
+   "indicator": "retail",
+   "period": "2027",
+   "value": 1.0,
+   "doc_id": "macro_1h26",
+   "date": "2026-07-31",
+   "page": 4
+  },
+  {
+   "indicator": "industry",
+   "period": "2027",
+   "value": 0.6,
+   "doc_id": "macro_1h26",
+   "date": "2026-07-31",
+   "page": 4
+  },
+  {
+   "indicator": "inflation_dec",
+   "period": "2027",
+   "value": 5.5,
+   "doc_id": "macro_1h26",
+   "date": "2026-07-31",
+   "page": 4
+  },
+  {
+   "indicator": "inflation_avg",
+   "period": "2027",
+   "value": 6.4,
+   "doc_id": "macro_1h26",
+   "date": "2026-07-31",
+   "page": 4
+  },
+  {
+   "indicator": "key_rate_end",
+   "period": "2027",
+   "value": 12.0,
+   "doc_id": "macro_1h26",
+   "date": "2026-07-31",
+   "page": 4
+  },
+  {
+   "indicator": "key_rate_avg",
+   "period": "2027",
+   "value": 12.6,
+   "doc_id": "macro_1h26",
+   "date": "2026-07-31",
+   "page": 4
+  },
+  {
+   "indicator": "wages_nominal",
+   "period": "2027",
+   "value": 8.0,
+   "doc_id": "macro_1h26",
+   "date": "2026-07-31",
+   "page": 4
+  },
+  {
+   "indicator": "wages_real",
+   "period": "2027",
+   "value": 1.5,
+   "doc_id": "macro_1h26",
+   "date": "2026-07-31",
+   "page": 4
+  },
+  {
+   "indicator": "unemployment",
+   "period": "2027",
+   "value": 2.4,
+   "doc_id": "macro_1h26",
+   "date": "2026-07-31",
+   "page": 4
+  },
+  {
+   "indicator": "budget_balance",
+   "period": "2027",
+   "value": -5.0,
+   "doc_id": "macro_1h26",
+   "date": "2026-07-31",
+   "page": 4
+  },
+  {
+   "indicator": "usd_rub",
+   "period": "2027",
+   "value": 95.0,
+   "doc_id": "macro_1h26",
+   "date": "2026-07-31",
+   "page": 4
+  },
+  {
+   "indicator": "cny_rub",
+   "period": "2027",
+   "value": 13.8,
+   "doc_id": "macro_1h26",
+   "date": "2026-07-31",
+   "page": 4
+  },
+  {
+   "indicator": "export",
+   "period": "2027",
+   "value": 450,
+   "doc_id": "macro_1h26",
+   "date": "2026-07-31",
+   "page": 4
+  },
+  {
+   "indicator": "import",
+   "period": "2027",
+   "value": 420,
+   "doc_id": "macro_1h26",
+   "date": "2026-07-31",
+   "page": 4
+  },
+  {
+   "indicator": "urals",
+   "period": "2027",
+   "value": 60,
+   "doc_id": "macro_1h26",
+   "date": "2026-07-31",
+   "page": 4
+  },
+  {
+   "indicator": "retail_loans",
+   "period": "2027",
+   "value": 9,
+   "doc_id": "macro_1h26",
+   "date": "2026-07-31",
+   "page": 4
+  },
+  {
+   "indicator": "mortgage",
+   "period": "2027",
+   "value": 10,
+   "doc_id": "macro_1h26",
+   "date": "2026-07-31",
+   "page": 4
+  },
+  {
+   "indicator": "retail_deposits",
+   "period": "2027",
+   "value": 12,
+   "doc_id": "macro_1h26",
+   "date": "2026-07-31",
+   "page": 4
+  },
+  {
+   "indicator": "corp_loans",
+   "period": "2027",
+   "value": 10,
+   "doc_id": "macro_1h26",
+   "date": "2026-07-31",
+   "page": 4
+  },
+  {
+   "indicator": "corp_deposits",
+   "period": "2027",
+   "value": 9,
+   "doc_id": "macro_1h26",
+   "date": "2026-07-31",
+   "page": 4
+  },
+  {
+   "indicator": "key_rate_end",
+   "period": "2026",
+   "value": 13.5,
+   "doc_id": "consumption_aug26",
+   "date": "2026-08-05",
+   "page": 2
+  },
+  {
+   "indicator": "unemployment",
+   "period": "2026",
+   "value": 2.3,
+   "doc_id": "consumption_aug26",
+   "date": "2026-08-05",
+   "page": 2
+  },
+  {
+   "indicator": "key_rate_end",
+   "period": "2027",
+   "value": 12.0,
+   "doc_id": "consumption_aug26",
+   "date": "2026-08-05",
+   "page": 2
+  },
+  {
+   "indicator": "inflation_dec",
+   "period": "2026",
+   "value": 7.5,
+   "doc_id": "macro_7m26",
+   "date": "2026-09-07",
+   "page": 3
+  },
+  {
+   "indicator": "inflation_avg",
+   "period": "2026",
+   "value": 6.4,
+   "doc_id": "macro_7m26",
+   "date": "2026-09-07",
+   "page": 3
+  },
+  {
+   "indicator": "key_rate_end",
+   "period": "2026",
+   "value": 13.5,
+   "doc_id": "macro_7m26",
+   "date": "2026-09-07",
+   "page": 3
+  },
+  {
+   "indicator": "key_rate_avg",
+   "period": "2026",
+   "value": 14.5,
+   "doc_id": "macro_7m26",
+   "date": "2026-09-07",
+   "page": 3
+  },
+  {
+   "indicator": "usd_rub",
+   "period": "2026",
+   "value": 87.2,
+   "doc_id": "macro_7m26",
+   "date": "2026-09-07",
+   "page": 3
+  },
+  {
+   "indicator": "cny_rub",
+   "period": "2026",
+   "value": 13.0,
+   "doc_id": "macro_7m26",
+   "date": "2026-09-07",
+   "page": 3
+  },
+  {
+   "indicator": "inflation_dec",
+   "period": "2027",
+   "value": 5.5,
+   "doc_id": "macro_7m26",
+   "date": "2026-09-07",
+   "page": 3
+  },
+  {
+   "indicator": "inflation_avg",
+   "period": "2027",
+   "value": 6.4,
+   "doc_id": "macro_7m26",
+   "date": "2026-09-07",
+   "page": 3
+  },
+  {
+   "indicator": "key_rate_end",
+   "period": "2027",
+   "value": 12.0,
+   "doc_id": "macro_7m26",
+   "date": "2026-09-07",
+   "page": 3
+  },
+  {
+   "indicator": "key_rate_avg",
+   "period": "2027",
+   "value": 12.5,
+   "doc_id": "macro_7m26",
+   "date": "2026-09-07",
+   "page": 3
+  },
+  {
+   "indicator": "usd_rub",
+   "period": "2027",
+   "value": 95.0,
+   "doc_id": "macro_7m26",
+   "date": "2026-09-07",
+   "page": 3
+  },
+  {
+   "indicator": "cny_rub",
+   "period": "2027",
+   "value": 13.8,
+   "doc_id": "macro_7m26",
+   "date": "2026-09-07",
+   "page": 3
+  },
+  {
+   "indicator": "gdp",
+   "period": "2027",
+   "value": 0.3,
+   "doc_id": "macro_7m26",
+   "date": "2026-09-07",
+   "page": 2
+  },
+  {
+   "indicator": "retail",
+   "period": "2027",
+   "value": 1.0,
+   "doc_id": "macro_7m26",
+   "date": "2026-09-07",
+   "page": 2
+  },
+  {
+   "indicator": "inflation_dec",
+   "period": "2026",
+   "value": 7.5,
+   "doc_id": "policy_rate_11sep26",
+   "date": "2026-09-11",
+   "page": 2
+  },
+  {
+   "indicator": "inflation_avg",
+   "period": "2026",
+   "value": 6.4,
+   "doc_id": "policy_rate_11sep26",
+   "date": "2026-09-11",
+   "page": 2
+  },
+  {
+   "indicator": "key_rate_end",
+   "period": "2026",
+   "value": 14.0,
+   "doc_id": "policy_rate_11sep26",
+   "date": "2026-09-11",
+   "page": 2
+  },
+  {
+   "indicator": "key_rate_avg",
+   "period": "2026",
+   "value": 14.6,
+   "doc_id": "policy_rate_11sep26",
+   "date": "2026-09-11",
+   "page": 2
+  },
+  {
+   "indicator": "usd_rub",
+   "period": "2026",
+   "value": 87.2,
+   "doc_id": "policy_rate_11sep26",
+   "date": "2026-09-11",
+   "page": 2
+  },
+  {
+   "indicator": "cny_rub",
+   "period": "2026",
+   "value": 13.0,
+   "doc_id": "policy_rate_11sep26",
+   "date": "2026-09-11",
+   "page": 2
+  },
+  {
+   "indicator": "inflation_dec",
+   "period": "2027",
+   "value": 5.5,
+   "doc_id": "policy_rate_11sep26",
+   "date": "2026-09-11",
+   "page": 2
+  },
+  {
+   "indicator": "inflation_avg",
+   "period": "2027",
+   "value": 6.4,
+   "doc_id": "policy_rate_11sep26",
+   "date": "2026-09-11",
+   "page": 2
+  },
+  {
+   "indicator": "key_rate_end",
+   "period": "2027",
+   "value": 12.0,
+   "doc_id": "policy_rate_11sep26",
+   "date": "2026-09-11",
+   "page": 2
+  },
+  {
+   "indicator": "key_rate_avg",
+   "period": "2027",
+   "value": 13.0,
+   "doc_id": "policy_rate_11sep26",
+   "date": "2026-09-11",
+   "page": 2
+  },
+  {
+   "indicator": "usd_rub",
+   "period": "2027",
+   "value": 93.0,
+   "doc_id": "policy_rate_11sep26",
+   "date": "2026-09-11",
+   "page": 2
+  },
+  {
+   "indicator": "cny_rub",
+   "period": "2027",
+   "value": 13.8,
+   "doc_id": "policy_rate_11sep26",
+   "date": "2026-09-11",
+   "page": 2
+  }
+ ]
+}

@@ -3,9 +3,12 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+      args:
+        EMBEDDINGS: ${EMBEDDINGS:-false}
     image: alfa-news-insights:latest
     ports:
-      - "8000:8000"
+      # только localhost: на сервере наружу отдаёт Nginx (docker в обход ufw публикует порты на 0.0.0.0)
+      - "127.0.0.1:8000:8000"
     env_file:
       - path: .env
         required: false

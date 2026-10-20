@@ -47,7 +47,8 @@ def _rule_plan(ctx: AgentContext) -> dict:
     if any(r.get("basis") and any(b.startswith("graph:") for b in r["basis"]) for r in ctx.scored.reasons) or \
             (ctx.profile.top_buyer_share or 0) > 0.3:
         steps.append({"tool": "get_counterparties", "args": {}, "why": "проверить эффекты через контрагентов"})
-    steps += [{"tool": "get_playbook", "args": {}, "why": "типовые каналы влияния и действия"},
+    steps += [{"tool": "get_bank_forecast", "args": {}, "why": "числовые прогнозы банка и их пересмотры"},
+              {"tool": "get_playbook", "args": {}, "why": "типовые каналы влияния и действия"},
               {"tool": "search_related_news", "args": {}, "why": "контекст связанных событий"},
               {"tool": "check_consistency", "args": {}, "why": "противоречия источников и позиции банка"}]
     return {"focus": "Влияние через факторы: " + ", ".join(ctx.scored.matched_factors[:3]), "steps": steps}

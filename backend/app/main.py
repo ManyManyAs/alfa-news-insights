@@ -290,6 +290,15 @@ def metrics():
     }
 
 
+@app.get("/api/bank/forecasts")
+def bank_forecasts():
+    """Макропрогноз Альфа-Банка (последние значения + пересмотры) и траектория ключевой ставки."""
+    kb = get_knowledge()
+    rows = kb.forecasts_for()
+    return {"forecasts": rows, "revisions": kb.revisions(), "rate_path": kb.rate_path,
+            "documents": list(kb.documents.values()), "theses_count": len(kb.theses)}
+
+
 @app.get("/api/llm/status")
 def llm_status():
     """Режим LLM, бюджет дня, роутинг задач по моделям и сведения о снапшоте."""
