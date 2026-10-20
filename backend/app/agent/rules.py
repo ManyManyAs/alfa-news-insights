@@ -81,6 +81,12 @@ def draft_rules(ctx: AgentContext) -> Insight:
         dir_txt = DIR_TEXT.get(r.get("direction", "unknown"), "")
         why.append(Claim(text=f"{r['why']}. Событие затрагивает фактор «{r['factor_title']}» ({dir_txt}).",
                          kind="ai_inference", sources=basis + news_src[:1], confidence="medium"))
+    # Эффект второго порядка: событие доходит до компании через отрасль её контрагентов
+    indirect = next(((r, ind) for r in reasons for ind in r.get("indirect", [])), None)
+    if indirect:
+        r, ind = indirect
+        why.append(Claim(text=f"{ind['why']} (фактор «{r['factor_title']}»).", kind="ai_inference",
+                         sources=[ind["basis"], *news_src[:1]], confidence="medium"))
     for r in scored.reasons:
         if r["factor"] == "country":
             why.append(Claim(text=r["why"], kind="ai_inference", sources=r["basis"] + news_src[:1], confidence="high"))
@@ -187,7 +193,7 @@ def valid_source(sid: str, ctx: AgentContext) -> bool:
     if kind == "bank":
         kb = get_knowledge()
         return any(c.id == ref for c in kb.chunks)
-    return kind in ("profile", "graph")
+    return kind in ("profile", "graph", "peers")
 
 
 def critique_rules(ins: Insight, ctx: AgentContext) -> tuple[list[QualityCheck], list[str]]:
@@ -210,7 +216,8 @@ def critique_rules(ins: Insight, ctx: AgentContext) -> tuple[list[QualityCheck],
     check("Позиция банка подкреплена материалами", bool(ins.bank_view) and (no_view or all(
         c.kind == "bank_view" and any(s.startswith("bank:") for s in c.sources) for c in ins.bank_view)),
         "нет ссылок на аналитику банка или вывод модели выдан за позицию банка")
-    check("Персонализация (не пересказ)", any(any(s.startswith(("profile:", "graph:")) for s in c.sources) for c in ins.why_it_matters),
+    check("Персонализация (не пересказ)",
+          any(any(s.startswith(("profile:", "graph:", "peers:")) for s in c.sources) for c in ins.why_it_matters),
           "раздел «почему важно» не опирается на признаки компании")
     corpus = " ".join(n.title + " " + n.text for n in ctx.event.news)
     corpus_nums = {x.replace(",", ".") for x in NUM_RE.findall(corpus)}

@@ -20,6 +20,16 @@ CREATE TABLE IF NOT EXISTS companies (
 );
 CREATE INDEX IF NOT EXISTS idx_companies_group ON companies(group_id);
 
+CREATE TABLE IF NOT EXISTS peer_groups (
+    key TEXT PRIMARY KEY,
+    payload TEXT
+);
+
+CREATE TABLE IF NOT EXISTS meta (
+    key TEXT PRIMARY KEY,
+    value TEXT
+);
+
 CREATE TABLE IF NOT EXISTS user_links (
     fid TEXT NOT NULL,
     uid TEXT NOT NULL,

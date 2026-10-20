@@ -116,7 +116,7 @@ async function loadBank() {
 
 // ---------------------------------------------------------------- профиль
 async function loadProfile() {
-  const { profile: p, exposures } = await api(`/api/companies/${state.company}?${q({ role: state.role })}`);
+  const { profile: p, exposures, peers } = await api(`/api/companies/${state.company}?${q({ role: state.role })}`);
   const money = (v) => v == null ? "нет данных" : (v >= 1e9 ? (v / 1e9).toFixed(1) + " млрд ₽" : (v / 1e6).toFixed(1) + " млн ₽");
   const products = { CL_PRODUCT_RKO_MARK: "РКО", CL_PRODUCT_LOA_MARK: "Кредит", CL_PRODUCT_LEA_MARK: "Лизинг", CL_PRODUCT_DEP_MARK: "Депозит", CL_PRODUCT_ZPP_MARK: "Зарплатный проект", CL_PRODUCT_GAR_MARK: "Гарантии", FACTORING_MARK: "Факторинг", FTS_FLAG: "ВЭД" };
   $("#profileCard").innerHTML = `
@@ -135,8 +135,34 @@ async function loadProfile() {
     <div class="chips">${p.products.map((x) => `<span class="chip">${products[x] || x}</span>`).join("")}</div>
     <div class="muted small" style="margin-top:10px">Чувствительность к факторам:</div>
     <div class="chips">${exposures.slice(0, 6).map((e) => `<span class="chip" title="${esc(e.reasons.map((r) => r.why).join("; "))}">${esc(e.title)} · ${e.weight}</span>`).join("")}</div>
+    ${supplyChain(p)}
+    ${peersBlock(peers)}
     ${p.data_gaps.length ? `<div class="notice">Неполные данные: ${esc(p.data_gaps.join("; "))}</div>` : ""}
     <div class="muted small">* оценка по выборке клиентов с тем же ОКВЭД</div>`;
+}
+
+function mixBars(rows, unknown) {
+  const all = [...rows];
+  if (unknown > 0.03) all.push({ name: "вне выборки (отрасль неизвестна)", share: unknown, unknown: true });
+  return all.map((m) => `<div class="mix-row${m.unknown ? " unk" : ""}"><span>${esc(m.name)}</span><i style="width:${Math.max(3, m.share * 100)}%"></i><b>${Math.round(m.share * 100)}%</b></div>`).join("");
+}
+function supplyChain(p) {
+  const buyers = p.industry_mix.filter((m) => m.direction === "in"), suppliers = p.industry_mix.filter((m) => m.direction === "out");
+  if (!buyers.length && !suppliers.length && !p.n_buyers && !p.n_suppliers) return "";
+  const conc = (h) => h == null ? "—" : h > 0.5 ? "очень высокая" : h > 0.25 ? "высокая" : h > 0.1 ? "умеренная" : "низкая";
+  return `<div class="sub-h">Цепочка поставок (граф платежей)</div>
+    ${buyers.length || p.unknown_share_in ? `<div class="muted small">Покупатели · ${p.n_buyers} · концентрация ${conc(p.hhi_in)}</div>${mixBars(buyers, p.unknown_share_in || 0)}` : ""}
+    ${suppliers.length || p.unknown_share_out ? `<div class="muted small">Поставщики · ${p.n_suppliers} · концентрация ${conc(p.hhi_out)}</div>${mixBars(suppliers, p.unknown_share_out || 0)}` : ""}
+    <div class="chips">${p.network_pct != null ? `<span class="chip" title="PageRank в сети денежных потоков">Узел сети: выше ${Math.round(p.network_pct * 100)}% компаний</span>` : ""}
+      ${p.affiliates.length ? `<span class="chip" title="Компании, связанные через общих физлиц">Связанных компаний: ${p.affiliates.length}</span>` : ""}</div>`;
+}
+function peersBlock(b) {
+  if (!b) return "";
+  const rows = b.products.filter((r) => r.peers_share >= 0.1 || r.has).slice(0, 6).map((r) => `<div class="peer-row">
+      <span>${esc(r.title)}</span><span class="bar"><i style="width:${r.peers_share * 100}%"></i></span>
+      <b>${Math.round(r.peers_share * 100)}%</b><span class="${r.has ? "ok" : "muted"}">${r.has ? "✓ есть" : "нет"}</span></div>`).join("");
+  return `<div class="sub-h">Похожие компании</div><div class="muted small">${esc(b.description)}: доля с продуктом / у вас</div>${rows}
+    ${b.buyer_concentration_vs_peers ? `<div class="muted small">Концентрация покупателей ${b.buyer_concentration_vs_peers}, чем у похожих</div>` : ""}`;
 }
 
 // ---------------------------------------------------------------- лента
@@ -310,5 +336,19 @@ async function loadMetrics() {
     card("События / компании", `${m.events} / ${m.companies}`),
   ].join("");
 }
+
+// ---------------------------------------------------------------- бюджет ИИ (временный индикатор)
+async function loadBudget() {
+  try {
+    const b = await api("/api/llm/budget");
+    const el = $("#budgetBadge");
+    if (b.mode !== "live") { el.textContent = `ИИ: ${b.mode === "replay" ? "сохранённые ответы, без ключа" : "выключен"}`; el.className = "budget-badge off"; return; }
+    const share = b.budget_rub ? b.left_rub / b.budget_rub : 0;
+    el.className = "budget-badge " + (share < 0.2 ? "low" : share < 0.5 ? "mid" : "ok");
+    el.innerHTML = `ИИ: осталось <b>${b.left_rub.toFixed(0)} ₽</b> из ${b.budget_rub.toFixed(0)}`;
+    el.title = `Потрачено ${b.spent_rub} ₽ (${b.source === "provider" ? "по данным провайдера — общий расход команды" : "по учёту этого сервера"}); этот сервер: ${b.spent_this_server_rub} ₽. Сброс в 03:00 МСК.`;
+  } catch (e) { /* индикатор необязателен */ }
+}
+loadBudget(); setInterval(loadBudget, 60000);
 
 init().catch((e) => { document.body.insertAdjacentHTML("afterbegin", `<div class="notice">Ошибка запуска: ${esc(e.message)}</div>`); });

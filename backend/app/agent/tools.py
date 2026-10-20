@@ -97,8 +97,20 @@ def t_search_related_news(ctx: AgentContext, k: int = 3) -> dict:
                          "summary": e.classification.summary, "sources": e.sources} for _, e in cands[:k]]}
 
 
+def t_get_peer_benchmark(ctx: AgentContext) -> dict:
+    """Сравнение с похожими компаниями (та же отрасль и масштаб): продукты, концентрация покупателей."""
+    from app.data.peers import peer_benchmark
+
+    return peer_benchmark(ctx.profile) or {"note": "группа сравнения не найдена"}
+
+
 def t_get_counterparties(ctx: AgentContext) -> dict:
-    return {"counterparties": [
+    p = ctx.profile
+    return {"industry_mix": [{**m, "basis": f"graph:{m['direction']}:{m['okved2']}"} for m in p.industry_mix],
+            "unknown_share_in": p.unknown_share_in, "unknown_share_out": p.unknown_share_out,
+            "hhi_buyers": p.hhi_in, "hhi_suppliers": p.hhi_out, "n_buyers": p.n_buyers, "n_suppliers": p.n_suppliers,
+            "network_percentile": p.network_pct, "affiliated_companies": len(p.affiliates),
+            "top_counterparties": [
         {"role": "покупатель" if c.direction == "in" else "поставщик", "okved": c.okved, "okved_name": c.okved_name,
          "share": round(c.share, 3), "basis": f"graph:{c.direction}:{c.okved}"} for c in ctx.profile.counterparties],
         "top_buyer_share": ctx.profile.top_buyer_share, "top_supplier_share": ctx.profile.top_supplier_share}
@@ -140,7 +152,8 @@ TOOLS: dict[str, tuple[Callable[..., dict], str]] = {
     "get_bank_forecast": (t_get_bank_forecast, "Числовые прогнозы Альфа-Банка и их пересмотры (args: factors | indicator)"),
     "search_bank_analytics": (t_search_bank_analytics, "Поиск по аналитике Альфа-Банка (args: query)"),
     "search_related_news": (t_search_related_news, "Связанные события из базы новостей"),
-    "get_counterparties": (t_get_counterparties, "Ключевые покупатели/поставщики из графа платежей"),
+    "get_counterparties": (t_get_counterparties, "Граф платежей: отрасли покупателей/поставщиков, концентрация, аффилированность"),
+    "get_peer_benchmark": (t_get_peer_benchmark, "Сравнение с похожими компаниями (отрасль и масштаб): продукты, концентрация"),
     "get_playbook": (t_get_playbook, "Типовые каналы влияния, действия и продукты по факторам"),
     "check_consistency": (t_check_consistency, "Проверка противоречий между источниками и позицией банка"),
 }

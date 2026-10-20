@@ -50,15 +50,33 @@ def compute_exposures(profile: CompanyProfile, role: str | None = None) -> dict[
         for rule in rules:
             add(rule["factor"], rule["weight"], rule.get("sign", 0), f"profile:OKVED={prefix}", f"Отрасль: {rule['why']}")
 
-    # Контрагенты: отрасли крупных покупателей/поставщиков дают эффекты второго порядка
-    for cp in profile.counterparties:
-        if cp.share < 0.2 or not cp.okved:
+    # Эффекты второго порядка: отраслевой профиль ВСЕХ контрагентов (доли платежей по классам ОКВЭД).
+    # Своя отрасль пропускается — она уже учтена напрямую.
+    own2 = profile.okved[:2]
+    for m in profile.industry_mix:
+        if m["share"] < 0.15 or m["okved2"] == own2:
             continue
-        for _prefix, rules in _okved_rules(cp.okved, cfg.get("okved", {})):
+        role_txt = "покупателей" if m["direction"] == "in" else "поставщиков"
+        for _prefix, rules in _okved_rules(m["okved2"], cfg.get("okved", {})):
             for rule in rules:
-                role_txt = "покупатель" if cp.direction == "in" else "поставщик"
-                add(rule["factor"], 0.4 * cp.share * rule["weight"], 0, f"graph:{cp.direction}:{cp.okved}",
-                    f"Ключевой {role_txt} ({cp.share:.0%} потока) работает в отрасли «{(cp.okved_name or cp.okved)[:60]}»")
+                add(rule["factor"], 0.45 * m["share"] * rule["weight"], 0, f"graph:{m['direction']}:{m['okved2']}",
+                    f"{m['share']:.0%} платежей {role_txt} приходится на отрасль «{m['name']}» — "
+                    f"событие может дойти до компании через них")
+
+    # Холодный старт: у компании мало признаков (нет продуктов кроме РКО, нет ВЭД и платежей) —
+    # добавляем слабую чувствительность по продуктам, типичным для похожих компаний.
+    signals = [x for x in profile.products if x != "CL_PRODUCT_RKO_MARK"]
+    if not signals and not profile.industry_mix:
+        from app.data.peers import PRODUCT_TITLES, peer_stats
+
+        st = peer_stats(profile.peer_key)
+        for product, share in ((st or {}).get("products") or {}).items():
+            if share < 0.3 or product == "CL_PRODUCT_RKO_MARK":
+                continue
+            for rule in (cfg["products"].get(product) or {}).get("exposures", []):
+                add(rule["factor"], 0.5 * share * rule["weight"], rule.get("sign", 0), f"peers:{product}",
+                    f"Данных о компании мало; у {share:.0%} похожих компаний есть {PRODUCT_TITLES[product]} — "
+                    f"{rule['why'][0].lower() + rule['why'][1:]}")
 
     if role:
         mult = (cfg.get("roles", {}).get(role) or {}).get("multipliers", {})

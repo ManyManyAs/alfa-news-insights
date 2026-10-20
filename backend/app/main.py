@@ -104,7 +104,9 @@ def company(company_id: str, role: str | None = None, user: str = Depends(curren
     p = authorized_profile(company_id, user)
     titles = {k: v["title"] for k, v in load_yaml("factors.yaml")["factors"].items()}
     exp = sorted(compute_exposures(p, role).values(), key=lambda e: e.weight, reverse=True)
-    return {"profile": p.model_dump(), "exposures": [
+    from app.data.peers import peer_benchmark
+
+    return {"profile": p.model_dump(), "peers": peer_benchmark(p), "exposures": [
         {"factor": e.factor, "title": titles.get(e.factor, e.factor), "weight": round(e.weight, 2), "sign": e.sign,
          "reasons": e.reasons} for e in exp[:10]]}
 
@@ -297,6 +299,19 @@ def bank_forecasts():
     rows = kb.forecasts_for()
     return {"forecasts": rows, "revisions": kb.revisions(), "rate_path": kb.rate_path,
             "documents": list(kb.documents.values()), "theses_count": len(kb.theses)}
+
+
+@app.get("/api/data/quality")
+def data_quality():
+    """Отчёт о качестве данных кейса и о том, как сервис обрабатывает пробелы."""
+    row = db.query_one("SELECT value FROM meta WHERE key='data_quality'")
+    return json.loads(row["value"]) if row else {}
+
+
+@app.get("/api/llm/budget")
+def llm_budget():
+    """Остаток дневного бюджета на модели: у провайдера (общий для команды) или по локальному учёту."""
+    return get_llm().budget_status()
 
 
 @app.get("/api/llm/status")

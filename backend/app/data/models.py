@@ -39,6 +39,19 @@ class CompanyProfile(BaseModel):
     counterparties: list[Counterparty] = Field(default_factory=list)
     top_buyer_share: float | None = None
     top_supplier_share: float | None = None
+    # --- граф (этап 3)
+    industry_mix: list[dict] = Field(default_factory=list)  # [{direction, okved2, name, share}] по всем контрагентам
+    unknown_share_in: float | None = None  # доля платежей от контрагентов вне выборки (отрасль неизвестна)
+    unknown_share_out: float | None = None
+    hhi_in: float | None = None  # концентрация покупателей (Херфиндаль–Хиршман, 0..1)
+    hhi_out: float | None = None
+    n_buyers: int = 0
+    n_suppliers: int = 0
+    network_pct: float | None = None  # перцентиль PageRank в сети платежей
+    cp_regions: list[dict] = Field(default_factory=list)
+    affiliates: list[str] = Field(default_factory=list)  # компании, связанные через общих физлиц
+    peer_key: str | None = None
+    peers_n: int = 0
     data_gaps: list[str] = Field(default_factory=list)
 
     def display_name(self) -> str:
@@ -58,6 +71,10 @@ class CompanyProfile(BaseModel):
             "вэд": {"есть": self.fts, "страны": self.fts_countries},
             "доля_в_отрасли_по_выборке": self.okved_revenue_share,
             "доля_в_группе": self.group_revenue_share,
+            "отрасли_покупателей": [{"отрасль": m["name"], "доля": m["share"]} for m in self.industry_mix if m["direction"] == "in"][:4],
+            "отрасли_поставщиков": [{"отрасль": m["name"], "доля": m["share"]} for m in self.industry_mix if m["direction"] == "out"][:4],
+            "концентрация_покупателей_hhi": self.hhi_in,
+            "аффилированных_компаний": len(self.affiliates),
             "ключевые_контрагенты": [
                 {"роль": "покупатель" if c.direction == "in" else "поставщик", "отрасль": c.okved_name, "доля_потока": round(c.share, 3)}
                 for c in self.counterparties[:6]

@@ -29,7 +29,28 @@ def answer_rules(q: str, ins: Insight, profile: CompanyProfile) -> dict:
         return {"answer": "Вывод сервиса — возможности:\n" + _fmt(ins.consequences.opportunities, "Возможности"), "mode": "rules"}
     if any(w in ql for w in ("делать", "действ", "шаг", "рекоменд")):
         return {"answer": "Возможные действия (вывод сервиса):\n" + _fmt(ins.actions, "Действия"), "mode": "rules"}
-    if any(w in ql for w in ("контрагент", "покупател", "поставщик", "разрез", "групп")):
+    if any(w in ql for w in ("похож", "конкурент", "бенчмарк", "сравн")):
+        from app.data.peers import peer_benchmark
+
+        b = peer_benchmark(profile)
+        if not b:
+            return {"answer": "Группа похожих компаний не найдена.", "mode": "rules"}
+        lines = [f"• {r['title']}: у похожих — {r['peers_share']:.0%}, у вас — {'есть' if r['has'] else 'нет'}" for r in b["products"]]
+        bc = b["buyer_concentration_vs_peers"]
+        conc = f"\nКонцентрация покупателей {bc}, чем у похожих." if bc else ""
+        return {"answer": f"Сравнение с похожими компаниями ({b['description']}):\n" + "\n".join(lines) + conc, "mode": "rules"}
+    if any(w in ql for w in ("контрагент", "покупател", "поставщик", "разрез", "групп", "отрасл")):
+        mix = [f"• {'Покупатели' if m['direction'] == 'in' else 'Поставщики'}: {m['name']} — {m['share']:.0%} платежей "
+               f"[graph:{m['direction']}:{m['okved2']}]" for m in profile.industry_mix]
+        extra = []
+        if profile.hhi_in is not None:
+            extra.append(f"Концентрация покупателей (HHI): {profile.hhi_in:.2f} — "
+                         + ("высокая, зависимость от немногих покупателей" if profile.hhi_in > 0.25 else "умеренная/низкая"))
+        if profile.affiliates:
+            extra.append(f"Связанных компаний через общих физлиц: {len(profile.affiliates)}")
+        if mix:
+            return {"answer": "Отраслевой разрез контрагентов (по всем платежам):\n" + "\n".join(mix)
+                              + ("\n" + "\n".join(extra) if extra else ""), "mode": "rules"}
         cps = profile.counterparties
         lines = [f"• {'Покупатель' if c.direction == 'in' else 'Поставщик'}: {c.okved_name or c.okved} — "
                  f"{c.share:.0%} потока [graph:{c.direction}:{c.okved}]" for c in cps]

@@ -132,6 +132,7 @@ class LLMClient:
             if override:
                 m["id"] = override
         self.allowed_ids = {m["id"] for m in self.cfg["models"].values()}
+        self._provider_cache: tuple[float, dict | None] | None = None
 
     # --- режим ---------------------------------------------------------
     @property
@@ -155,13 +156,49 @@ class LLMClient:
         return self.mode in ("live", "replay")
 
     # --- бюджет и выбор модели ----------------------------------------
+    def provider_budget(self, max_age_s: float = 60.0) -> dict | None:
+        """Расход по ключу у провайдера (эндпоинт организаторов — прокси LiteLLM: GET /key/info).
+
+        Это настоящий общий расход команды (все участники и все прогоны), а не только этого сервера.
+        Кэшируется на минуту; при недоступности — None (тогда используется локальный учёт).
+        """
+        if not self.live:
+            return None
+        now = time.time()
+        if self._provider_cache and now - self._provider_cache[0] < max_age_s:
+            return self._provider_cache[1]
+        root = re.sub(r"/v1/?$", "", self.settings.llm_base_url.rstrip("/"))
+        info = None
+        for url in (f"{root}/key/info", f"{root}/v1/key/info"):
+            try:
+                with httpx.Client(timeout=8) as c:
+                    r = c.get(url, headers=self._headers())
+                if r.status_code == 200:
+                    data = r.json()
+                    raw = data.get("info", data)
+                    if raw.get("spend") is not None:
+                        info = {"spent": float(raw["spend"]), "max_budget": raw.get("max_budget"),
+                                "reset_at": raw.get("budget_reset_at"), "duration": raw.get("budget_duration")}
+                        break
+            except (httpx.HTTPError, ValueError, TypeError):
+                continue
+        self._provider_cache = (now, info)
+        return info
+
     def budget_status(self) -> dict:
         budget = float(self.cfg.get("daily_budget_rub", 500))
-        spent = spent_today()
+        local = spent_today()
+        prov = self.provider_budget()
+        if prov and prov.get("max_budget"):
+            budget = float(prov["max_budget"])
+        spent = max(local, prov["spent"]) if prov else local
         return {"day": budget_day(), "spent_rub": round(spent, 2), "budget_rub": budget,
                 "soft_limit_rub": budget * float(self.cfg.get("soft_limit_share", 0.8)),
                 "background_limit_rub": budget * float(self.cfg.get("background_share", 0.6)),
-                "left_rub": round(max(0.0, budget - spent), 2)}
+                "left_rub": round(max(0.0, budget - spent), 2),
+                "source": "provider" if prov else "local",
+                "spent_this_server_rub": round(local, 2),
+                "reset_at": (prov or {}).get("reset_at"), "mode": self.mode}
 
     def model_for(self, task: str, priority: str = "interactive") -> tuple[str, dict]:
         route = self.cfg["tasks"].get(task) or {"model": "qwen", "fallback": "gemma"}
