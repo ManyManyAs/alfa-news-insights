@@ -22,7 +22,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -99,8 +99,9 @@ def cache_key(payload: dict) -> str:
 
 
 def budget_day() -> str:
-    """Лимит организаторов обновляется в 00:00 по Москве."""
-    return datetime.now(MSK).date().isoformat()
+    """«Бюджетные сутки» организаторов: лимит сбрасывается в 03:00 по Москве."""
+    reset = int(load_yaml("models.yaml").get("budget_reset_hour_msk", 0))
+    return (datetime.now(MSK) - timedelta(hours=reset)).date().isoformat()
 
 
 def spent_today() -> float:
@@ -314,6 +315,8 @@ class LLMClient:
         for i in range(attempts):
             with httpx.Client(timeout=self.settings.llm_timeout_s) as client:
                 r = client.post(url, json=payload, headers=self._headers())
+            if "budget has been exceeded" in r.text.lower():
+                raise LLMUnavailable("Бюджет ключа на сегодня исчерпан (сброс в 03:00 МСК)")
             if r.status_code in RETRY_STATUS and i < attempts - 1:
                 wait = float(r.headers.get("retry-after") or delay)
                 log.warning("LLM API %s, повтор через %.1f с", r.status_code, wait)
