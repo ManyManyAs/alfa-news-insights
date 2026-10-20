@@ -1,0 +1,32 @@
+# Полностью зафиксированные версии (прямые + транзитивные зависимости) для Docker-сборки.
+# Python 3.12 (см. .python-version и Dockerfile). Обновление: uv pip compile pyproject.toml -o requirements.lock
+fastapi==0.115.6
+starlette==0.41.3
+pydantic==2.10.4
+pydantic-core==2.27.2
+pydantic-settings==2.7.0
+python-dotenv==1.0.1
+annotated-types==0.7.0
+typing-extensions==4.12.2
+uvicorn==0.32.1
+click==8.1.7
+h11==0.14.0
+httpx==0.28.1
+httpcore==1.0.7
+anyio==4.7.0
+sniffio==1.3.1
+idna==3.10
+certifi==2024.12.14
+pandas==2.2.3
+numpy==2.2.1
+python-dateutil==2.9.0.post0
+pytz==2024.2
+tzdata==2024.2
+six==1.17.0
+pyyaml==6.0.2
+apscheduler==3.11.0
+tzlocal==5.2
+pytest==8.3.4
+iniconfig==2.0.0
+pluggy==1.5.0
+packaging==24.2

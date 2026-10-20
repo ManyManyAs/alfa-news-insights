@@ -1,0 +1,18 @@
+# Исходные данные кейса и материалы банка — не публикуем (см. data/raw/README.md)
+data/raw/*
+!data/raw/README.md
+data/processed/*
+!data/processed/.gitkeep
+data/knowledge/docs/*.md
+!data/knowledge/docs/.gitkeep
+
+.env
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+*.db
+*.db-*
+.DS_Store
+.idea/
+.vscode/

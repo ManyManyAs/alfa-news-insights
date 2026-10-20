@@ -1,0 +1,31 @@
+[project]
+name = "alfa-news-insights"
+version = "0.1.0"
+description = "Персонализированная новостная аналитика для клиентов КИБ (прототип для хакатона Альфа-Банка)"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "fastapi==0.115.6",
+    "uvicorn==0.32.1",
+    "pydantic==2.10.4",
+    "pydantic-settings==2.7.0",
+    "httpx==0.28.1",
+    "pandas==2.2.3",
+    "pyyaml==6.0.2",
+    "apscheduler==3.11.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest==8.3.4",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]

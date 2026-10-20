@@ -1,0 +1,28 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: alfa-news-insights:latest
+    ports:
+      - "8000:8000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DB_PATH: /app/data/processed/app.db
+    volumes:
+      # исходные CSV кейса (если нет — используется синтетика из data/sample)
+      - ./data/raw:/app/data/raw:ro
+      # БД, кэш LLM, демо-пользователи
+      - ./data/processed:/app/data/processed
+      # OCR-тексты аналитики банка (scripts/extract_bank_theses.py)
+      - ./data/knowledge:/app/data/knowledge
+    restart: unless-stopped
+
+  tests:
+    profiles: ["test"]
+    image: alfa-news-insights:latest
+    command: ["python", "-m", "pytest", "-q"]
+    environment:
+      LLM_MODE: mock

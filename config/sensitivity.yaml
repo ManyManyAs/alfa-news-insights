@@ -1,0 +1,108 @@
+# Матрица чувствительности: признак компании -> фактор -> вес и знак.
+#
+# weight  — насколько фактор важен компании (0..1), суммируется по правилам.
+# sign    — как РОСТ фактора влияет на компанию: +1 хорошо, -1 плохо, 0 неоднозначно.
+#           Итоговый эффект = sign * direction события (up=+1, down=-1).
+# why     — шаблон объяснения «почему вам это важно» (показывается в UI и
+#           передаётся агенту как обоснование из профиля).
+#
+# Новая отрасль или продукт = новая строка, без изменения кода (критерий 07).
+
+products:
+  CL_PRODUCT_LOA_MARK:
+    title: Кредит
+    exposures:
+      - {factor: key_rate, weight: 1.0, sign: -1, why: "У компании есть кредит в банке — изменение ставки напрямую меняет процентную нагрузку"}
+      - {factor: credit_conditions, weight: 0.6, sign: 1, why: "Компания пользуется кредитом — важны условия рефинансирования и доступность заёмных средств"}
+  CL_PRODUCT_DEP_MARK:
+    title: Депозит
+    exposures:
+      - {factor: key_rate, weight: 0.7, sign: 1, why: "У компании есть депозиты — ставка определяет доходность свободной ликвидности"}
+  CL_PRODUCT_LEA_MARK:
+    title: Лизинг
+    exposures:
+      - {factor: key_rate, weight: 0.6, sign: -1, why: "Лизинговые платежи зависят от стоимости фондирования"}
+      - {factor: auto_market, weight: 0.5, sign: 0, why: "Компания использует лизинг — важны цены и условия на рынке техники и авто"}
+  CL_PRODUCT_ZPP_MARK:
+    title: Зарплатный проект
+    exposures:
+      - {factor: labor_market, weight: 0.6, sign: -1, why: "У компании зарплатный проект — дефицит кадров и рост зарплат увеличивают ФОТ"}
+  CL_PRODUCT_GAR_MARK:
+    title: Гарантии
+    exposures:
+      - {factor: budget_policy, weight: 0.6, sign: 1, why: "Компания использует банковские гарантии — вероятно, работает с госзаказом, важны бюджетные решения"}
+  FACTORING_MARK:
+    title: Факторинг
+    exposures:
+      - {factor: credit_conditions, weight: 0.5, sign: 1, why: "Компания пользуется факторингом — важны отсрочки и платёжная дисциплина покупателей"}
+      - {factor: consumer_demand, weight: 0.3, sign: 1, why: "Факторинг обычно связан с поставками в розницу — важен спрос"}
+  FTS_FLAG:
+    title: Внешнеэкономическая деятельность
+    exposures:
+      - {factor: fx_rub, weight: 0.9, sign: 0, why: "Компания ведёт ВЭД — курс рубля влияет на стоимость контрактов (для импортёра ослабление рубля — риск, для экспортёра — возможность)"}
+      - {factor: sanctions_trade, weight: 0.8, sign: -1, why: "Компания ведёт ВЭД — санкции, пошлины и ограничения меняют условия поставок и расчётов"}
+      - {factor: logistics, weight: 0.5, sign: -1, why: "Компания ведёт ВЭД — важны сроки и стоимость международной логистики"}
+
+# Страна ВЭД -> дополнительный фактор
+countries:
+  КИТАЙ: [{factor: china_trade, weight: 0.8, sign: 0, why: "Компания торгует с Китаем — важны расчёты в юанях и курс CNY"}]
+  ГОНКОНГ: [{factor: china_trade, weight: 0.6, sign: 0, why: "Компания работает через Гонконг — важны расчёты в юанях"}]
+  ТУРЦИЯ: [{factor: sanctions_trade, weight: 0.3, sign: -1, why: "Компания работает с Турцией — чувствительна к вторичным санкциям и проблемам с платежами"}]
+  ОАЭ: [{factor: sanctions_trade, weight: 0.3, sign: -1, why: "Компания работает с ОАЭ — чувствительна к платёжной инфраструктуре и санкционным рискам"}]
+
+# Отрасль по префиксу ОКВЭД (сопоставление по самому длинному префиксу)
+okved:
+  "01": [{factor: agriculture, weight: 1.0, sign: 0, why: "Сельское хозяйство"}, {factor: inflation, weight: 0.4, sign: 0, why: "Цены на продовольствие"}]
+  "10": [{factor: agriculture, weight: 0.8, sign: 0, why: "Пищевое производство зависит от сырья"}, {factor: consumer_demand, weight: 0.6, sign: 1, why: "Продукция для конечного потребителя"}]
+  "06": [{factor: commodity_oil, weight: 1.0, sign: 1, why: "Нефтегазодобыча"}]
+  "19": [{factor: commodity_oil, weight: 0.8, sign: 0, why: "Нефтепереработка"}, {factor: fuel, weight: 0.8, sign: 1, why: "Производство топлива"}]
+  "07.29": [{factor: gold, weight: 1.0, sign: 1, why: "Добыча драгметаллов"}]
+  "24": [{factor: commodity_metals, weight: 1.0, sign: 1, why: "Металлургия"}]
+  "24.41": [{factor: gold, weight: 1.0, sign: 1, why: "Производство драгметаллов"}]
+  "25": [{factor: commodity_metals, weight: 0.7, sign: -1, why: "Металл — ключевое сырьё для металлообработки"}]
+  "41": [{factor: construction, weight: 1.0, sign: 1, why: "Строительство зданий"}, {factor: key_rate, weight: 0.7, sign: -1, why: "Девелопмент чувствителен к стоимости проектного финансирования и ипотеки"}, {factor: credit_conditions, weight: 0.5, sign: 1, why: "Спрос на жильё зависит от ипотеки"}]
+  "43": [{factor: construction, weight: 0.8, sign: 1, why: "Специализированные строительные работы"}]
+  "71": [{factor: construction, weight: 0.6, sign: 1, why: "Инжиниринг и проектирование зависят от стройки"}]
+  "45": [{factor: auto_market, weight: 1.0, sign: 1, why: "Торговля и обслуживание автомобилей"}, {factor: fx_rub, weight: 0.5, sign: -1, why: "Импортные автомобили и запчасти"}, {factor: credit_conditions, weight: 0.4, sign: 1, why: "Спрос зависит от автокредитов"}]
+  "46": [{factor: consumer_demand, weight: 0.6, sign: 1, why: "Оптовая торговля"}, {factor: fx_rub, weight: 0.5, sign: -1, why: "Значительная доля импортных товаров в опте"}, {factor: logistics, weight: 0.5, sign: -1, why: "Оптовая торговля зависит от логистики"}]
+  "46.51": [{factor: it_tech, weight: 0.5, sign: 0, why: "Торговля компьютерной техникой и ПО"}]
+  "47": [{factor: consumer_demand, weight: 1.0, sign: 1, why: "Розничная торговля"}, {factor: inflation, weight: 0.5, sign: -1, why: "Рост цен сдерживает реальный спрос"}]
+  "49": [{factor: logistics, weight: 1.0, sign: 1, why: "Сухопутный транспорт"}, {factor: fuel, weight: 0.8, sign: -1, why: "Топливо — ключевая статья затрат перевозчика"}]
+  "52": [{factor: logistics, weight: 1.0, sign: 1, why: "Складирование и вспомогательная транспортная деятельность"}, {factor: real_estate, weight: 0.3, sign: 0, why: "Складская недвижимость"}]
+  "55": [{factor: consumer_demand, weight: 0.8, sign: 1, why: "Гостиничный бизнес"}, {factor: labor_market, weight: 0.5, sign: -1, why: "Высокая доля ФОТ"}]
+  "56": [{factor: consumer_demand, weight: 1.0, sign: 1, why: "Общепит зависит от расходов населения"}, {factor: labor_market, weight: 0.6, sign: -1, why: "Высокая доля ФОТ и дефицит персонала"}, {factor: inflation, weight: 0.5, sign: -1, why: "Цены на продукты — себестоимость"}]
+  "62": [{factor: it_tech, weight: 1.0, sign: 0, why: "Разработка ПО"}, {factor: labor_market, weight: 0.7, sign: -1, why: "Зарплаты разработчиков — главная статья затрат"}, {factor: tax_regulation, weight: 0.6, sign: 0, why: "IT-льготы и налоговые режимы"}]
+  "63": [{factor: it_tech, weight: 0.8, sign: 0, why: "Информационные услуги"}]
+  "64": [{factor: key_rate, weight: 1.0, sign: 0, why: "Финансовые услуги"}, {factor: bond_market, weight: 0.7, sign: 0, why: "Финансовые организации держат облигации"}]
+  "66": [{factor: bond_market, weight: 0.8, sign: 0, why: "Вспомогательная финансовая деятельность"}]
+  "68": [{factor: real_estate, weight: 1.0, sign: 1, why: "Аренда и управление недвижимостью"}, {factor: key_rate, weight: 0.5, sign: -1, why: "Ставка влияет на оценку недвижимости и ставки капитализации"}]
+  "69": [{factor: tax_regulation, weight: 0.8, sign: 0, why: "Юридические и бухгалтерские услуги — изменения законодательства"}]
+  "70": [{factor: consumer_demand, weight: 0.2, sign: 1, why: "Консалтинг зависит от деловой активности клиентов"}]
+  "72": [{factor: budget_policy, weight: 0.5, sign: 1, why: "НИОКР часто финансируются государством"}]
+  "86": [{factor: budget_policy, weight: 0.5, sign: 1, why: "Здравоохранение, госзаказ и ОМС"}, {factor: fx_rub, weight: 0.4, sign: -1, why: "Импортное оборудование и препараты"}]
+
+# Линза роли: множители к весам факторов (крит. «персонализация по роли»)
+roles:
+  owner:
+    title: Собственник
+    multipliers: {geopolitics: 1.3, budget_policy: 1.2, tax_regulation: 1.2, consumer_demand: 1.2}
+  ceo:
+    title: Генеральный директор
+    multipliers: {consumer_demand: 1.3, labor_market: 1.2, sanctions_trade: 1.2}
+  cfo:
+    title: Финансовый директор
+    multipliers: {key_rate: 1.4, credit_conditions: 1.3, fx_rub: 1.3, bond_market: 1.2, inflation: 1.2}
+  treasurer:
+    title: Казначей
+    multipliers: {key_rate: 1.5, fx_rub: 1.5, bond_market: 1.4, china_trade: 1.3}
+  accountant:
+    title: Главный бухгалтер
+    multipliers: {tax_regulation: 1.8, budget_policy: 1.1}
+
+# Базовый вес фактора для всех компаний (макрофон важен всем понемногу)
+baseline:
+  key_rate: 0.2
+  inflation: 0.3
+  fx_rub: 0.2
+  consumer_demand: 0.1
+  tax_regulation: 0.2

@@ -1,0 +1,45 @@
+# Источники новостей. Новый источник = новая запись (адаптер type: rss | html_list | manual).
+# Перед включением проверьте robots.txt и условия использования источника;
+# сохраняем только заголовок, лид, ссылку и дату — полный текст не перепубликуется.
+# URL лент проверьте перед хакатоном: издания иногда меняют адреса RSS.
+
+sources:
+  - id: cbr
+    title: Банк России — события
+    type: rss
+    url: https://www.cbr.ru/rss/eventrss
+    trust: official
+    enabled: true
+  - id: interfax
+    title: Интерфакс
+    type: rss
+    url: https://www.interfax.ru/rss.asp
+    trust: media
+    enabled: true
+  - id: rbc
+    title: РБК
+    type: rss
+    url: https://rssexport.rbc.ru/rbcnews/news/30/full.rss
+    trust: media
+    enabled: true
+  - id: kommersant
+    title: Коммерсантъ
+    type: rss
+    url: https://www.kommersant.ru/RSS/news.xml
+    trust: media
+    enabled: true
+  - id: tass_economy
+    title: ТАСС
+    type: rss
+    url: https://tass.ru/rss/v2.xml
+    trust: media
+    enabled: true
+  - id: demo_seed
+    title: Демо-набор новостей (data/sample/news_seed.jsonl)
+    type: jsonl
+    url: data/sample/news_seed.jsonl
+    trust: demo
+    enabled: true
+
+# Расписание фонового сбора (минуты)
+schedule_minutes: 30

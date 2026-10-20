@@ -1,0 +1,54 @@
+# Роутинг задач по разрешённым моделям (Приложение 3 кейса).
+# Использовать другие LLM запрещено — клиент проверяет, что model id входит в allowed.
+#
+# Реальные id моделей уточните у организаторов (по общему ключу) и пропишите
+# в переменных окружения LLM_MODEL_* или прямо здесь.
+# price_rub_per_1k_* — оценка для учёта дневного лимита 500 ₽ (уточнить у организаторов).
+
+daily_budget_rub: 500
+# Доля бюджета, после которой включается экономичный режим (дешёвые модели + шаблоны)
+soft_limit_share: 0.8
+
+models:
+  gemma:
+    id: "gemma-4-26b-a4b"
+    title: Gemma 4 26B A4B
+    price_rub_per_1k_input: 0.02
+    price_rub_per_1k_output: 0.06
+  glm:
+    id: "glm-5.3-flash"
+    title: GLM-5.3-Flash
+    price_rub_per_1k_input: 0.05
+    price_rub_per_1k_output: 0.15
+  qwen:
+    id: "qwen3.6-35b-a3b"
+    title: Qwen3.6 35B A3B
+    price_rub_per_1k_input: 0.03
+    price_rub_per_1k_output: 0.09
+  deepseek:
+    id: "deepseek-v4.1-flash"
+    title: DeepSeek-V4.1-Flash
+    price_rub_per_1k_input: 0.04
+    price_rub_per_1k_output: 0.12
+  qwen_vl:
+    id: "qwen3-vl-30b-a3b-instruct"
+    title: Qwen3-VL-30B-A3B-Instruct
+    price_rub_per_1k_input: 0.04
+    price_rub_per_1k_output: 0.12
+  kimi:
+    id: "kimi-k2.6"
+    title: Kimi-K2.6
+    price_rub_per_1k_input: 0.05
+    price_rub_per_1k_output: 0.15
+
+# Задача -> модель (и запасная модель при исчерпании soft limit)
+tasks:
+  classify_news:      {model: gemma,    fallback: gemma}
+  rerank:             {model: gemma,    fallback: gemma}
+  summarize_doc:      {model: kimi,     fallback: qwen}
+  ocr_page:           {model: qwen_vl,  fallback: qwen_vl}
+  plan:               {model: qwen,     fallback: gemma}
+  interpret:          {model: glm,      fallback: qwen}
+  critique:           {model: deepseek, fallback: gemma}
+  revise:             {model: glm,      fallback: qwen}
+  chat:               {model: qwen,     fallback: gemma}

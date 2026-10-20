@@ -1,0 +1,78 @@
+# Архитектура
+
+## Поток данных
+
+1. **Профили** (`app/data/profiles.py`). CSV → `CompanyProfile`: продукты, ВЭД, отрасль, доли, контрагенты, `data_gaps`. Строятся один раз при старте и хранятся в SQLite.
+2. **Чувствительность** (`app/data/sensitivity.py`). Признаки → веса факторов (noisy-OR, чтобы вес не рос без предела), знак влияния и текстовое обоснование для каждого вклада. Роль пользователя умножает веса.
+3. **Новости** (`app/news`). Адаптеры источников → нормализация → точный дедуп по хэшу → склейка перефразированных новостей в событие (перекрытие заголовков + Жаккар по лиду в окне 2 дня) → классификация события.
+4. **Классификация.** Gemma 4 возвращает JSON по словарю факторов `config/factors.yaml`. Fallback — правила (ключевые слова с границей слова, направление по фрагменту предложения). Факты и прогнозы разделяются, числа извлекаются.
+5. **Ранжирование** (`app/ranking/scorer.py`). `Σ вес_фактора × уверенность + совпадение стран ВЭД + важность` × свежесть (период полураспада 14 дней). Эффект: риск / возможность / смешанный / отслеживать. Все слагаемые сохраняются как причины.
+6. **Агент** (`app/agent/orchestrator.py`) — для события, открытого пользователем.
+
+## Цикл агента
+
+```mermaid
+sequenceDiagram
+  participant O as Оркестратор
+  participant L as LLM (разрешённые)
+  participant T as Инструменты (allowlist)
+  participant C as Критик (правила + LLM)
+  O->>O: relevance (скоринг, причины)
+  O->>L: plan (Qwen) → шаги и гипотеза
+  loop шаги плана (≤10 вызовов)
+    O->>T: get_event / get_company_profile / get_bank_theses / search_bank_analytics / get_counterparties / get_playbook / search_related_news / check_consistency
+    T-->>O: результат → ctx.memory (общий контекст)
+  end
+  O->>L: draft (GLM) → Insight JSON
+  O->>C: правила: 6 вопросов, источники, валидность id, позиция банка, персонализация, числа, injection
+  O->>L: критик (DeepSeek — другая модель, чем автор)
+  alt есть замечания
+    O->>T: повторный поиск по аналитике (если нет позиции банка)
+    O->>L: revise (GLM)
+    O->>O: repair: удалить неподтверждённое, понизить «факт» до «предположения»
+  end
+  O->>O: finalize: SourceRef для каждого id, трассировка
+```
+
+Если LLM недоступна (mock-режим, исчерпан бюджет, сетевая ошибка), каждый шаг переходит на детерминированную реализацию (`app/agent/rules.py`). Шаблоны последствий и действий берутся из `config/playbook.yaml`. Тот же плейбук передаётся LLM как подсказка.
+
+## JSON-схема инсайта (`app/agent/schemas.py`)
+
+```json
+{
+  "headline": "...",
+  "takeaway": {"text": "главный вывод для компании", "kind": "ai_inference", "sources": ["profile:CL_PRODUCT_LOA_MARK", "news:seed-01", "bank:t01"]},
+  "what_happened": [{"text": "...", "kind": "fact|assumption", "sources": ["news:..."]}],
+  "why_it_matters": [{"text": "...", "kind": "ai_inference", "sources": ["profile:...", "graph:in:41.20"]}],
+  "consequences": {"risks": [], "opportunities": [], "drivers": []},
+  "actions": [{"text": "...", "action_type": "finance|hedge|analysis|operations|monitor|question"}],
+  "bank_view": [{"text": "...", "kind": "bank_view", "sources": ["bank:t01"]}],
+  "products": [{"product": "...", "why": "...", "label": "Предложение Альфа-Банка"}],
+  "sources": [{"id": "bank:t01", "type": "bank", "title": "...", "date": "...", "page": 1, "quote": "...", "stale": false}],
+  "relevance": {"score": 0.44, "reasons": [], "consistency_issues": []},
+  "quality": [{"name": "Числа в фактах есть в источниках", "passed": true}],
+  "trace_id": "tr-..."
+}
+```
+
+Пространства id источников: `news:<id>` — новость; `bank:<thesis_id|chunk_id>` — аналитика банка; `profile:<признак>` — признак компании; `graph:<in|out>:<ОКВЭД>` — контрагент из графа платежей.
+
+## Модель данных (SQLite → PostgreSQL)
+
+| Таблица | Назначение |
+|---|---|
+| `companies` | Профиль компании (JSON) |
+| `user_links` | Физлицо ↔ компания (RBAC) |
+| `news`, `events` | Новости и события (склейка, классификация) |
+| `insights` | Кэш инсайтов по ключу `event|company|role` |
+| `trace_steps` | Трассировка агента |
+| `llm_cache`, `llm_usage` | Кэш ответов LLM, расход по дням и моделям |
+| `feedback`, `audit_log` | Обратная связь, журнал доступа |
+
+## Масштабирование и сопровождение (критерий 07)
+
+- **Новая отрасль или продукт:** строка в `config/sensitivity.yaml` и при необходимости фактор в `config/factors.yaml` и `config/playbook.yaml`. Код не меняется.
+- **Новый источник:** запись в `config/sources.yaml`; для нового формата — класс-адаптер в `app/news/sources.py`.
+- **Новые аналитические материалы банка:** положить PDF → `extract_bank_theses.py` → проверить `bank_theses.auto.json` → перенести в `bank_theses.json`. Материалы старше года автоматически помечаются как устаревшие.
+- **Нагрузка:** события классифицируются один раз и разделяются между клиентами; дорогой персональный шаг (агент) запускается только при открытии карточки и кэшируется. Для продакшена: PostgreSQL + pgvector, очередь задач для ingest, предрасчёт инсайтов для топ-событий.
+- **Качество:** промпты версионируются (`PROMPT_VERSION` попадает в трассировку); регрессионный прогон `scripts/evaluate.py` на размеченном наборе перед каждым изменением промптов или весов.

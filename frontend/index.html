@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Бизнес-радар — прототип</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark">Б</span> Интернет-банк для бизнеса <span class="proto">прототип хакатона</span></div>
+    <div class="session">
+      <label>Пользователь
+        <select id="userSelect"></select>
+      </label>
+      <label>Компания
+        <select id="companySelect"></select>
+      </label>
+      <label>Роль
+        <select id="roleSelect"></select>
+      </label>
+    </div>
+  </header>
+
+  <div class="layout">
+    <nav class="sidebar">
+      <a class="nav-item active" data-view="home">Главная</a>
+      <a class="nav-item" data-view="radar">Бизнес-радар <span class="badge" id="navBadge"></span></a>
+      <a class="nav-item muted">Счета и платежи</a>
+      <a class="nav-item muted">Кредиты</a>
+      <a class="nav-item muted">ВЭД</a>
+      <a class="nav-item muted">Зарплатный проект</a>
+      <a class="nav-item" data-view="metrics">Качество и бюджет</a>
+    </nav>
+
+    <main>
+      <!-- Главный экран: заметная постоянная точка входа (критерий 09) -->
+      <section id="view-home" class="view active">
+        <div class="home-grid">
+          <div class="card account">
+            <div class="muted small">Расчётный счёт</div>
+            <div class="big">•••• 4417</div>
+            <div class="muted small">Демо-данные: счёт и платежи не отображаются</div>
+          </div>
+          <div class="card radar-widget" id="radarWidget">
+            <div class="widget-head">
+              <div>
+                <div class="eyebrow">Бизнес-радар</div>
+                <h2>Что важно для вашего бизнеса сегодня</h2>
+              </div>
+              <button class="btn" data-goto="radar">Вся лента →</button>
+            </div>
+            <div id="widgetList" class="widget-list"><div class="skeleton"></div></div>
+          </div>
+          <div class="card profile-card" id="profileCard"></div>
+        </div>
+      </section>
+
+      <!-- Лента + инсайт -->
+      <section id="view-radar" class="view">
+        <div class="radar-grid">
+          <div class="feed-col">
+            <div class="feed-head">
+              <h2>Персональная лента</h2>
+              <button class="btn ghost" id="analyzeBtn">+ Проверить новость</button>
+            </div>
+            <div class="legend">
+              <span class="pill risk">риск</span><span class="pill opportunity">возможность</span>
+              <span class="pill mixed">риски и возможности</span><span class="pill watch">отслеживать</span>
+            </div>
+            <div id="feedList"></div>
+          </div>
+          <div class="insight-col" id="insightPanel">
+            <div class="empty">Выберите событие слева — сервис объяснит, что оно значит именно для вашей компании.</div>
+          </div>
+        </div>
+      </section>
+
+      <section id="view-metrics" class="view">
+        <h2>Мониторинг качества, персонализации и бюджета LLM</h2>
+        <div id="metricsBox" class="metrics"></div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="analyzeDialog">
+    <form method="dialog" id="analyzeForm">
+      <h3>Проверить новость, которой нет в ленте</h3>
+      <p class="muted small">Вставьте текст или ссылку. Сервис классифицирует событие и построит интерпретацию для выбранной компании.</p>
+      <input id="analyzeUrl" type="url" placeholder="https://… (ссылка на новость)">
+      <textarea id="analyzeText" rows="7" placeholder="…или текст новости"></textarea>
+      <div class="row">
+        <button value="cancel" class="btn ghost">Отмена</button>
+        <button id="analyzeSubmit" value="default" class="btn">Проанализировать</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
