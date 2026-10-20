@@ -17,7 +17,7 @@ from app.news.dedup import jaccard, stems
 from app.news.models import Event
 from app.ranking.scorer import Scored
 
-MAX_TOOL_CALLS = 10
+MAX_TOOL_CALLS = 12
 
 
 @dataclass
@@ -58,9 +58,19 @@ def t_get_event_brief(ctx: AgentContext) -> dict:
 def t_get_bank_theses(ctx: AgentContext, factors: list[str] | None = None, include_stale: bool = False) -> dict:
     factors = factors or ctx.scored.matched_factors
     kb = get_knowledge()
-    theses = kb.theses_for(factors, include_stale=include_stale)
+    theses = kb.theses_for(factors, include_stale=include_stale, query=f"{ctx.event.title} {ctx.event.classification.summary}")
     return {"theses": [{**t, "doc_title": kb.doc(t["doc_id"]).get("title"), "date": kb.doc(t["doc_id"]).get("date")}
                        for t in theses[:8]]}
+
+
+def t_get_bank_forecast(ctx: AgentContext, factors: list[str] | None = None, indicator: str | None = None) -> dict:
+    """Числовые прогнозы банка (ставка, инфляция, курс, ВВП…) с историей пересмотров."""
+    kb = get_knowledge()
+    rows = [kb.forecast(indicator, p) for p in ("2026", "2027")] if indicator \
+        else kb.forecasts_for(factors or ctx.scored.matched_factors)
+    rows = [r for r in rows if r]
+    return {"forecasts": [{k: r[k] for k in ("ref", "title", "period", "value", "unit", "date", "revision", "text")} for r in rows[:10]],
+            "rate_path": kb.rate_path}
 
 
 def t_search_bank_analytics(ctx: AgentContext, query: str | None = None, k: int = 5) -> dict:
@@ -127,6 +137,7 @@ TOOLS: dict[str, tuple[Callable[..., dict], str]] = {
     "get_event": (t_get_event, "Факты, прогнозы, числа и источники события (классификация)"),
     "get_event_brief": (t_get_event_brief, "Общий разбор события: факты, каналы влияния, сверка с позицией банка"),
     "get_bank_theses": (t_get_bank_theses, "Тезисы позиции Альфа-Банка по факторам (args: factors)"),
+    "get_bank_forecast": (t_get_bank_forecast, "Числовые прогнозы Альфа-Банка и их пересмотры (args: factors | indicator)"),
     "search_bank_analytics": (t_search_bank_analytics, "Поиск по аналитике Альфа-Банка (args: query)"),
     "search_related_news": (t_search_related_news, "Связанные события из базы новостей"),
     "get_counterparties": (t_get_counterparties, "Ключевые покупатели/поставщики из графа платежей"),

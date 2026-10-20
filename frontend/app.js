@@ -83,7 +83,35 @@ function show(view) {
 async function reload() {
   state.insight = null; state.current = null;
   $("#insightPanel").innerHTML = `<div class="empty">Выберите событие — сервис объяснит, что оно значит именно для вашей компании.</div>`;
-  await Promise.all([loadProfile(), loadFeed()]);
+  await Promise.all([loadProfile(), loadFeed(), state.bankLoaded ? null : loadBank()]);
+}
+
+// ---------------------------------------------------------------- позиция банка (макропрогноз)
+const KEY_IND = [["key_rate_end", "2026"], ["key_rate_end", "2027"], ["inflation_dec", "2026"], ["usd_rub", "2026"], ["gdp", "2026"], ["wages_nominal", "2026"]];
+function fmtVal(v, unit) { const n = (unit.startsWith("%") ? Number(v).toFixed(1) : String(v)).replace(".", ","); return unit.startsWith("%") ? `${n}%${unit.slice(1)}` : `${n} ${unit}`; }
+async function loadBank() {
+  const d = await api("/api/bank/forecasts");
+  state.bankLoaded = true;
+  const by = Object.fromEntries(d.forecasts.map((f) => [`${f.indicator}|${f.period}`, f]));
+  const rows = KEY_IND.map(([i, p]) => by[`${i}|${p}`]).filter(Boolean).map((f) => {
+    const r = f.revision;
+    const arrow = r ? `<span class="rev ${r.direction}" title="Банк ${r.direction === "up" ? "повысил" : "понизил"} прогноз: ${fmtVal(r.from, f.unit)} → ${fmtVal(r.to, f.unit)} (${fmtDate(r.from_date)} → ${fmtDate(r.to_date)})">${r.direction === "up" ? "▲" : "▼"} было ${fmtVal(r.from, f.unit)}</span>` : "";
+    return `<tr><td>${esc(f.title)}, ${f.period}</td><td class="num">${fmtVal(f.value, f.unit)}</td><td>${arrow}</td></tr>`;
+  }).join("");
+  const pts = (d.rate_path && d.rate_path.points) || [];
+  let spark = "";
+  if (pts.length > 1) {
+    const vals = pts.map((p) => p[1]), lo = Math.min(...vals) - 0.5, hi = Math.max(...vals) + 0.5, W = 260, H = 70;
+    const xy = pts.map((p, i) => [12 + i * (W - 24) / (pts.length - 1), H - 14 - (p[1] - lo) / (hi - lo) * (H - 28)]);
+    spark = `<svg viewBox="0 0 ${W} ${H}" class="spark" role="img" aria-label="Прогноз ключевой ставки">
+      <polyline points="${xy.map((p) => p.join(",")).join(" ")}" fill="none" stroke="var(--accent)" stroke-width="2.5"/>
+      ${xy.map((p, i) => `<circle cx="${p[0]}" cy="${p[1]}" r="3.5" fill="var(--accent)"/><text x="${p[0]}" y="${p[1] - 7}" text-anchor="middle">${String(pts[i][1]).replace(".", ",")}%</text><text x="${p[0]}" y="${H - 1}" text-anchor="middle" class="lbl">${esc(pts[i][0])}</text>`).join("")}</svg>`;
+  }
+  $("#bankCard").innerHTML = `<div class="eyebrow">Позиция Альфа-Банка</div>
+    <h3>Макропрогноз банка</h3>
+    ${spark ? `<div class="muted small">Траектория ключевой ставки (прогноз от ${fmtDate(d.rate_path.date)})</div>${spark}` : ""}
+    <table class="fc">${rows}</table>
+    <div class="muted small">${d.theses_count} тезисов из ${d.documents.length} аналитических материалов · ▲▼ — пересмотр прогноза банком</div>`;
 }
 
 // ---------------------------------------------------------------- профиль

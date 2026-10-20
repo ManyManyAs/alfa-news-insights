@@ -1,0 +1,10 @@
+# Оверлей для сервера: docker compose -f docker-compose.yml -f deploy/docker-compose.prod.yml up -d --build
+# Наружу сервис отдаёт Nginx на хосте (deploy/nginx.conf); контейнер слушает только 127.0.0.1:8000.
+services:
+  app:
+    restart: unless-stopped
+    environment:
+      ENABLE_SCHEDULER: "true"
+    logging:
+      driver: json-file
+      options: {max-size: "20m", max-file: "3"}

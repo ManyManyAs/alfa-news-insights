@@ -43,6 +43,29 @@ def classification_scores(preds: dict[str, dict[str, str]], labels: dict[str, di
             "direction_acc": round(dir_ok / dir_total, 3) if dir_total else None, "n": len(labels)}
 
 
+def retrieval_recall(k: int = 5, path: Path | None = None) -> dict:
+    """recall@k поиска по аналитике банка: хотя бы один релевантный тезис/прогноз в топ-k."""
+    from app.knowledge.bank import get_knowledge
+    from app.knowledge.embeddings import get_embedder
+
+    path = path or get_settings().data_dir / "eval" / "bank_retrieval.jsonl"
+    kb = get_knowledge()
+    hits, n, misses = 0, 0, []
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            if not line.strip():
+                continue
+            r = json.loads(line)
+            got = [h["id"] for h in kb.search(r["query"], k=k)]
+            n += 1
+            if set(got) & set(r["relevant"]):
+                hits += 1
+            else:
+                misses.append((r["query"], got))
+    return {"recall": hits / n if n else 0.0, "hits": hits, "n": n, "misses": misses,
+            "mode": "hybrid" if get_embedder() else "bm25"}
+
+
 def ndcg(rels: list[int], ideal: list[int], k: int) -> float:
     dcg = sum((2 ** r - 1) / math.log2(i + 2) for i, r in enumerate(rels[:k]))
     idcg = sum((2 ** r - 1) / math.log2(i + 2) for i, r in enumerate(sorted(ideal, reverse=True)[:k]))

@@ -6,6 +6,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends poppler-utils &
 WORKDIR /app/backend
 COPY backend/requirements.lock ./
 RUN pip install --no-cache-dir -r requirements.lock
+# Опционально: локальные эмбеддинги для гибридного поиска (docker compose build --build-arg EMBEDDINGS=true).
+# Ошибка установки не ломает сборку — поиск останется на BM25.
+ARG EMBEDDINGS=false
+COPY backend/requirements-embeddings.txt ./
+RUN if [ "$EMBEDDINGS" = "true" ]; then pip install --no-cache-dir -r requirements-embeddings.txt || echo "embeddings: пропущено"; fi
 
 COPY backend/ ./
 COPY config/ /app/config/
