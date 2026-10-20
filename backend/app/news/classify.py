@@ -167,7 +167,13 @@ def classify(item: NewsItem, trust: str = "media") -> EventClassification:
     messages, flags = classification_messages(item)
     try:
         data, res = llm.complete_json("classify_news", messages, ClassificationOut, max_tokens=800)
-        data["factors"] = [f for f in data.get("factors", []) if f.get("factor") in factors_cfg]
+        # модель иногда повторяет фактор с разными направлениями — оставляем самый уверенный
+        best: dict[str, dict] = {}
+        for f in data.get("factors", []):
+            if f.get("factor") in factors_cfg and (f["factor"] not in best or
+                                                   f.get("confidence", 0) > best[f["factor"]].get("confidence", 0)):
+                best[f["factor"]] = f
+        data["factors"] = sorted(best.values(), key=lambda f: -f.get("confidence", 0))
         cls = EventClassification.model_validate({**data, "classifier": f"llm:{res.model}"})
         cls.security_flags = sorted(set(cls.security_flags) | set(flags))
         if not cls.factors:  # модель не нашла факторов — берём правила
