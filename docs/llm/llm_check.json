@@ -1,0 +1,89 @@
+{
+  "checked_at": "2026-10-20T20:41:02.586574+00:00",
+  "models": {
+    "gemma": {
+      "configured_id": "google/gemma-4-26b-a4b-it",
+      "ping_s": 1.08,
+      "ping_error": null,
+      "ping": "ОК",
+      "json_s": 1.79,
+      "json_error": null,
+      "json_ok": true
+    },
+    "glm": {
+      "configured_id": "z-ai/glm-5.3-flash",
+      "ping_s": 1.82,
+      "ping_error": null,
+      "ping": "",
+      "json_s": 3.25,
+      "json_error": null,
+      "json_ok": false
+    },
+    "qwen": {
+      "configured_id": "qwen/qwen3.6-35b-a3b",
+      "ping_s": 1.24,
+      "ping_error": null,
+      "ping": "",
+      "json_s": 1.59,
+      "json_error": null,
+      "json_ok": false
+    },
+    "deepseek": {
+      "configured_id": "deepseek/deepseek-v4.1-flash",
+      "ping_s": 1.65,
+      "ping_error": null,
+      "ping": "",
+      "json_s": 1.66,
+      "json_error": null,
+      "json_ok": false
+    },
+    "qwen_vl": {
+      "configured_id": "qwen/qwen3-vl-30b-a3b-instruct",
+      "ping_s": 1.07,
+      "ping_error": null,
+      "ping": "ОК",
+      "json_s": 1.23,
+      "json_error": null,
+      "json_ok": true,
+      "vision_s": 1.29,
+      "vision_error": null,
+      "vision": "Красный",
+      "vision_ok": true
+    },
+    "kimi": {
+      "configured_id": "moonshotai/kimi-k2.6",
+      "ping_s": 1.36,
+      "ping_error": null,
+      "ping": "",
+      "json_s": 1.64,
+      "json_error": null,
+      "json_ok": false
+    }
+  },
+  "endpoint_models": [
+    "google/gemma-4-26b-a4b-it",
+    "z-ai/glm-5.3-flash",
+    "qwen/qwen3.6-35b-a3b",
+    "deepseek/deepseek-v4.1-flash",
+    "qwen/qwen3-vl-30b-a3b-instruct",
+    "moonshotai/kimi-k2.6",
+    "deepseek-cost-test"
+  ],
+  "endpoint_models_error": null,
+  "id_match": {
+    "gemma": "google/gemma-4-26b-a4b-it",
+    "glm": "z-ai/glm-5.3-flash",
+    "qwen": "qwen/qwen3.6-35b-a3b",
+    "deepseek": "deepseek/deepseek-v4.1-flash",
+    "qwen_vl": "qwen/qwen3-vl-30b-a3b-instruct",
+    "kimi": "moonshotai/kimi-k2.6"
+  },
+  "budget": {
+    "day": "2026-10-20",
+    "spent_rub": 0.41,
+    "budget_rub": 500.0,
+    "soft_limit_rub": 400.0,
+    "background_limit_rub": 300.0,
+    "left_rub": 499.59
+  }
+}
