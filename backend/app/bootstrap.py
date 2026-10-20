@@ -15,6 +15,8 @@ from app.storage.snapshot import import_snapshot
 log = logging.getLogger(__name__)
 # Версия схемы профилей: увеличивать при изменении признаков компании (сервер пересоберёт профили сам)
 PROFILES_VERSION = "3-graph-peers"
+# Версия новостного пайплайна: при смене добираем новые демо-новости, сущности и пересобираем сюжеты
+NEWS_VERSION = "4-stories"
 
 # Демо-сценарии: подбираем реальных пользователей из данных под разные типы бизнеса
 DEMO_CRITERIA = [
@@ -74,6 +76,34 @@ def load_demo_users() -> list[dict]:
     return json.loads(p.read_text(encoding="utf-8")) if p.exists() else []
 
 
+def upgrade_news() -> dict:
+    """Новые поля классификации (регионы, отрасли, даты вступления в силу, доверие) и сюжеты для уже собранных
+    событий — без повторных запросов к LLM: сущности добираются правилами, разбор модели сохраняется."""
+    from app.config import load_yaml
+    from app.news.classify import classify_rules
+    from app.news.models import EventClassification
+    from app.news.stories import rebuild_stories
+
+    trust_of = {x["id"]: x.get("trust", "media") for x in load_yaml("sources.yaml")["sources"]}
+    trust_of["user_url"] = "user"
+    n = 0
+    for r in db.query("SELECT e.id, e.classification, n.title, n.text, n.published_at, n.source FROM events e "
+                      "JOIN news n ON n.event_id = e.id WHERE e.classification IS NOT NULL GROUP BY e.id"):
+        cls = EventClassification.model_validate_json(r["classification"])
+        rules = classify_rules(r["title"], r["text"] or "", r["published_at"])
+        cls.regions = list(dict.fromkeys(cls.regions + rules.regions))[:5]
+        cls.industries = list(dict.fromkeys(cls.industries + rules.industries))[:5]
+        cls.effective_dates = sorted(set(cls.effective_dates + rules.effective_dates))[:3]
+        cls.trust = trust_of.get(r["source"], "user" if r["source"] in ("user", "user_text") else "media")
+        with db.tx() as conn:
+            conn.execute("UPDATE events SET classification=? WHERE id=?", (cls.model_dump_json(), r["id"]))
+        n += 1
+    stories = rebuild_stories()
+    with db.tx() as conn:
+        conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('news_version', ?)", (NEWS_VERSION,))
+    return {"events": n, "stories": stories}
+
+
 def bootstrap(force: bool = False) -> dict:
     s = get_settings()
     stats: dict = {}
@@ -103,9 +133,14 @@ def bootstrap(force: bool = False) -> dict:
         snap = import_snapshot() if s.use_snapshot else None
         if snap:
             stats["snapshot"] = snap["imported"]
-        else:
+        stats["ingest"] = run_ingest(only=["demo_seed"])  # после снапшота — только новые демо-новости
+    nver = db.query_one("SELECT value FROM meta WHERE key='news_version'")
+    if not nver or nver["value"] != NEWS_VERSION:
+        if "ingest" not in stats:
             stats["ingest"] = run_ingest(only=["demo_seed"])
-    users = load_demo_users()
+        stats["news_upgrade"] = upgrade_news()
+    return_users = load_demo_users()
+    users = return_users
     if not users or not db.query_one("SELECT 1 FROM user_links WHERE fid=?", (users[0]["user_id"],)):
         pick_demo_users()
     return stats

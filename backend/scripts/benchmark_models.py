@@ -31,11 +31,10 @@ from app.bootstrap import bootstrap, load_demo_users
 from app.config import REPO_ROOT, load_yaml
 from app.data.profiles import get_profile
 from app.data.sensitivity import compute_exposures
-from app.evaluation import classification_scores, load_classification_labels
+from app.evaluation import classification_scores, load_eval_news
 from app.llm.client import LLMUnavailable, get_llm, llm_priority
 from app.news.classify import classification_messages, classify_rules
 from app.news.ingest import list_events
-from app.news.sources import JsonlSource
 from app.ranking.scorer import rank_feed, score_event
 from app.security.guard import UNTRUSTED_NOTICE
 
@@ -55,8 +54,8 @@ class Budget:
 
 def bench_classification(budget: Budget) -> dict:
     llm = get_llm()
-    labels = load_classification_labels()
-    items = {n.id: n for n in JsonlSource({"id": "seed", "url": "data/sample/news_seed.jsonl"}).fetch() if n.id in labels}
+    items, labels, _ = load_eval_news()
+    items = {k: v for k, v in items.items() if k in labels}
     factors_cfg = load_yaml("factors.yaml")["factors"]
     results = {"rules": {"scores": classification_scores(
         {nid: {h.factor: h.direction for h in classify_rules(it.title, it.text).factors} for nid, it in items.items()}, labels),

@@ -7,6 +7,7 @@ import json
 import logging
 import re
 import xml.etree.ElementTree as ET
+from datetime import datetime
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 
@@ -37,12 +38,34 @@ class Source:
         raise NotImplementedError
 
 
+ATOM = "{http://www.w3.org/2005/Atom}"
+
+
+def parse_date(value: str | None) -> str | None:
+    """RFC 822 (RSS) или ISO 8601 (Atom) → ISO 8601."""
+    if not value:
+        return None
+    value = value.strip()
+    try:
+        return parsedate_to_datetime(value).isoformat()
+    except (TypeError, ValueError, IndexError):
+        pass
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).isoformat()
+    except ValueError:
+        return None
+
+
 class RSSSource(Source):
+    """RSS 2.0 и Atom. Сохраняем заголовок, лид, ссылку и дату — полный текст не перепубликуется."""
+
     def fetch(self) -> list[NewsItem]:
         with httpx.Client(timeout=20, headers=UA, follow_redirects=True) as c:
             r = c.get(self.cfg["url"])
             r.raise_for_status()
         root = ET.fromstring(r.content)
+        if root.tag == f"{ATOM}feed":
+            return self._atom(root)
         items = []
         for it in root.iter("item"):
             title = strip_html(it.findtext("title") or "")
@@ -52,11 +75,20 @@ class RSSSource(Source):
             if full is None:
                 full = it.find("{http://purl.org/rss/1.0/modules/content/}encoded")
             text = strip_html(full.text) if full is not None and full.text else desc
-            pub = it.findtext("pubDate")
-            try:
-                published = parsedate_to_datetime(pub).isoformat() if pub else None
-            except (TypeError, ValueError):
-                published = None
+            published = parse_date(it.findtext("pubDate") or it.findtext("{http://purl.org/dc/elements/1.1/}date"))
+            if title:
+                items.append(NewsItem(id=_id(self.id, link or title), source=self.id, source_title=self.cfg.get("title"),
+                                      url=link, title=title, text=text[:4000], published_at=published))
+        return items
+
+    def _atom(self, root: ET.Element) -> list[NewsItem]:
+        items = []
+        for e in root.iter(f"{ATOM}entry"):
+            title = strip_html(e.findtext(f"{ATOM}title") or "")
+            link_el = next((x for x in e.findall(f"{ATOM}link") if x.get("rel", "alternate") == "alternate"), None)
+            link = link_el.get("href") if link_el is not None else None
+            text = strip_html(e.findtext(f"{ATOM}summary") or e.findtext(f"{ATOM}content") or "")
+            published = parse_date(e.findtext(f"{ATOM}published") or e.findtext(f"{ATOM}updated"))
             if title:
                 items.append(NewsItem(id=_id(self.id, link or title), source=self.id, source_title=self.cfg.get("title"),
                                       url=link, title=title, text=text[:4000], published_at=published))

@@ -65,3 +65,45 @@ trucker;49.41;Деятельность автомобильного грузов
 trucker;49.41;Деятельность автомобильного грузового транспорта;CL_PRODUCT_LEA_MARK|CL_PRODUCT_LOA_MARK;;ceo;seed-10;0
 trucker;49.41;Деятельность автомобильного грузового транспорта;CL_PRODUCT_LEA_MARK|CL_PRODUCT_LOA_MARK;;ceo;seed-11;0
 trucker;49.41;Деятельность автомобильного грузового транспорта;CL_PRODUCT_LEA_MARK|CL_PRODUCT_LOA_MARK;;ceo;seed-12;0
+dev_loan;41.20;Строительство жилых и нежилых зданий;CL_PRODUCT_LOA_MARK;;cfo;seed-13;1
+dev_loan;41.20;Строительство жилых и нежилых зданий;CL_PRODUCT_LOA_MARK;;cfo;seed-14;2
+dev_loan;41.20;Строительство жилых и нежилых зданий;CL_PRODUCT_LOA_MARK;;cfo;seed-15;0
+dev_loan;41.20;Строительство жилых и нежилых зданий;CL_PRODUCT_LOA_MARK;;cfo;seed-16;1
+dev_loan;41.20;Строительство жилых и нежилых зданий;CL_PRODUCT_LOA_MARK;;cfo;seed-17;0
+dev_loan;41.20;Строительство жилых и нежилых зданий;CL_PRODUCT_LOA_MARK;;cfo;seed-18;0
+dev_loan;41.20;Строительство жилых и нежилых зданий;CL_PRODUCT_LOA_MARK;;cfo;seed-19;1
+importer_cn;46.90;Торговля оптовая неспециализированная;FTS_FLAG;КИТАЙ;treasurer;seed-13;0
+importer_cn;46.90;Торговля оптовая неспециализированная;FTS_FLAG;КИТАЙ;treasurer;seed-14;1
+importer_cn;46.90;Торговля оптовая неспециализированная;FTS_FLAG;КИТАЙ;treasurer;seed-15;0
+importer_cn;46.90;Торговля оптовая неспециализированная;FTS_FLAG;КИТАЙ;treasurer;seed-16;0
+importer_cn;46.90;Торговля оптовая неспециализированная;FTS_FLAG;КИТАЙ;treasurer;seed-17;2
+importer_cn;46.90;Торговля оптовая неспециализированная;FTS_FLAG;КИТАЙ;treasurer;seed-18;0
+importer_cn;46.90;Торговля оптовая неспециализированная;FTS_FLAG;КИТАЙ;treasurer;seed-19;1
+it_zpp;62.01;Разработка компьютерного программного обеспечения;CL_PRODUCT_ZPP_MARK;;accountant;seed-13;0
+it_zpp;62.01;Разработка компьютерного программного обеспечения;CL_PRODUCT_ZPP_MARK;;accountant;seed-14;1
+it_zpp;62.01;Разработка компьютерного программного обеспечения;CL_PRODUCT_ZPP_MARK;;accountant;seed-15;0
+it_zpp;62.01;Разработка компьютерного программного обеспечения;CL_PRODUCT_ZPP_MARK;;accountant;seed-16;0
+it_zpp;62.01;Разработка компьютерного программного обеспечения;CL_PRODUCT_ZPP_MARK;;accountant;seed-17;0
+it_zpp;62.01;Разработка компьютерного программного обеспечения;CL_PRODUCT_ZPP_MARK;;accountant;seed-18;0
+it_zpp;62.01;Разработка компьютерного программного обеспечения;CL_PRODUCT_ZPP_MARK;;accountant;seed-19;0
+restaurant;56.10;Деятельность ресторанов и услуги по доставке продуктов питания;CL_PRODUCT_LEA_MARK;;owner;seed-13;0
+restaurant;56.10;Деятельность ресторанов и услуги по доставке продуктов питания;CL_PRODUCT_LEA_MARK;;owner;seed-14;1
+restaurant;56.10;Деятельность ресторанов и услуги по доставке продуктов питания;CL_PRODUCT_LEA_MARK;;owner;seed-15;0
+restaurant;56.10;Деятельность ресторанов и услуги по доставке продуктов питания;CL_PRODUCT_LEA_MARK;;owner;seed-16;0
+restaurant;56.10;Деятельность ресторанов и услуги по доставке продуктов питания;CL_PRODUCT_LEA_MARK;;owner;seed-17;0
+restaurant;56.10;Деятельность ресторанов и услуги по доставке продуктов питания;CL_PRODUCT_LEA_MARK;;owner;seed-18;0
+restaurant;56.10;Деятельность ресторанов и услуги по доставке продуктов питания;CL_PRODUCT_LEA_MARK;;owner;seed-19;0
+landlord;68.20;Аренда и управление собственным или арендованным недвижимым имуществом;CL_PRODUCT_DEP_MARK;;cfo;seed-13;1
+landlord;68.20;Аренда и управление собственным или арендованным недвижимым имуществом;CL_PRODUCT_DEP_MARK;;cfo;seed-14;2
+landlord;68.20;Аренда и управление собственным или арендованным недвижимым имуществом;CL_PRODUCT_DEP_MARK;;cfo;seed-15;0
+landlord;68.20;Аренда и управление собственным или арендованным недвижимым имуществом;CL_PRODUCT_DEP_MARK;;cfo;seed-16;0
+landlord;68.20;Аренда и управление собственным или арендованным недвижимым имуществом;CL_PRODUCT_DEP_MARK;;cfo;seed-17;0
+landlord;68.20;Аренда и управление собственным или арендованным недвижимым имуществом;CL_PRODUCT_DEP_MARK;;cfo;seed-18;0
+landlord;68.20;Аренда и управление собственным или арендованным недвижимым имуществом;CL_PRODUCT_DEP_MARK;;cfo;seed-19;2
+trucker;49.41;Деятельность автомобильного грузового транспорта;CL_PRODUCT_LEA_MARK|CL_PRODUCT_LOA_MARK;;ceo;seed-13;1
+trucker;49.41;Деятельность автомобильного грузового транспорта;CL_PRODUCT_LEA_MARK|CL_PRODUCT_LOA_MARK;;ceo;seed-14;2
+trucker;49.41;Деятельность автомобильного грузового транспорта;CL_PRODUCT_LEA_MARK|CL_PRODUCT_LOA_MARK;;ceo;seed-15;1
+trucker;49.41;Деятельность автомобильного грузового транспорта;CL_PRODUCT_LEA_MARK|CL_PRODUCT_LOA_MARK;;ceo;seed-16;0
+trucker;49.41;Деятельность автомобильного грузового транспорта;CL_PRODUCT_LEA_MARK|CL_PRODUCT_LOA_MARK;;ceo;seed-17;0
+trucker;49.41;Деятельность автомобильного грузового транспорта;CL_PRODUCT_LEA_MARK|CL_PRODUCT_LOA_MARK;;ceo;seed-18;0
+trucker;49.41;Деятельность автомобильного грузового транспорта;CL_PRODUCT_LEA_MARK|CL_PRODUCT_LOA_MARK;;ceo;seed-19;1

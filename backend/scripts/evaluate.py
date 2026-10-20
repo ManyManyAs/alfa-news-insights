@@ -44,14 +44,20 @@ def main() -> None:
             labels[r["case_id"]][r["news_id"]] = int(r["label"])
 
     events = list_events(500)
-    news_to_event = {n.id: e.id for e in events for n in e.news}
+    # Лента сворачивает сюжет в одну карточку, поэтому оцениваем на уровне «карточек»: событие вне сюжета
+    # или сюжет целиком (метка сюжета — максимум меток его событий)
+    news_to_event = {n.id: (e.story_id or e.id) for e in events for n in e.news}
     p3s, ndcgs = [], []
     for cid, r in cases.items():
         prof = CompanyProfile(uid=f"EVAL_{cid}", okved=r["okved"], okved_name=r["okved_name"],
                               products=[p for p in r["products"].split("|") if p],
                               fts="FTS_FLAG" in r["products"], fts_countries=[c for c in r["fts_countries"].split("|") if c])
-        ev_label = {news_to_event[n]: lab for n, lab in labels[cid].items() if n in news_to_event}
-        ranked = [s.event.id for s in rank_feed(events, prof, r["role"] or None, limit=20)]
+        ev_label: dict[str, int] = {}
+        for n, lab in labels[cid].items():
+            if n in news_to_event:
+                key = news_to_event[n]
+                ev_label[key] = max(ev_label.get(key, 0), lab)
+        ranked = [s.event.story_id or s.event.id for s in rank_feed(events, prof, r["role"] or None, limit=20)]
         rels = [ev_label.get(e, 0) for e in ranked]
         p3 = sum(1 for x in rels[:3] if x > 0) / 3
         n5 = ndcg(rels, list(ev_label.values()), 5)
@@ -82,15 +88,20 @@ def main() -> None:
         print(f"  промах: {q} → {got}")
 
     # Классификация правилами (базовая линия без LLM)
-    from app.evaluation import classification_scores, load_classification_labels
+    from app.evaluation import classification_scores, entity_scores, load_eval_news
     from app.news.classify import classify_rules
-    from app.news.sources import JsonlSource
+    from app.news.entities import is_noise
 
-    lab = load_classification_labels()
-    items = {n.id: n for n in JsonlSource({"id": "seed", "url": "data/sample/news_seed.jsonl"}).fetch() if n.id in lab}
-    preds = {nid: {h.factor: h.direction for h in classify_rules(it.title, it.text).factors} for nid, it in items.items()}
+    items, lab, ent_gold = load_eval_news()
+    rules = {nid: classify_rules(it.title, it.text, it.published_at) for nid, it in items.items()}
+    preds = {nid: {h.factor: h.direction for h in c.factors} for nid, c in rules.items() if nid in lab}
     cs = classification_scores(preds, lab)
-    print(f"Классификация (правила): F1={cs['f1']} precision={cs['precision']} recall={cs['recall']} направление={cs['direction_acc']}")
+    print(f"\nКлассификация (правила, {cs['n']} новостей): F1={cs['f1']} precision={cs['precision']} "
+          f"recall={cs['recall']} направление={cs['direction_acc']}")
+    ent = entity_scores({nid: {"regions": c.regions, "industries": c.industries, "effective_dates": c.effective_dates,
+                               "noise": is_noise(items[nid].title, items[nid].text)} for nid, c in rules.items()}, ent_gold)
+    print(f"Сущности ({len(ent_gold)} новостей): регионы F1={ent['regions']['f1']}, отрасли F1={ent['industries']['f1']}, "
+          f"даты вступления в силу F1={ent['effective_dates']['f1']}, фильтр шума accuracy={ent['noise_accuracy']}")
 
     if args.insights:
         from app.agent.orchestrator import run_agent

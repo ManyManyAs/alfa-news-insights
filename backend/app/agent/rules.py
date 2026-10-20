@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import re
+from datetime import UTC, date, datetime
 
 from app.agent.schemas import Action, Claim, Consequences, Insight, ProductOffer, QualityCheck
 from app.agent.tools import AgentContext
@@ -53,6 +54,27 @@ def _products_ok(when: str | None, products: list[str]) -> bool:
     return (feature in products) if kind == "has" else (feature not in products)
 
 
+def upcoming_date(dates: list[str]) -> tuple[date, int] | None:
+    """Ближайшая будущая дата вступления в силу и сколько до неё дней."""
+    today = datetime.now(UTC).date()
+    for d in sorted(dates):
+        try:
+            dd = date.fromisoformat(d)
+        except ValueError:
+            continue
+        if dd >= today:
+            return dd, (dd - today).days
+    return None
+
+
+def due_text(days: int) -> str:
+    if days == 0:
+        return "сегодня"
+    n10, n100 = days % 10, days % 100
+    word = "день" if n10 == 1 and n100 != 11 else "дня" if 2 <= n10 <= 4 and not 12 <= n100 <= 14 else "дней"
+    return f"через {days} {word}"
+
+
 def draft_rules(ctx: AgentContext) -> Insight:
     ev, cls, scored = ctx.event, ctx.event.classification, ctx.scored
     pb = load_yaml("playbook.yaml")["factors"]
@@ -66,6 +88,10 @@ def draft_rules(ctx: AgentContext) -> Insight:
             what.append(Claim(text=f, kind="fact", sources=news_src[:1], confidence="high"))
     for o in cls.forecasts_or_opinions[:2]:
         what.append(Claim(text=f"Прогноз/мнение в источнике: {o}", kind="assumption", sources=news_src[:1], confidence="low"))
+    due = upcoming_date(cls.effective_dates)
+    if due:
+        what.append(Claim(text=f"Изменение вступает в силу {due[0]:%d.%m.%Y} — {due_text(due[1])}.", kind="fact",
+                          sources=news_src[:1], confidence="high"))
 
     # 02 Почему важно
     # Причины, опирающиеся на конкретные признаки компании; базовый макрофон — только если других нет
@@ -74,6 +100,9 @@ def draft_rules(ctx: AgentContext) -> Insight:
     why = []
     for r in reasons:
         basis = [b for b in r.get("basis", []) if b != "baseline"]
+        if r["factor"] in ("industry", "region"):  # прямое совпадение отрасли/региона — объяснение уже готово
+            why.append(Claim(text=f"{r['why']}.", kind="ai_inference", sources=basis + news_src[:1], confidence="high"))
+            continue
         if not basis:  # только макрофон — честно помечаем низкую уверенность
             why.append(Claim(text=f"Прямой связи с признаками компании нет: событие влияет на общий макрофон — «{r['factor_title']}».",
                              kind="ai_inference", sources=["profile:OKVED"] + news_src[:1], confidence="low"))
@@ -151,8 +180,13 @@ def draft_rules(ctx: AgentContext) -> Insight:
             if len(products) < 2 and _products_ok(p.get("when"), ctx.profile.products) and all(p["product"] != x.product for x in products):
                 products.append(ProductOffer(product=p["product"], why=p["why"]))
 
-    # Главный вывод
-    top = reasons[0] if reasons else None
+    if due and len(actions) < 5:
+        actions.append(Action(text=f"Заложить в план подготовку к {due[0]:%d.%m.%Y}: оценить, какие процессы, договоры и "
+                                   f"расчёты затронет изменение, и назначить ответственного",
+                              action_type="monitor", kind="ai_inference", sources=news_src[:1]))
+
+    # Главный вывод — по главному фактору с плейбуком (совпадение отрасли/региона само по себе не вывод)
+    top = next((r for r in reasons if r["factor"] in pb), reasons[0] if reasons else None)
     effect = scored.effect
     if top and pb.get(top["factor"]):
         play = pb[top["factor"]]

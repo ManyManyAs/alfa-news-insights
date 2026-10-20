@@ -1,45 +1,105 @@
-# Источники новостей. Новый источник = новая запись (адаптер type: rss | html_list | manual).
-# Перед включением проверьте robots.txt и условия использования источника;
-# сохраняем только заголовок, лид, ссылку и дату — полный текст не перепубликуется.
-# URL лент проверьте перед хакатоном: издания иногда меняют адреса RSS.
+# Источники новостей. Новый источник = новая запись (адаптер type: rss (RSS 2.0 и Atom) | jsonl).
+# Сохраняем только заголовок, лид, ссылку и дату — полный текст не перепубликуется; карточка всегда ведёт
+# на первоисточник. Перед включением проверьте robots.txt и условия использования источника.
+#
+# trust — уровень доверия, влияет на обработку и показывается в UI:
+#   official — регулятор и органы власти: всегда разбирается моделью, фильтр шума не применяется;
+#   agency   — информагентства (быстро, фактологично);
+#   media    — деловые СМИ (контекст, мнения, прогнозы — их сервис помечает как предположения);
+#   demo     — синтетический демо-набор для проверки без интернета.
+# Работоспособность каждого источника видна в UI («Источники») и на /api/sources/health.
 
 sources:
-  - id: cbr
+  # --- официальные
+  - id: cbr_events
     title: Банк России — события
     type: rss
     url: https://www.cbr.ru/rss/eventrss
     trust: official
-    enabled: true
+  - id: cbr_press
+    title: Банк России — пресс-релизы
+    type: rss
+    url: https://www.cbr.ru/rss/RssPress
+    trust: official
+  - id: government
+    title: Правительство России
+    type: rss
+    url: http://government.ru/all/rss/
+    trust: official
+  - id: kremlin
+    title: Президент России — события
+    type: rss
+    url: http://kremlin.ru/events/all/feed
+    trust: official
+    enabled: false  # много протокольных новостей; включается при необходимости
+
+  # --- информагентства
   - id: interfax
     title: Интерфакс
     type: rss
     url: https://www.interfax.ru/rss.asp
-    trust: media
-    enabled: true
+    trust: agency
+  - id: tass
+    title: ТАСС
+    type: rss
+    url: https://tass.ru/rss/v2.xml
+    trust: agency
+  - id: ria_economy
+    title: РИА Новости — экономика
+    type: rss
+    url: https://ria.ru/export/rss2/economy/index.xml
+    trust: agency
+  - id: prime
+    title: ПРАЙМ
+    type: rss
+    url: https://1prime.ru/export/rss2/index.xml
+    trust: agency
+
+  # --- деловые СМИ
   - id: rbc
     title: РБК
     type: rss
     url: https://rssexport.rbc.ru/rbcnews/news/30/full.rss
     trust: media
-    enabled: true
+  - id: kommersant_economics
+    title: Коммерсантъ — экономика
+    type: rss
+    url: https://www.kommersant.ru/RSS/section-economics.xml
+    trust: media
   - id: kommersant
-    title: Коммерсантъ
+    title: Коммерсантъ — главное
     type: rss
     url: https://www.kommersant.ru/RSS/news.xml
     trust: media
-    enabled: true
-  - id: tass_economy
-    title: ТАСС
+  - id: vedomosti
+    title: Ведомости
     type: rss
-    url: https://tass.ru/rss/v2.xml
+    url: https://www.vedomosti.ru/rss/news
     trust: media
-    enabled: true
+  - id: lenta_economics
+    title: Лента.ру — экономика
+    type: rss
+    url: https://lenta.ru/rss/news/economics
+    trust: media
+  - id: rg
+    title: Российская газета
+    type: rss
+    url: https://rg.ru/xml/index.xml
+    trust: media
+  - id: banki
+    title: Банки.ру — новости
+    type: rss
+    url: https://www.banki.ru/xml/news.rss
+    trust: media
+
+  # --- демо
   - id: demo_seed
     title: Демо-набор новостей (data/sample/news_seed.jsonl)
     type: jsonl
     url: data/sample/news_seed.jsonl
     trust: demo
-    enabled: true
 
-# Расписание фонового сбора (минуты)
+# Расписание фонового сбора (минуты); первый проход — сразу после старта
 schedule_minutes: 30
+# Не больше N свежих заметок из одного источника за проход (бюджет и нагрузка)
+max_per_source: 40

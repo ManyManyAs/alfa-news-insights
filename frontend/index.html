@@ -31,6 +31,7 @@
       <a class="nav-item muted">Кредиты</a>
       <a class="nav-item muted">ВЭД</a>
       <a class="nav-item muted">Зарплатный проект</a>
+      <a class="nav-item" data-view="sources">Источники новостей</a>
       <a class="nav-item" data-view="metrics">Качество и бюджет</a>
     </nav>
 
@@ -76,6 +77,12 @@
             <div class="empty">Выберите событие слева — сервис объяснит, что оно значит именно для вашей компании.</div>
           </div>
         </div>
+      </section>
+
+      <section id="view-sources" class="view">
+        <h2>Источники новостей</h2>
+        <div class="muted small" id="sourcesHead">Сбор идёт в фоне по расписанию; новости вне бизнес-повестки отсекаются до модели.</div>
+        <div id="sourcesBox" class="card sources-card"><div class="skeleton"></div></div>
       </section>
 
       <section id="view-metrics" class="view">
