@@ -50,6 +50,7 @@ jobs:
         working-directory: backend
     steps:
       - name: Проверка секретов
+        working-directory: .
         run: |
           if [ -z "$LLM_API_KEY" ]; then echo "::error::Добавьте секрет LLM_API_KEY (Settings → Secrets and variables → Actions)"; exit 1; fi
           if [ -z "$LLM_BASE_URL" ]; then echo "::error::Добавьте секрет или переменную LLM_BASE_URL"; exit 1; fi
