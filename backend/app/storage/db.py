@@ -4,9 +4,10 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 from app.config import get_settings
 
@@ -79,6 +80,8 @@ CREATE TABLE IF NOT EXISTS trace_steps (
 
 CREATE TABLE IF NOT EXISTS llm_cache (
     key TEXT PRIMARY KEY,
+    task TEXT,
+    model TEXT,
     response TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );

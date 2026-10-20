@@ -54,7 +54,7 @@ def compute_exposures(profile: CompanyProfile, role: str | None = None) -> dict[
     for cp in profile.counterparties:
         if cp.share < 0.2 or not cp.okved:
             continue
-        for prefix, rules in _okved_rules(cp.okved, cfg.get("okved", {})):
+        for _prefix, rules in _okved_rules(cp.okved, cfg.get("okved", {})):
             for rule in rules:
                 role_txt = "покупатель" if cp.direction == "in" else "поставщик"
                 add(rule["factor"], 0.4 * cp.share * rule["weight"], 0, f"graph:{cp.direction}:{cp.okved}",

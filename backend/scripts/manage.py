@@ -2,7 +2,9 @@
 
   uv run python scripts/manage.py bootstrap [--force]   # пересобрать профили и демо-новости
   uv run python scripts/manage.py ingest [--source cbr] # собрать новости из источников config/sources.yaml
-  uv run python scripts/manage.py warmup                # прогреть инсайты демо-пользователей (перед защитой)
+  uv run python scripts/manage.py warmup                # прогреть инсайты демо-пользователей
+  uv run python scripts/manage.py snapshot-export       # сохранить результаты LLM в data/snapshot (для жюри)
+  uv run python scripts/manage.py snapshot-import       # подгрузить снапшот в текущую БД
 """
 from __future__ import annotations
 
@@ -13,8 +15,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.bootstrap import bootstrap, load_demo_users  # noqa: E402
-from app.news.ingest import list_events, run_ingest  # noqa: E402
+from app.bootstrap import bootstrap, load_demo_users
+from app.news.ingest import list_events, run_ingest
 
 
 def warmup(top: int = 5) -> None:
@@ -32,7 +34,7 @@ def warmup(top: int = 5) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["bootstrap", "ingest", "warmup"])
+    ap.add_argument("cmd", choices=["bootstrap", "ingest", "warmup", "snapshot-export", "snapshot-import"])
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--source", action="append")
     a = ap.parse_args()
@@ -40,8 +42,16 @@ def main() -> None:
         print(json.dumps(bootstrap(force=a.force), ensure_ascii=False, indent=2))
     elif a.cmd == "ingest":
         print(json.dumps(run_ingest(a.source), ensure_ascii=False, indent=2))
-    else:
+    elif a.cmd == "warmup":
         warmup()
+    elif a.cmd == "snapshot-export":
+        from app.storage.snapshot import export_snapshot
+
+        print(json.dumps(export_snapshot(), ensure_ascii=False, indent=2))
+    else:
+        from app.storage.snapshot import import_snapshot
+
+        print(json.dumps(import_snapshot(), ensure_ascii=False, indent=2, default=str))
 
 
 if __name__ == "__main__":

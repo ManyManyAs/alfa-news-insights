@@ -1,6 +1,6 @@
 """Сборка профилей компаний из CSV кейса (Приложение 1).
 
-Файлы (кладутся в data/raw/, в git не коммитятся):
+Файлы: data/case/*.csv.gz (в репозитории) или свои CSV в data/raw/ (приоритетнее):
   df_Uid_data_hack.csv      — компании
   df_Uid_payment_hack.csv   — платежи между компаниями
   df_Fid_Uid_link_hack.csv  — связи физлицо -> компания (пользователи интернет-банка)
@@ -29,6 +29,14 @@ PRODUCT_COLUMNS = [
 # Выручка ровно 1000 руб. встречается сотни раз — похоже на заглушку
 SUSPICIOUS_REVENUE = {1000.0}
 TOP_COUNTERPARTIES = 5
+
+
+def find_table(directory: Path, stem: str) -> Path | None:
+    """CSV кейса: <stem>.csv или сжатый <stem>.csv.gz (pandas читает оба)."""
+    for name in (f"{stem}.csv", f"{stem}.csv.gz"):
+        if (directory / name).exists():
+            return directory / name
+    return None
 
 
 def _flag(v) -> bool:
@@ -82,7 +90,7 @@ def compute_counterparties(pay_path: Path, uids: set[str], okved: dict[str, tupl
 
 
 def build_profiles(raw_dir: Path, limit: int = 0) -> list[CompanyProfile]:
-    df = read_companies(raw_dir / "df_Uid_data_hack.csv", limit)
+    df = read_companies(find_table(raw_dir, "df_Uid_data_hack"), limit)
     okved_map = {r.SYNTHETIC_U: (r.MAINOKVED_CODE, r.MAINOKVED_NAME) for r in df.itertuples(index=False)}
 
     valid_rev = df["REVENUE"].where(~df["REVENUE"].isin(SUSPICIOUS_REVENUE))
@@ -92,8 +100,8 @@ def build_profiles(raw_dir: Path, limit: int = 0) -> list[CompanyProfile]:
     df["_group_total"] = valid_rev.groupby(df["GROUP_ID"]).transform("sum")
     df["_group_size"] = df.groupby("GROUP_ID")["SYNTHETIC_U"].transform("count")
 
-    pay_path = raw_dir / "df_Uid_payment_hack.csv"
-    cps = compute_counterparties(pay_path, set(df["SYNTHETIC_U"]), okved_map) if pay_path.exists() else {}
+    pay_path = find_table(raw_dir, "df_Uid_payment_hack")
+    cps = compute_counterparties(pay_path, set(df["SYNTHETIC_U"]), okved_map) if pay_path else {}
 
     profiles: list[CompanyProfile] = []
     for r in df.to_dict("records"):
@@ -117,7 +125,7 @@ def build_profiles(raw_dir: Path, limit: int = 0) -> list[CompanyProfile]:
         if not cp_list:
             gaps.append("нет данных о платежах с контрагентами")
 
-        def ratio(num, den):
+        def ratio(num, den, suspicious=suspicious):
             return float(num / den) if (num is not None and den and pd.notna(den) and not suspicious) else None
 
         profiles.append(CompanyProfile(

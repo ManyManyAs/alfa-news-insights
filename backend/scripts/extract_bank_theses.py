@@ -21,8 +21,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.config import get_settings, load_yaml  # noqa: E402
-from app.llm.client import get_llm  # noqa: E402
+from app.config import get_settings, load_yaml
+from app.llm.client import get_llm
 
 OCR_PROMPT = ("Распознай страницу аналитического отчёта банка. Верни текст в Markdown, сохраняя заголовки и абзацы. "
               "Таблицы — в Markdown-таблицы. Для графиков кратко опиши, что показано и ключевые значения. Ничего не добавляй от себя.")

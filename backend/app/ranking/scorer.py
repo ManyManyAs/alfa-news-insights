@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from app.config import load_yaml
 from app.data.models import CompanyProfile
@@ -54,8 +54,8 @@ def freshness(published_at: str | None, now: datetime | None = None) -> float:
     except ValueError:
         return 0.7
     if t.tzinfo is None:
-        t = t.replace(tzinfo=timezone.utc)
-    now = now or datetime.now(timezone.utc)
+        t = t.replace(tzinfo=UTC)
+    now = now or datetime.now(UTC)
     days = max(0.0, (now - t).total_seconds() / 86400)
     return max(0.25, math.pow(0.5, days / HALF_LIFE_DAYS))
 

@@ -17,11 +17,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.bootstrap import bootstrap  # noqa: E402
-from app.config import get_settings  # noqa: E402
-from app.data.models import CompanyProfile  # noqa: E402
-from app.news.ingest import list_events  # noqa: E402
-from app.ranking.scorer import rank_feed  # noqa: E402
+from app.bootstrap import bootstrap
+from app.config import get_settings
+from app.data.models import CompanyProfile
+from app.news.ingest import list_events
+from app.ranking.scorer import rank_feed
 
 
 def ndcg(rels: list[int], ideal: list[int], k: int) -> float:

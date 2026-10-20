@@ -50,9 +50,9 @@ def _rule_plan(ctx: AgentContext) -> dict:
 
 def plan(ctx: AgentContext, tracer: Tracer) -> dict:
     llm = get_llm()
-    with tracer.step("plan", "llm" if llm.live else "rules", input={"factors": ctx.scored.matched_factors}) as rec:
+    with tracer.step("plan", "llm" if llm.enabled else "rules", input={"factors": ctx.scored.matched_factors}) as rec:
         p = None
-        if llm.live:
+        if llm.enabled:
             tools = "\n".join(f"- {k}: {v[1]}" for k, v in TOOLS.items())
             msg = [{"role": "system", "content": prompts.PLAN_SYSTEM.format(notice=UNTRUSTED_NOTICE, tools=tools)},
                    {"role": "user", "content": json.dumps({
@@ -114,8 +114,8 @@ def _parse_insight(data: dict, ctx: AgentContext, generated_by: str) -> Insight:
 
 def draft(ctx: AgentContext, tracer: Tracer) -> Insight:
     llm = get_llm()
-    with tracer.step("draft", "llm" if llm.live else "rules", input={"prompt_version": prompts.PROMPT_VERSION}) as rec:
-        if llm.live:
+    with tracer.step("draft", "llm" if llm.enabled else "rules", input={"prompt_version": prompts.PROMPT_VERSION}) as rec:
+        if llm.enabled:
             msg = [{"role": "system", "content": prompts.INTERPRET_SYSTEM.format(notice=UNTRUSTED_NOTICE)},
                    {"role": "user", "content": _context_for_llm(ctx)}]
             try:
@@ -139,7 +139,7 @@ def critique(ins: Insight, ctx: AgentContext, tracer: Tracer, iteration: int) ->
         ins.quality = checks
         rec["output"] = {"checks": [c.model_dump() for c in checks], "issues": issues}
     llm = get_llm()
-    if llm.live and ins.generated_by.startswith("llm"):
+    if llm.enabled and ins.generated_by.startswith("llm"):
         with tracer.step(f"critique:llm#{iteration}", "llm") as rec:
             msg = [{"role": "system", "content": prompts.CRITIC_SYSTEM.format(notice=UNTRUSTED_NOTICE)},
                    {"role": "user", "content": _context_for_llm(ctx) + "\n<draft>\n" + ins.model_dump_json() + "\n</draft>"}]
@@ -160,12 +160,13 @@ def adapt(ins: Insight, ctx: AgentContext, issues: list[str], tracer: Tracer) ->
     if any("аналитику банка" in i or "Позиция банка" in i for i in issues):
         titles = load_yaml("factors.yaml")["factors"]
         q = " ".join(titles[f]["title"] for f in ctx.scored.matched_factors if f in titles) or ctx.event.title
-        with tracer.step("tool:search_bank_analytics(retry)", "tool", input={"query": q, "why": "нет позиции банка — расширяем поиск"}) as rec:
+        why = "нет позиции банка — расширяем поиск"
+        with tracer.step("tool:search_bank_analytics(retry)", "tool", input={"query": q, "why": why}) as rec:
             res = call_tool(ctx, "search_bank_analytics", {"query": q, "k": 3})
             ctx.memory["search_bank_analytics#retry"] = res
             rec["output"] = res
     llm = get_llm()
-    if llm.live and ins.generated_by.startswith("llm"):
+    if llm.enabled and ins.generated_by.startswith("llm"):
         with tracer.step("revise", "llm", input={"issues": issues}) as rec:
             msg = [{"role": "system", "content": prompts.REVISE_SYSTEM.format(notice=UNTRUSTED_NOTICE)},
                    {"role": "user", "content": _context_for_llm(ctx) + "\n<draft>\n" + ins.model_dump_json()

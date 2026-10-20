@@ -17,8 +17,9 @@ class Settings(BaseSettings):
     # LLM: OpenAI-совместимый эндпоинт организаторов
     llm_base_url: str = "https://example.invalid/v1"
     llm_api_key: str = ""
-    # mock — без обращений к LLM (детерминированные шаблоны), live — реальные модели
-    llm_mode: str = "mock"
+    # auto — live при наличии ключа, иначе replay; live — реальные модели; replay — только сохранённые
+    # ответы (снапшот в репозитории, работает без ключа); mock — без LLM вообще (тесты)
+    llm_mode: str = "auto"
     llm_timeout_s: float = 60.0
 
     config_dir: Path = REPO_ROOT / "config"
@@ -27,6 +28,8 @@ class Settings(BaseSettings):
 
     # Явно задать каталог с CSV (по умолчанию data/raw, а если там пусто — data/sample)
     data_source_dir: Path | None = None
+    # Подгружать снапшот результатов LLM из data/snapshot при первом старте
+    use_snapshot: bool = True
     # Сколько компаний загружать (для быстрого старта демо можно ограничить)
     max_companies: int = 0  # 0 = все
     # Фоновый сбор новостей из RSS

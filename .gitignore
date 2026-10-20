@@ -1,4 +1,4 @@
-# Исходные данные кейса и материалы банка — не публикуем (см. data/raw/README.md)
+# Свои локальные данные и PDF банка (данные кейса лежат сжатыми в data/case)
 data/raw/*
 !data/raw/README.md
 data/processed/*

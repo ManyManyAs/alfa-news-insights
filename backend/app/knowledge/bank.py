@@ -41,7 +41,7 @@ class BM25:
 
     def scores(self, q: list[str]) -> list[float]:
         out = []
-        for tf, d in zip(self.tf, self.docs):
+        for tf, d in zip(self.tf, self.docs, strict=False):
             s = 0.0
             for t in q:
                 if t in tf:

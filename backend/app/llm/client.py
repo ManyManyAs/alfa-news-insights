@@ -63,6 +63,12 @@ def parse_json(text: str) -> dict | list:
     raise ValueError("Ответ модели не является JSON")
 
 
+def cache_key(payload: dict) -> str:
+    """Ключ кэша не зависит от response_format: повтор без него (fallback) попадает в тот же кэш."""
+    p = {k: v for k, v in payload.items() if k != "response_format"}
+    return hashlib.sha256(json.dumps(p, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
+
+
 def spent_today() -> float:
     row = db.query_one("SELECT COALESCE(SUM(cost_rub),0) AS s FROM llm_usage WHERE day=?", (date.today().isoformat(),))
     return float(row["s"]) if row else 0.0
@@ -76,8 +82,24 @@ class LLMClient:
 
     # --- выбор модели -------------------------------------------------
     @property
+    def mode(self) -> str:
+        """Итоговый режим: live — реальные вызовы; replay — только ответы из снапшота/кэша
+        (для жюри без ключа); mock — без LLM вообще (тесты). auto = live при наличии ключа, иначе replay."""
+        m = (self.settings.llm_mode or "auto").lower()
+        if m == "auto":
+            return "live" if self.settings.llm_api_key else "replay"
+        if m == "live" and not self.settings.llm_api_key:
+            return "replay"
+        return m if m in ("live", "replay", "mock") else "mock"
+
+    @property
     def live(self) -> bool:
-        return self.settings.llm_mode == "live" and bool(self.settings.llm_api_key)
+        return self.mode == "live"
+
+    @property
+    def enabled(self) -> bool:
+        """Есть смысл пытаться звать LLM (вживую или из снапшота)."""
+        return self.mode in ("live", "replay")
 
     def model_for(self, task: str) -> tuple[str, dict]:
         route = self.cfg["tasks"].get(task) or {"model": "qwen", "fallback": "gemma"}
@@ -94,17 +116,23 @@ class LLMClient:
     # --- вызов --------------------------------------------------------
     def complete(self, task: str, messages: list[dict], *, json_mode: bool = False,
                  max_tokens: int = 1200, temperature: float = 0.2) -> LLMResult:
+        if not self.enabled:
+            raise LLMUnavailable("LLM_MODE=mock: генеративные модели отключены")
+        route = self.cfg["tasks"].get(task) or {"model": "qwen", "fallback": "gemma"}
+        # В replay бюджет не тратится — ищем ответ основной и запасной модели
+        candidates = [self.cfg["models"][route["model"]], self.cfg["models"][route["fallback"]]] if not self.live \
+            else [self.model_for(task)[1]]
+        for model in candidates:
+            payload = self._payload(model["id"], messages, json_mode, max_tokens, temperature)
+            hit = db.query_one("SELECT response FROM llm_cache WHERE key=?", (cache_key(payload),))
+            if hit:
+                data = json.loads(hit["response"])
+                return LLMResult(text=data["text"], model=model["id"], cached=True)
         if not self.live:
-            raise LLMUnavailable("LLM_MODE=mock или не задан LLM_API_KEY")
-        key, model = self.model_for(task)
-        payload = {"model": model["id"], "messages": messages, "max_tokens": max_tokens, "temperature": temperature}
-        if json_mode:
-            payload["response_format"] = {"type": "json_object"}
-        cache_key = hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
-        hit = db.query_one("SELECT response FROM llm_cache WHERE key=?", (cache_key,))
-        if hit:
-            data = json.loads(hit["response"])
-            return LLMResult(text=data["text"], model=model["id"], cached=True)
+            raise LLMUnavailable("replay: ответа нет в снапшоте — используется детерминированный режим")
+        model = candidates[0]
+        payload = self._payload(model["id"], messages, json_mode, max_tokens, temperature)
+        ck = cache_key(payload)
 
         t0 = time.perf_counter()
         try:
@@ -125,9 +153,17 @@ class LLMClient:
         cost = tin / 1000 * model["price_rub_per_1k_input"] + tout / 1000 * model["price_rub_per_1k_output"]
         self._account(model["id"], tin, tout, cost)
         with db.tx() as conn:
-            conn.execute("INSERT OR REPLACE INTO llm_cache(key, response) VALUES (?,?)", (cache_key, db.dumps({"text": text})))
+            conn.execute("INSERT OR REPLACE INTO llm_cache(key, task, model, response) VALUES (?,?,?,?)",
+                         (ck, task, model["id"], db.dumps({"text": text})))
         return LLMResult(text=text, model=model["id"], tokens_in=tin, tokens_out=tout, cost_rub=cost,
                          duration_ms=int((time.perf_counter() - t0) * 1000))
+
+    @staticmethod
+    def _payload(model_id: str, messages: list[dict], json_mode: bool, max_tokens: int, temperature: float) -> dict:
+        payload = {"model": model_id, "messages": messages, "max_tokens": max_tokens, "temperature": temperature}
+        if json_mode:
+            payload["response_format"] = {"type": "json_object"}
+        return payload
 
     def _post(self, payload: dict) -> dict:
         url = self.settings.llm_base_url.rstrip("/") + "/chat/completions"

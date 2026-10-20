@@ -6,8 +6,8 @@
 """
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable
 
 from app.config import load_yaml
 from app.data.models import CompanyProfile
