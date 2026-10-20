@@ -1,63 +1,63 @@
 {
-  "checked_at": "2026-10-20T20:41:02.586574+00:00",
+  "checked_at": "2026-10-20T20:44:35.986464+00:00",
   "models": {
     "gemma": {
       "configured_id": "google/gemma-4-26b-a4b-it",
-      "ping_s": 1.08,
+      "ping_s": 0.65,
       "ping_error": null,
       "ping": "ОК",
-      "json_s": 1.79,
+      "json_s": 1.1,
       "json_error": null,
       "json_ok": true
     },
     "glm": {
       "configured_id": "z-ai/glm-5.3-flash",
-      "ping_s": 1.82,
+      "ping_s": 2.28,
       "ping_error": null,
-      "ping": "",
-      "json_s": 3.25,
+      "ping": "ОК",
+      "json_s": 3.65,
       "json_error": null,
-      "json_ok": false
+      "json_ok": true
     },
     "qwen": {
       "configured_id": "qwen/qwen3.6-35b-a3b",
-      "ping_s": 1.24,
+      "ping_s": 0.8,
       "ping_error": null,
-      "ping": "",
-      "json_s": 1.59,
+      "ping": "ОК",
+      "json_s": 0.88,
       "json_error": null,
-      "json_ok": false
+      "json_ok": true
     },
     "deepseek": {
       "configured_id": "deepseek/deepseek-v4.1-flash",
-      "ping_s": 1.65,
+      "ping_s": 1.23,
       "ping_error": null,
-      "ping": "",
-      "json_s": 1.66,
+      "ping": "ОК",
+      "json_s": 1.28,
       "json_error": null,
-      "json_ok": false
+      "json_ok": true
     },
     "qwen_vl": {
       "configured_id": "qwen/qwen3-vl-30b-a3b-instruct",
-      "ping_s": 1.07,
+      "ping_s": 0.82,
       "ping_error": null,
       "ping": "ОК",
-      "json_s": 1.23,
+      "json_s": 1.86,
       "json_error": null,
       "json_ok": true,
-      "vision_s": 1.29,
+      "vision_s": 0.86,
       "vision_error": null,
       "vision": "Красный",
       "vision_ok": true
     },
     "kimi": {
       "configured_id": "moonshotai/kimi-k2.6",
-      "ping_s": 1.36,
+      "ping_s": 1.07,
       "ping_error": null,
-      "ping": "",
-      "json_s": 1.64,
+      "ping": "ОК",
+      "json_s": 1.11,
       "json_error": null,
-      "json_ok": false
+      "json_ok": true
     }
   },
   "endpoint_models": [
@@ -80,10 +80,10 @@
   },
   "budget": {
     "day": "2026-10-20",
-    "spent_rub": 0.41,
+    "spent_rub": 0.45,
     "budget_rub": 500.0,
     "soft_limit_rub": 400.0,
     "background_limit_rub": 300.0,
-    "left_rub": 499.59
+    "left_rub": 499.55
   }
 }
