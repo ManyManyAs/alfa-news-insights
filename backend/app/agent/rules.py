@@ -268,8 +268,11 @@ def critique_rules(ins: Insight, ctx: AgentContext) -> tuple[list[QualityCheck],
     bad = sorted({sid for _, c in all_claims(ins) for sid in c.sources if not valid_source(sid, ctx)})
     check("Ссылки на источники корректны", not bad, f"неизвестные источники: {', '.join(bad[:5])}")
     no_view = len(ins.bank_view) == 1 and ins.bank_view[0].text == NO_BANK_VIEW
-    check("Позиция банка подкреплена материалами", bool(ins.bank_view) and (no_view or all(
-        c.kind == "bank_view" and any(s.startswith("bank:") for s in c.sources) for c in ins.bank_view)),
+    # в разделе может быть и сравнение «новость vs банк» с пометкой «вывод сервиса» — это честно помеченный вывод;
+    # ошибка — только «позиция банка» без ссылки на материалы банка или раздел без единого тезиса банка
+    bank_claims = [c for c in ins.bank_view if c.kind == "bank_view"]
+    check("Позиция банка подкреплена материалами", bool(ins.bank_view) and (no_view or (
+        bool(bank_claims) and all(any(s.startswith("bank:") for s in c.sources) for c in bank_claims))),
         "нет ссылок на аналитику банка или вывод модели выдан за позицию банка")
     check("Персонализация (не пересказ)",
           any(any(s.startswith(("profile:", "graph:", "peers:")) for s in c.sources) for c in ins.why_it_matters),

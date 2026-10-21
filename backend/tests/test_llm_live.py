@@ -190,3 +190,45 @@ def test_refresh_does_not_replace_llm_insight_with_rules(live, monkeypatch):
     again = orchestrator.get_or_create_insight(ev, p, u["role"], force=True)
     assert again.generated_by == good.generated_by
     assert orchestrator.cached_insight(ev.id, p.uid, u["role"]).generated_by.startswith("llm:")
+
+
+def test_revise_only_when_critic_has_remarks(live, monkeypatch):
+    """Критик доволен — правки моделью нет (решение в трассировке); критик недоволен — правка есть."""
+    u, p, ev = _persona()
+    ins = run_agent(ev, p, u["role"])
+    steps = {s["name"]: s for s in load_trace(ins.trace_id)}
+    assert "revise" not in CALLS and "revise" not in steps
+    if "decide:revise" in steps:
+        assert steps["decide:revise"]["output"]["revise_with_llm"] is False
+
+    def picky(self, payload, attempts=3):
+        sys_msg = payload["messages"][0]["content"]
+        if "редактор-риск-менеджер" in sys_msg:
+            CALLS.append("critic")
+            return _resp(json.dumps({"verdict": "revise", "issues": ["нет сроков у действий"],
+                                     "scores": {"personalization": 4, "depth": 3, "grounding": 4, "bank_view": 4,
+                                                "actionability": 3}}, ensure_ascii=False))
+        return fake_post(self, payload, attempts)
+
+    monkeypatch.setattr(llm_client.LLMClient, "_post", picky)
+    with db.tx() as conn:  # иначе критик ответит из кэша первого прогона
+        conn.execute("DELETE FROM llm_cache")
+    CALLS.clear()
+    ins = run_agent(ev, p, u["role"])
+    steps = {s["name"]: s for s in load_trace(ins.trace_id)}
+    assert steps["decide:revise"]["output"]["revise_with_llm"] is True and "revise" in steps
+
+
+def test_llm_deadline_cuts_calls():
+    """Остаток времени агента — потолок для HTTP-таймаута: без времени модель не вызывается вовсе."""
+    from types import SimpleNamespace
+
+    from app.llm.client import llm_deadline, time_left
+
+    dummy = SimpleNamespace(settings=SimpleNamespace(llm_base_url="http://llm.invalid/v1", llm_timeout_s=60),
+                            _headers=lambda: {})
+    with llm_deadline(1):
+        assert 0 < time_left() <= 1
+        with pytest.raises(LLMUnavailable):
+            llm_client.LLMClient._post(dummy, {})
+    assert time_left() is None

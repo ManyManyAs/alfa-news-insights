@@ -95,7 +95,7 @@ async function sse(path, opts, onEvent) {
   }
 }
 
-const STEP_RU = { relevance: "Оценка релевантности", plan: "План анализа", draft: "Черновик интерпретации", finalize: "Итог",
+const STEP_RU = { relevance: "Оценка релевантности", plan: "План анализа", "decide:revise": "Решение: нужна ли правка моделью", draft: "Черновик интерпретации", finalize: "Итог",
   "repair:rules": "Удаление неподтверждённого", revise: "Правка по замечаниям", preview: "Быстрый вывод по профилю",
   limit: "Лимит времени или стоимости — дальше без LLM", "tool:scenario_calc": "Расчёт сценариев",
   "tool:get_story_timeline": "Хронология сюжета", "tool:get_regulation_dates": "Даты вступления в силу" };
@@ -969,9 +969,9 @@ async function loadMetrics() {
     <h3 class="mon-h">Скорость и стоимость разбора</h3>
     <div class="metrics">
       ${tile("Первый вывод, p50 / p95", `${secs(sp.preview_p50)} / ${secs(sp.preview_p95)}`, "предпросмотр без модели · цель p95 ≤ 2 с", vsTarget(sp.preview_p95, 2000, true))}
-      ${tile("Полный разбор моделью, p50 / p95", `${secs(sp.full_fresh_p50)} / ${secs(sp.full_fresh_p95)}`, "план → черновик → критик → правка · лимит 90 с", vsTarget(sp.full_fresh_p95, 90000, true))}
+      ${tile("Полный разбор моделью, p50 / p95", `${secs(sp.full_fresh_p50)} / ${secs(sp.full_fresh_p95)}`, "план и разбор события параллельно → черновик → критик → правка при необходимости · цель p95 ≤ 60 с", vsTarget(sp.full_fresh_p95, 60000, true))}
       ${tile("Повторное открытие, p50", secs(sp.full_cached_p50), "из кэша разборов")}
-      ${tile("Стоимость разбора", c.avg_rub != null ? `${num(c.avg_rub)} ₽` : "—", c.avg_rub != null ? `p95 ${num(c.p95_rub)} ₽ · ${num(c.avg_llm_calls, 1)} вызовов модели · ${num(c.avg_build_s, 1)} с · лимит 4 ₽` : "появится после разборов моделью", vsTarget(c.avg_rub, 4, true))}
+      ${tile("Стоимость разбора", c.avg_rub != null ? `${num(c.avg_rub)} ₽` : "—", c.avg_rub != null ? `p95 ${num(c.p95_rub)} ₽ · ${num(c.avg_llm_calls, 1)} вызовов модели · ${num(c.avg_build_s, 1)} с · цель в среднем ≤ 2 ₽, потолок 4 ₽` : "появится после разборов моделью", vsTarget(c.avg_rub, 2, true))}
       ${tile("Бюджет LLM сегодня", `${num(m.llm.spent_rub)} ₽`, `из ${m.llm.budget_rub} ₽ · фоновые задачи до ${m.llm.background_limit_rub} ₽ · режим ${esc(m.llm.mode)}`, m.llm.budget_rub && m.llm.spent_rub / m.llm.budget_rub >= 0.8 ? "warn" : "good")}
       ${tile("Разборов построено", m.insights.total, `${c.with_llm} — моделью, остальные — правилами`)}
     </div>

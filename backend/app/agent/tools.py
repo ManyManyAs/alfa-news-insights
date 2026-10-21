@@ -50,7 +50,11 @@ def t_get_event_brief(ctx: AgentContext) -> dict:
     """Общий для всех клиентов разбор события (уровень 1, кэшируется)."""
     from app.agent.event_brief import get_event_brief
 
-    brief, by, res = get_event_brief(ctx.event)
+    fut = ctx.memory.pop("_brief_future", None)  # разбор мог уже строиться параллельно с планом
+    try:
+        brief, by, res = fut.result() if fut is not None else get_event_brief(ctx.event)
+    except Exception:  # сбой фонового разбора: строим заново (из кэша или правилами)
+        brief, by, res = get_event_brief(ctx.event)
     ctx.memory["_brief_llm"] = res  # для трассировки (модель, токены, стоимость)
     return {"generated_by": by, **brief.model_dump()}
 

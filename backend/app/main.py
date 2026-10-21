@@ -617,6 +617,7 @@ def metrics(days: int = Query(7, ge=1, le=90)):
     fb = db.query_one("SELECT COUNT(*) n, COALESCE(SUM(rating>0),0) pos, COALESCE(SUM(rating<0),0) neg FROM feedback")
     budget = get_llm().budget_status()
     product = monitoring.product_metrics(days)
+    cost = monitoring.cost_per_insight()
     health = sources_health()
     down = sum(1 for s in health["sources"] if s["status"] in ("degraded", "down"))
     since = (datetime.now(UTC) - timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S")
@@ -627,9 +628,9 @@ def metrics(days: int = Query(7, ge=1, le=90)):
         "insights": {"total": total, "quality_passed_share": round(passed / total, 3) if total else None, "judge": judge},
         "feedback": dict(fb), "events": db.query_one("SELECT COUNT(*) n FROM events")["n"],
         "companies": db.query_one("SELECT COUNT(*) n FROM companies")["n"],
-        "product": product, "cost": monitoring.cost_per_insight(), "offline": monitoring.offline_metrics(),
+        "product": product, "cost": cost, "offline": monitoring.offline_metrics(),
         "sources": {"total": len(health["sources"]), "down": down, "last_ingest": health["last_ingest"]},
-        "alerts": monitoring.alerts(budget, product, judge, down, inj),
+        "alerts": monitoring.alerts(budget, product, judge, down, inj, cost),
     }
 
 
