@@ -1,5 +1,5 @@
 {
-  "run_at": "2026-10-20T22:20:19.637639+00:00",
+  "run_at": "2026-10-21T13:43:30.470516+00:00",
   "classification": {
     "rules": {
       "scores": {
@@ -23,8 +23,8 @@
       },
       "json_first_try": 1.0,
       "errors": 0,
-      "latency_s": 3.41,
-      "cost_rub": 1.118
+      "latency_s": 0.0,
+      "cost_rub": 0.0
     },
     "qwen": {
       "scores": {
@@ -36,8 +36,8 @@
       },
       "json_first_try": 0.97,
       "errors": 0,
-      "latency_s": 2.99,
-      "cost_rub": 1.857
+      "latency_s": 0.0,
+      "cost_rub": 0.0
     },
     "glm": {
       "scores": {
@@ -49,8 +49,8 @@
       },
       "json_first_try": 1.0,
       "errors": 0,
-      "latency_s": 5.34,
-      "cost_rub": 2.869
+      "latency_s": 0.0,
+      "cost_rub": 0.0
     },
     "deepseek": {
       "scores": {
@@ -62,8 +62,8 @@
       },
       "json_first_try": 1.0,
       "errors": 0,
-      "latency_s": 2.56,
-      "cost_rub": 2.498
+      "latency_s": 0.0,
+      "cost_rub": 0.0
     },
     "kimi": {
       "scores": {
@@ -75,12 +75,41 @@
       },
       "json_first_try": 0.83,
       "errors": 4,
-      "latency_s": 8.17,
-      "cost_rub": 4.474
+      "latency_s": 0.0,
+      "cost_rub": 0.0
     }
   },
-  "interpretation": {},
-  "spent_rub": 20.0,
+  "interpretation": {
+    "glm": {
+      "checks_passed": 0.857,
+      "judge_mean": 3.6,
+      "latency_s": 18.2,
+      "cost_rub_per_case": 0.61,
+      "errors": 2
+    },
+    "qwen": {
+      "checks_passed": 0.857,
+      "judge_mean": 2.8,
+      "latency_s": 11.0,
+      "cost_rub_per_case": 0.346,
+      "errors": 2
+    },
+    "deepseek": {
+      "checks_passed": 0.857,
+      "judge_mean": 4.4,
+      "latency_s": 13.1,
+      "cost_rub_per_case": 0.531,
+      "errors": 2
+    },
+    "kimi": {
+      "checks_passed": 0.857,
+      "judge_mean": 3.8,
+      "latency_s": 39.6,
+      "cost_rub_per_case": 0.685,
+      "errors": 2
+    }
+  },
+  "spent_rub": 3.93,
   "models": {
     "gemma": "google/gemma-4-26b-a4b-it",
     "glm": "z-ai/glm-5.3-flash",
