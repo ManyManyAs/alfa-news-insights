@@ -477,7 +477,15 @@ async function openInsight(eventId, refresh = false, from = "feed") {
   } catch (e) { $("#insightPanel").innerHTML = `<div class="insight bad">Ошибка: ${esc(e.message)}</div>`; }
 }
 
-function srcTags(ids) { return (ids || []).map((s) => `<span class="src" data-src="${esc(s)}">${esc(s.split(":")[0] === "bank" ? "банк " + s.split(":")[1] : s.split(":")[0] === "news" ? "новость" : s)}</span>`).join(""); }
+// Метка источника у утверждения: понятное слово вместо внутреннего id, полное название — в подсказке
+function srcTags(ids) {
+  return (ids || []).map((s) => {
+    const kind = s.split(":")[0];
+    const src = (state.insight?.sources || []).find((x) => x.id === s);
+    const label = CITE_KIND[kind] || (kind === "peers" ? "похожие компании" : "источник");
+    return `<span class="src ${esc(kind)}" data-src="${esc(s)}" title="${esc(src ? src.title : s)}">${label}</span>`;
+  }).join("");
+}
 function claims(list) {
   return (list || []).map((c) => `<div class="claim ${c.kind} ${c.confidence === "low" ? "conf-low" : ""}">
     <span class="kind">${KIND[c.kind] || c.kind}</span>${esc(c.text)}<div>${srcTags(c.sources)}${c.kind !== "fact" ? `<span class="conf ${c.confidence}" title="${esc(CONF_DEF[c.confidence] || "")}">${CONF[c.confidence] || ""}</span>` : ""}</div></div>`).join("") || `<div class="muted small">нет данных</div>`;
@@ -643,7 +651,7 @@ function renderChatMd(raw) {
     .replace(/\[((?:[a-z_]+:[^\]\s,]+)(?:\s*,\s*[a-z_]+:[^\]\s,]+)*)\]/g, (_, ids) => ids.split(/\s*,\s*/).map(citeChip).join(""))
     .replace(/\*\*([^*]+?)\*\*/g, "<b>$1</b>")
     .replace(/(^|[\s(])\*([^*\n]+?)\*(?=[\s.,;:!?)]|$)/g, "$1<i>$2</i>")
-    .replace(/^(Позиция Альфа-Банка|Вывод сервиса(?: \(AI\))?)(:?)/, (_, l, c) => `<span class="lbl ${l.startsWith("Позиция") ? "bank" : "ai"}">${l}</span>${c}`);
+    .replace(/^(?:<b>)?(Позиция Альфа-Банка|Вывод сервиса(?: \(AI\))?)(?:\s*[:—-])?\s*(?:<\/b>)?\s*/, (_, l) => `<span class="lbl ${l.startsWith("Позиция") ? "bank" : "ai"}">${l}</span> `);
   const out = []; let list = null;
   const close = () => { if (list) { out.push(`</${list}>`); list = null; } };
   for (const line of raw.replace(/\r/g, "").split("\n")) {
