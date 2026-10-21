@@ -258,6 +258,10 @@ def feed(company_id: str, role: str | None = None, limit: int = Query(20, le=50)
                                               (user, p.uid))}
     # Сюжет сворачивается в одну карточку (rank_feed): самое релевантное событие, остальные — в таймлайне
     items = [s for s in cached_rank(p, role, limit + len(hidden)) if show_hidden or s.event.id not in hidden][:limit]
+    # Оценка важности моделью из уже построенных разборов: «не касается / слабо» опускает карточку в ленте
+    mat = ai_materiality(p.uid, role)
+    if mat:
+        items.sort(key=lambda s: -s.score * MATERIALITY_WEIGHT.get(mat.get(s.event.id, (2, ""))[0], 1.0))
     kb = get_knowledge()
     stories = {s.event.story_id: get_story(s.event.story_id) for s in items if s.event.story_id}
     today = datetime.now(UTC).date()
@@ -277,7 +281,8 @@ def feed(company_id: str, role: str | None = None, limit: int = Query(20, le=50)
             "story": ({"id": st["id"], "count": len(st["events"]), "updated": st["last_at"] or "",
                        "timeline": [{k: e[k] for k in ("event_id", "title", "published_at", "direction")}
                                     for e in st["events"]]} if st and len(st["events"]) > 1 else None),
-            "has_bank_view": bool(kb.theses_for([f.factor for f in cls.factors]))}
+            "has_bank_view": bool(kb.theses_for([f.factor for f in cls.factors])),
+            "ai_relevance": ({"level": mat[s.event.id][0], "why": mat[s.event.id][1]} if s.event.id in mat else None)}
 
     # «Тишина — тоже ответ»: за неделю ничего значимого — говорим прямо и показываем последнее важное
     week_ago = (datetime.now(UTC) - timedelta(days=QUIET_DAYS)).isoformat()
@@ -286,6 +291,20 @@ def feed(company_id: str, role: str | None = None, limit: int = Query(20, le=50)
                                                               "published_at": items[0].event.published_at} if items else None)}
     return {"company_id": company_id, "role": role, "quiet": quiet, "hidden_count": len(hidden),
             "items": [{**card(s), "hidden": s.event.id in hidden} for s in items]}
+
+
+MATERIALITY_WEIGHT = {0: 0.3, 1: 0.6, 2: 1.0, 3: 1.15}
+
+
+def ai_materiality(company_uid: str, role: str | None) -> dict[str, tuple[int, str]]:
+    """Важность события для компании по оценке модели (из разборов): своя роль важнее, иначе — любая роль."""
+    rows = db.query("SELECT event_id, role, json_extract(payload, '$.materiality') m, "
+                    "json_extract(payload, '$.materiality_why') w FROM insights "
+                    "WHERE company_uid=? AND json_extract(payload, '$.materiality') IS NOT NULL", (company_uid,))
+    out: dict[str, tuple[int, str]] = {}
+    for r in sorted(rows, key=lambda r: (r["role"] or "") == (role or "")):  # своя роль — последней, перезапишет
+        out[r["event_id"]] = (int(r["m"]), r["w"] or "")
+    return out
 
 
 class HideRequest(BaseModel):
@@ -380,7 +399,8 @@ def digest(company_id: str, role: str | None = None, period: str = Query("week",
     p = authorized_profile(company_id, user)
     days = 1 if period == "day" else 7
     since = (datetime.now(UTC) - timedelta(days=days)).date().isoformat()
-    items = cached_rank(p, role, 30)
+    mat = ai_materiality(p.uid, role)
+    items = [s for s in cached_rank(p, role, 30) if mat.get(s.event.id, (2, ""))[0] >= 2]  # «слабо» — не в дайджест
     fresh = [s for s in items if (s.event.published_at or "")[:10] >= since]
     top = (fresh or items)[:5]
     today = datetime.now(UTC).date()

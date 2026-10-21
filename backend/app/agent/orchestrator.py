@@ -17,7 +17,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from app.agent import prompts
 from app.agent.llm_schemas import CriticOut, InsightDraftOut, PlanOut
-from app.agent.rules import critique_rules, draft_rules, repair_rules
+from app.agent.rules import critique_rules, draft_rules, fix_headline, repair_rules
 from app.agent.schemas import Insight, SourceRef
 from app.agent.tools import TOOLS, AgentContext, ToolNotAllowed, call_tool
 from app.agent.trace import Tracer
@@ -184,8 +184,8 @@ def _parse_insight(data: dict, ctx: AgentContext, generated_by: str) -> Insight:
     base = draft_rules(ctx)  # недостающие поля берём из детерминированного черновика
     merged = base.model_dump()
     for k in ("headline", "takeaway", "what_happened", "why_it_matters", "consequences", "actions", "bank_view", "products",
-              "what_could_change"):
-        if data.get(k):
+              "what_could_change", "materiality", "materiality_why"):
+        if data.get(k) or (k == "materiality" and data.get(k) == 0):
             merged[k] = data[k]
     merged["generated_by"] = generated_by
     return Insight.model_validate(merged)
@@ -401,6 +401,7 @@ def run_agent(event: Event, profile: CompanyProfile, role: str | None = None, li
         ins.quality, _ = critique_rules(ins, ctx)
 
     ins.iterations = iterations
+    ins = fix_headline(ins, ctx)
     ins.sources = build_sources(ins, ctx)
     ins.trace_id = tracer.trace_id
     ins.relevance = {"score": scored.score, "reasons": scored.reasons, "focus": p.get("focus")}

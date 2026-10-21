@@ -74,6 +74,8 @@ class ClaimOut(BaseModel):
 
 class ActionOut(ClaimOut):
     action_type: Literal["analysis", "hedge", "finance", "operations", "monitor", "question"] = "analysis"
+    owner: str = ""
+    due: str = ""
 
 
 class ConsequencesOut(BaseModel):
@@ -99,6 +101,8 @@ class InsightDraftOut(BaseModel):
     bank_view: list[ClaimOut] = Field(default_factory=list)
     products: list[ProductOut] = Field(default_factory=list)
     what_could_change: list[ClaimOut] = Field(default_factory=list)
+    materiality: int | None = Field(None, ge=0, le=3)
+    materiality_why: str = ""
 
 
 class CriticOut(BaseModel):

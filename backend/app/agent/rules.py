@@ -189,7 +189,8 @@ def draft_rules(ctx: AgentContext) -> Insight:
     if due and len(actions) < 5:
         actions.append(Action(text=f"Заложить в план подготовку к {due[0]:%d.%m.%Y}: оценить, какие процессы, договоры и "
                                    f"расчёты затронет изменение, и назначить ответственного",
-                              action_type="monitor", kind="ai_inference", sources=news_src[:1]))
+                              action_type="monitor", kind="ai_inference", sources=news_src[:1],
+                              due=f"до {due[0]:%d.%m.%Y}, вступление в силу"))
 
     # Главный вывод — по главному фактору с плейбуком (совпадение отрасли/региона само по себе не вывод)
     top = next((r for r in reasons if r["factor"] in pb), reasons[0] if reasons else None)
@@ -217,6 +218,13 @@ def draft_rules(ctx: AgentContext) -> Insight:
         actions.append(Action(text=f"Проверить устойчивость бюджета к негативному сценарию — {neg.assumptions}: "
                                    f"по оценке это {money(neg.total_rub)} в год; уточните суммы в калькуляторе «Что если»",
                               action_type="analysis", kind="ai_inference", sources=["calc:scenario"]))
+
+    from app.data.sensitivity import role_titles
+
+    owner = role_titles().get(ctx.role or "", "") or "Финансовый директор"
+    for a in actions:
+        a.owner = a.owner or owner
+        a.due = a.due or "в течение месяца"
 
     return Insight(
         event_id=ev.id, company_uid=ctx.profile.uid, role=ctx.role, scenarios=scen, what_could_change=change,
@@ -317,4 +325,17 @@ def repair_rules(ins: Insight, ctx: AgentContext) -> Insight:
         ins.bank_view = [Claim(text=NO_BANK_VIEW, kind="ai_inference", sources=[f"news:{ctx.event.news[0].id}"], confidence="low")]
     if not ok(ins.takeaway):
         ins.takeaway.sources = [f"news:{ctx.event.news[0].id}"]
+    return fix_headline(ins, ctx)
+
+
+def fix_headline(ins: Insight, ctx: AgentContext) -> Insight:
+    """Заголовок — что случилось, главный вывод — что это значит; если модель их слила, заголовком становится событие."""
+    if _overlap(ins.headline, ins.takeaway.text) > 0.6:
+        ins.headline = ctx.event.title
     return ins
+
+
+def _overlap(a: str, b: str) -> float:
+    """Доля слов короткого текста, которые есть в другом (слова от 4 букв, без регистра)."""
+    wa, wb = ({w[:6] for w in re.findall(r"[а-яёa-z0-9]{4,}", t.lower())} for t in (a, b))
+    return len(wa & wb) / min(len(wa), len(wb)) if wa and wb else 0.0
