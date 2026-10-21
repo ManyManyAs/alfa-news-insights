@@ -56,6 +56,7 @@ class ScenarioRow(BaseModel):
     title: str
     effect_rub: float
     formula: str = ""
+    basis: str = ""
 
 
 class Scenario(BaseModel):
@@ -69,6 +70,10 @@ class Scenario(BaseModel):
     rows: list[ScenarioRow] = Field(default_factory=list)
     estimated: list[str] = Field(default_factory=list)  # какие параметры компании оценены по профилю
     sources: list[str] = Field(default_factory=list)
+    monthly: list[float] = Field(default_factory=list)  # накопленный эффект по месяцам горизонта
+    months: list[str] = Field(default_factory=list)
+    start_month: int = 0  # с какого месяца горизонта действует отраслевой эффект
+    version: int = 0  # версия калькулятора: старые расчёты в кэше пересчитываются
 
 
 class QualityCheck(BaseModel):

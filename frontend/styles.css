@@ -413,7 +413,7 @@ details.story summary { cursor: pointer; font-weight: 650; }
 .wi-field input { width: 100%; max-width: none; }
 .wi-out { background: var(--surface); border-radius: 14px; padding: 12px 14px; margin-bottom: 8px; }
 .wi-total { font-family: var(--display); font-size: 26px; font-weight: 800; letter-spacing: -.02em; }
-.wi-line { display: grid; grid-template-columns: 90px 110px 1fr; gap: 8px; font-size: 13px; padding: 3px 0; align-items: baseline; }
+.wi-line { display: grid; grid-template-columns: minmax(150px, 260px) 110px 1fr; gap: 8px; font-size: 13px; padding: 3px 0; align-items: baseline; }
 
 /* карта влияния */
 .impact-wrap { margin: 14px 0; border-radius: 18px; padding: 14px 16px; background: var(--soft); }
@@ -685,3 +685,28 @@ body.logged-out .layout, body.logged-out .topbar { display: none; }
 .ai-weak { font-size: 12px; color: var(--muted); margin-top: 6px; font-style: italic; }
 .ai-strong { font-size: 12px; color: var(--red); margin-top: 6px; font-weight: 650; }
 @media (max-width: 640px) { .sh-row { grid-template-columns: 1fr; gap: 2px; } }
+
+/* Эффект за 12 месяцев: график накопления и разбивка по рычагам */
+.effect-chart { background: var(--soft); border-radius: 16px; padding: 12px 14px 8px; margin: 4px 0 10px; }
+.ec-head { font-size: 12px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; }
+.effect-chart svg { width: 100%; height: auto; display: block; overflow: visible; }
+.ec-grid { stroke: var(--line); stroke-width: 1; }
+.ec-zero { stroke: var(--muted); stroke-width: 1.2; opacity: .6; }
+.ec-ax { font-size: 11px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+.ec-end { font-size: 12px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.ec-start { stroke: var(--ink2); stroke-dasharray: 3 3; opacity: .5; }
+.ec-lbl { font-size: 11px; fill: var(--ink2); }
+.ec-legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted); margin-top: 2px; flex-wrap: wrap; }
+.ec-legend i { display: inline-block; width: 16px; height: 3px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+.ec-legend i.negative { background: var(--risk); } .ec-legend i.base { background: var(--watch); } .ec-legend i.positive { background: var(--opp); }
+.lever-wrap { overflow-x: auto; margin: 0 0 8px; }
+.lever-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.lever-table th { text-align: right; font-size: 11px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+.lever-table th:first-child { text-align: left; }
+.lever-table td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.lever-table td:not(:first-child) { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.lever-table td.bad { color: var(--risk); } .lever-table td.ok { color: var(--opp); }
+.lever-table .lt-f { font-size: 11px; margin-top: 2px; }
+.lever-table .lt-total td { font-weight: 800; border-bottom: 0; }
+.scen-note { margin-bottom: 8px; }
+@media (max-width: 640px) { .lever-table .lt-f { display: none; } .ec-end { font-size: 10px; } }

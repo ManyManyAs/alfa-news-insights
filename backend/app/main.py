@@ -17,11 +17,12 @@ from pydantic import BaseModel, Field
 from app import monitoring
 from app.agent.chat import answer, answer_stream
 from app.agent.orchestrator import cached_insight, get_or_create_insight
+from app.agent.scenario import MARGIN, bank_baseline, business_levers, relevant_levers, start_month
 from app.agent.scenario import Inputs as ScenarioInputs
-from app.agent.scenario import bank_baseline, relevant_levers
 from app.agent.scenario import calc as scenario_calc
 from app.agent.scenario import defaults as scenario_defaults
 from app.agent.scenario import scenarios as scenario_set
+from app.agent.scenario import timeline as scenario_timeline
 from app.agent.schemas import Insight
 from app.agent.trace import load_trace
 from app.bootstrap import bootstrap, load_demo_users
@@ -366,6 +367,7 @@ def feed_rerank(company_id: str, role: str | None = None, limit: int = Query(20,
 class ScenarioRequest(BaseModel):
     company_id: str
     event_id: str | None = None
+    role: str | None = None
     inputs: ScenarioInputs = Field(default_factory=ScenarioInputs)
 
 
@@ -376,13 +378,21 @@ def scenario(req: ScenarioRequest, user: str = Depends(current_user)):
     Параметры компании (долг, импорт, ФОТ) по умолчанию оцениваются по профилю, пользователь может ввести свои.
     """
     p = authorized_profile(req.company_id, user)
-    factors = []
+    factors, reasons, dates = [], [], []
     if req.event_id and (ev := get_event(req.event_id)):
         factors = [f.factor for f in ev.classification.factors]
+        reasons = score_event(ev, p, compute_exposures(p, req.role)).reasons
+        dates = ev.classification.effective_dates
+    spec = business_levers(p, reasons)
+    start = start_month(dates) if spec else 0
     defaults, estimated = scenario_defaults(p)
-    return {"result": scenario_calc(p, req.inputs), "defaults": defaults, "estimated": estimated,
-            "levers": relevant_levers(factors) if factors else ["rate", "fx", "wages"], "baseline": bank_baseline(),
-            "scenarios": scenario_set(p, factors, req.inputs)}
+    sc = scenario_set(p, factors, req.inputs, reasons=reasons, effective_dates=dates)
+    res = scenario_calc(p, req.inputs, spec, start)
+    res["monthly"] = scenario_timeline(res["rows"], sc[0]["months"], start)
+    return {"result": res, "defaults": {**defaults, "margin": MARGIN}, "estimated": estimated,
+            "levers": relevant_levers(factors, spec) if factors else ["rate", "fx", "wages"], "baseline": bank_baseline(),
+            "business": spec, "start_month": start, "months": sc[0]["months"],
+            "base_params": sc[0]["params"], "scenarios": sc}
 
 
 ROLE_FOCUS = {

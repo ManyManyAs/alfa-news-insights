@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import csv
 import json
+import os
 import statistics
 import sys
 from collections import defaultdict
@@ -84,8 +85,10 @@ def score() -> None:
         print("Нет заполненных строк — сначала заполните колонки h_* в", CSV_PATH.relative_to(REPO_ROOT))
         return
     payloads = {r["key"]: json.loads(r["payload"]) for r in db.query("SELECT key, payload FROM insights")}
-    lines = ["# Калибровка LLM-судьи по людям", "", f"Оценено людьми: {len(rows)} разборов.", "",
-             "| Ось | Человек | LLM-судья | Ср. |Δ| | Совпало ±1 |", "|---|---|---|---|---|"]
+    reviewer = os.environ.get("REVIEWER", "команда")
+    lines = ["# Ручная проверка разборов и калибровка LLM-судьи", "",
+             f"Проверено разборов: {len(rows)}. Кто проверял: {reviewer}.", "",
+             "| Ось | Ручная проверка | LLM-судья | Ср. |Δ| | Совпало ±1 |", "|---|---|---|---|---|"]
     for col, axis, title in QUESTIONS:
         if not axis:
             continue

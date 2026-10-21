@@ -576,7 +576,7 @@ async function openInsight(eventId, refresh = false, from = "feed") {
         $("#previewBox").innerHTML = `<span class="pill ${p.effect}">${EFFECT[p.effect]}</span> <span class="muted small">быстрый вывод по профилю · полный разбор готовится…</span>
           <h2 style="margin-top:8px">${esc(p.headline)}</h2>
           <div class="takeaway"><span class="claim-kind small" style="color:var(--ai)">ВЫВОД СЕРВИСА · </span>${esc(p.takeaway.text)}</div>
-          ${scenarioCards(p.scenarios)}`;
+          ${scenarioCards(p.scenarios, true)}`;
       } else if (e.type === "done") {
         track("insight_ready", { event_id: eventId, value: Math.round(performance.now() - t0), meta: { cached: !!e.cached } });
         state.insight = e.insight; renderInsight("analysis");
@@ -587,7 +587,8 @@ async function openInsight(eventId, refresh = false, from = "feed") {
 
 // Метка источника у утверждения: понятное слово вместо внутреннего id, полное название — в подсказке
 function srcTags(ids) {
-  return (ids || []).map((s) => {
+  const seen = new Set();
+  return (ids || []).filter((s) => { const k = CITE_KIND[s.split(":")[0]] || s.split(":")[0]; if (seen.has(k)) return false; seen.add(k); return true; }).map((s) => {
     const kind = s.split(":")[0];
     const src = (state.insight?.sources || []).find((x) => x.id === s);
     const label = CITE_KIND[kind] || (kind === "peers" ? "похожие компании" : "источник");
@@ -600,19 +601,71 @@ function claims(list) {
 }
 
 const SCEN_CLASS = { base: "watch", negative: "risk", positive: "opportunity" };
-function scenarioCards(list) {
+const SCEN_SHORT = { negative: "Негативный", base: "Базовый", positive: "Позитивный" };
+const SCEN_ORDER = ["negative", "base", "positive"];
+function scenarioCards(list, compact = false) {
   if (!list || !list.length) return "";
   const est = list[0].estimated || [];
-  return `<div class="scenarios">${list.map((s) => `<div class="scen ${SCEN_CLASS[s.name]}">
+  const byName = Object.fromEntries(list.map((s) => [s.name, s]));
+  const cards = `<div class="scenarios">${SCEN_ORDER.filter((n) => byName[n]).map((n) => { const s = byName[n]; return `<div class="scen ${SCEN_CLASS[s.name]}">
       <div class="scen-t">${esc(s.title)}</div>
-      <div class="scen-v ${s.total_rub < 0 ? "bad" : s.total_rub > 0 ? "ok" : ""}">${rub(s.total_rub)}<span class="muted small"> в год</span></div>
-      ${s.share_of_revenue != null ? `<div class="muted small">${(s.share_of_revenue * 100).toFixed(2).replace(".", ",")}% выручки</div>` : ""}
-      <div class="small">${esc(s.assumptions)}</div>
-      ${s.name === "base" ? `<div>${srcTags(s.sources)}</div>` : ""}</div>`).join("")}</div>
-    ${est.length ? `<div class="muted small">Оценка по профилю: ${esc(est.join("; "))}. Свои цифры — в блоке «Что если».</div>` : ""}`;
+      <div class="scen-v ${s.total_rub < 0 ? "bad" : s.total_rub > 0 ? "ok" : ""}">${rub(s.total_rub)}</div>
+      ${s.share_of_revenue != null ? `<div class="muted small">${pctRev(s.share_of_revenue)} выручки</div>` : ""}
+      <div class="small">${esc(s.assumptions)}</div></div>`; }).join("")}</div>`;
+  if (compact) return cards;
+  return cards + effectChart(list) + leverTable(list)
+    + `<div class="muted small scen-note">${est.length ? `Оценено по профилю: ${esc(est.join("; "))}. ` : ""}Суммы считает калькулятор по формулам, а не модель. Свои цифры — в блоке «Что если».</div>`;
+}
+function pctRev(x) {
+  const v = Math.abs(x * 100);
+  return (x < 0 ? "−" : "") + (v < 0.1 ? v.toFixed(2) : v.toFixed(1)).replace(".", ",") + "%";
+}
+// Накопленный эффект по месяцам: три линии сценариев, ноль, подписи итогов и месяц начала действия нормы
+function effectChart(list) {
+  const ok = list.filter((s) => (s.monthly || []).length === 12);
+  if (!ok.length || ok.every((s) => s.monthly.every((v) => !v))) return "";
+  const months = ok[0].months || [], start = ok[0].start_month || 0;
+  const W = 640, H = 210, L = 64, R = 92, T = 14, B = 30;
+  const vals = ok.flatMap((s) => s.monthly).concat([0]);
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  if (hi - lo < 1) { hi += 1; lo -= 1; }
+  const pad = (hi - lo) * 0.08; lo -= pad; hi += pad;
+  const x = (k) => L + (k + 1) * (W - L - R) / 12, y = (v) => T + (hi - v) * (H - T - B) / (hi - lo);
+  const col = { negative: "var(--risk)", base: "var(--watch)", positive: "var(--opp)" };
+  const ticks = [lo + pad, 0, hi - pad].filter((v, i, a) => a.findIndex((z) => Math.abs(z - v) < (hi - lo) * 0.12) === i);
+  const lines = SCEN_ORDER.map((n) => ok.find((s) => s.name === n)).filter(Boolean).map((s) => {
+    const pts = [[L, y(0)], ...s.monthly.map((v, k) => [x(k), y(v)])];
+    const last = s.monthly[11];
+    return `<path d="M${pts.map((p) => p.map((z) => z.toFixed(1)).join(",")).join(" L")}" fill="none" stroke="${col[s.name]}" stroke-width="${s.name === "base" ? 3 : 2}" ${s.name === "base" ? "" : 'stroke-dasharray="5 4"'} stroke-linejoin="round" stroke-linecap="round"/>
+      <circle cx="${x(11).toFixed(1)}" cy="${y(last).toFixed(1)}" r="4" fill="${col[s.name]}"/>
+      <text x="${(x(11) + 8).toFixed(1)}" y="${(y(last) + 4).toFixed(1)}" class="ec-end" fill="${col[s.name]}">${esc(rub(last))}</text>`;
+  });
+  // подписи у правого края не должны налезать друг на друга
+  const startMark = start > 0 ? `<line x1="${x(start - 1).toFixed(1)}" x2="${x(start - 1).toFixed(1)}" y1="${T}" y2="${H - B}" class="ec-start"/>
+    <text x="${(x(start - 1) + 4).toFixed(1)}" y="${T + 10}" class="ec-lbl">вступление в силу</text>` : "";
+  return `<div class="effect-chart"><div class="ec-head">Как накапливается эффект по месяцам</div>
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Накопленный эффект по трём сценариям за 12 месяцев">
+      ${ticks.map((v) => `<line x1="${L}" x2="${W - R}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" class="${Math.abs(v) < 1e-6 ? "ec-zero" : "ec-grid"}"/><text x="${L - 8}" y="${(y(v) + 4).toFixed(1)}" class="ec-ax" text-anchor="end">${v === 0 ? "0" : esc(rub(v))}</text>`).join("")}
+      ${months.map((m, k) => k % 2 === 0 || k === 11 ? `<text x="${x(k).toFixed(1)}" y="${H - 10}" class="ec-ax" text-anchor="middle">${esc(m)}</text>` : "").join("")}
+      ${startMark}${lines.join("")}
+    </svg>
+    <div class="ec-legend">${SCEN_ORDER.filter((n) => ok.find((s) => s.name === n)).map((n) => `<span><i class="${n}"></i>${SCEN_SHORT[n]}</span>`).join("")}</div></div>`;
+}
+// Из чего складывается итог: рычаг × сценарий, под рычагом — через что он действует на компанию
+function leverTable(list) {
+  const byName = Object.fromEntries(list.map((s) => [s.name, s]));
+  const levers = [];
+  list.forEach((s) => (s.rows || []).forEach((r) => { if (!levers.find((l) => l.lever === r.lever)) levers.push(r); }));
+  if (!levers.length) return "";
+  const cell = (n, lv) => { const r = ((byName[n] || {}).rows || []).find((x) => x.lever === lv); return r ? `<td class="${r.effect_rub < 0 ? "bad" : r.effect_rub > 0 ? "ok" : "muted"}" title="${esc(r.formula)}">${rub(r.effect_rub)}</td>` : `<td class="muted">—</td>`; };
+  return `<div class="lever-wrap"><table class="lever-table"><thead><tr><th>Из чего складывается</th>${SCEN_ORDER.filter((n) => byName[n]).map((n) => `<th>${SCEN_SHORT[n]}</th>`).join("")}</tr></thead><tbody>
+    ${levers.map((l) => { const b = ((byName.base || {}).rows || []).find((x) => x.lever === l.lever) || l; return `<tr><td><b>${esc(l.title)}</b>${b.basis ? `<div class="muted small">${esc(b.basis)}</div>` : ""}<div class="muted small lt-f">${esc(b.formula)}</div></td>${SCEN_ORDER.filter((n) => byName[n]).map((n) => cell(n, l.lever)).join("")}</tr>`; }).join("")}
+    <tr class="lt-total"><td>Итого за 12 месяцев</td>${SCEN_ORDER.filter((n) => byName[n]).map((n) => `<td class="${byName[n].total_rub < 0 ? "bad" : byName[n].total_rub > 0 ? "ok" : ""}">${rub(byName[n].total_rub)}</td>`).join("")}</tr>
+  </tbody></table></div>`;
 }
 function rub(v) {
   if (v == null) return "—";
+  if (Math.abs(v) < 500) return "0 ₽";
   const a = Math.abs(v), sign = v < 0 ? "−" : v > 0 ? "+" : "";
   const n = (x) => x.toFixed(1).replace(".", ",");
   return sign + (a >= 1e9 ? n(a / 1e9) + " млрд ₽" : a >= 1e6 ? n(a / 1e6) + " млн ₽" : Math.round(a / 1e3) + " тыс. ₽");
@@ -622,40 +675,50 @@ function rub(v) {
 function whatIfBlock() {
   return `<details class="whatif" id="whatIf"><summary>Что если — посчитать для своих цифр</summary><div id="whatIfBody" class="muted small">Загрузка…</div></details>`;
 }
-const WI = { debt_rub: ["Долг, млн ₽", 1e6], floating_share: ["Доля под плавающей ставкой, %", 0.01], import_rub: ["Импорт в год, млн ₽", 1e6], payroll_rub: ["ФОТ в год, млн ₽", 1e6] };
+const WI = { debt_rub: ["Долг, млн ₽", 1e6], floating_share: ["Доля под плавающей ставкой, %", 0.01], import_rub: ["Импорт в год, млн ₽", 1e6], payroll_rub: ["ФОТ в год, млн ₽", 1e6], margin: ["Маржинальность, %", 0.01], purchases_rub: ["Закупки в год, млн ₽", 1e6] };
+const fmtPct = (x, unit = "%") => `${x > 0 ? "+" : x < 0 ? "−" : ""}${String(Math.abs(x)).replace(".", ",")}${unit}`;
 async function initWhatIf() {
   const box = document.getElementById("whatIfBody");
   if (!box) return;
-  const r = await api("/api/scenario", { method: "POST", body: JSON.stringify({ company_id: state.company, event_id: state.current }) });
-  const b = r.baseline, d = r.defaults;
+  const r = await api("/api/scenario", { method: "POST", body: JSON.stringify({ company_id: state.company, event_id: state.current, role: state.role }) });
+  const b = r.baseline, d = r.defaults, biz = r.business || {}, bp = r.base_params || {};
+  state.wi = { biz };
   const slider = (id, label, min, max, step, val, hint) => `<label class="wi-row"><span>${label}</span>
     <input type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${val}"><b id="${id}V"></b><span class="muted small">${hint}</span></label>`;
+  const fields = Object.keys(WI).filter((k) => !((k === "margin" && !biz.demand) || (k === "purchases_rub" && !biz.costs)));
   const field = (k) => `<label class="wi-field">${WI[k][0]}<input type="number" min="0" step="any" id="wi_${k}" value="${d[k] != null ? +(d[k] / WI[k][1]).toFixed(2) : ""}" placeholder="нет данных"></label>`;
   box.className = "";
   box.innerHTML = `
     <div class="wi-grid">
-      ${slider("wiRate", "Ключевая ставка, изменение", -4, 4, 0.25, b.rate_delta_pp, `прогноз банка: ${b.rate_delta_pp > 0 ? "+" : ""}${String(b.rate_delta_pp).replace(".", ",")} п.п. (средняя ${String(b.key_rate_avg_next).replace(".", ",")}% против ${String(b.key_rate_now).replace(".", ",")}% сейчас)`)}
+      ${biz.demand ? slider("wiDem", `Спрос на продукцию, %`, -20, 20, 0.5, bp.demand_change_pct ?? 0, `в базовом сценарии: ${fmtPct(bp.demand_change_pct ?? 0)} — ${esc(biz.demand.shock_src)}; ${esc(biz.demand.basis)}`) : ""}
+      ${biz.costs ? slider("wiCost", `Цены закупок, %`, -15, 30, 0.5, bp.cost_change_pct ?? 0, `в базовом сценарии: ${fmtPct(bp.cost_change_pct ?? 0)} — ${esc(biz.costs.shock_src)}; ${esc(biz.costs.basis)}`) : ""}
+      ${biz.tax ? slider("wiTax", "Налоговая нагрузка, п.п. выручки", -2, 2, 0.05, bp.tax_change_pp ?? 0, `в базовом сценарии: ${fmtPct(bp.tax_change_pp ?? 0, " п.п.")} — стресс-сценарий, уточните по своей отчётности`) : ""}
+      ${slider("wiRate", "Ключевая ставка, изменение", -4, 4, 0.25, b.rate_delta_pp, `прогноз банка: ${fmtPct(b.rate_delta_pp, " п.п.")} (средняя ${String(b.key_rate_avg_next).replace(".", ",")}% против ${String(b.key_rate_now).replace(".", ",")}% сейчас)`)}
       ${slider("wiFx", "Курс рубля: ослабление, %", -20, 40, 0.1, b.fx_change_pct, `прогноз банка: ${String(b.fx_change_pct).replace(".", ",")}% (${b.usd_rub.join(" → ")} ₽/$)`)}
       ${slider("wiWage", "Рост зарплат за год, %", 0, 25, 0.1, b.wage_growth_pct, `прогноз банка: ${String(b.wage_growth_pct).replace(".", ",")}% — заложен в бюджет как база`)}
     </div>
-    <div class="wi-fields">${Object.keys(WI).map(field).join("")}</div>
+    <div class="wi-fields">${fields.map(field).join("")}</div>
     <div id="wiOut" class="wi-out"></div>
-    <div class="muted small">${r.estimated.length ? "Значения по умолчанию — оценки по профилю: " + esc(r.estimated.join("; ")) + ". Замените своими — расчёт мгновенно обновится." : ""}</div>`;
+    <div class="muted small">${r.estimated.length ? "Значения по умолчанию — оценки по профилю: " + esc(r.estimated.join("; ")) + ". Замените своими — расчёт сразу обновится." : ""}${r.start_month ? ` Отраслевой эффект считается с ${esc(r.months[r.start_month])} — с даты вступления в силу.` : ""}</div>`;
   let timer;
   const run = () => { clearTimeout(timer); timer = setTimeout(recalc, 120); };
   box.querySelectorAll("input").forEach((el) => el.addEventListener("input", run));
   recalc();
 }
 async function recalc() {
-  const v = (id) => +document.getElementById(id).value;
-  $("#wiRateV").textContent = `${v("wiRate") > 0 ? "+" : ""}${String(v("wiRate")).replace(".", ",")} п.п.`;
-  $("#wiFxV").textContent = `${v("wiFx") > 0 ? "+" : ""}${String(v("wiFx")).replace(".", ",")}%`;
-  $("#wiWageV").textContent = `${String(v("wiWage")).replace(".", ",")}%`;
+  const el = (id) => document.getElementById(id);
+  const v = (id) => +el(id).value;
+  el("wiRateV").textContent = fmtPct(v("wiRate"), " п.п.");
+  el("wiFxV").textContent = fmtPct(v("wiFx"));
+  el("wiWageV").textContent = `${String(v("wiWage")).replace(".", ",")}%`;
   const inputs = { rate_delta_pp: v("wiRate"), fx_change_pct: v("wiFx"), wage_growth_pct: v("wiWage") };
-  for (const k of Object.keys(WI)) { const el = document.getElementById("wi_" + k); if (el.value !== "") inputs[k] = +el.value * WI[k][1]; }
+  if (el("wiDem")) { inputs.demand_change_pct = v("wiDem"); el("wiDemV").textContent = fmtPct(v("wiDem")); }
+  if (el("wiCost")) { inputs.cost_change_pct = v("wiCost"); el("wiCostV").textContent = fmtPct(v("wiCost")); }
+  if (el("wiTax")) { inputs.tax_change_pp = v("wiTax"); el("wiTaxV").textContent = fmtPct(v("wiTax"), " п.п."); }
+  for (const k of Object.keys(WI)) { const f = el("wi_" + k); if (f && f.value !== "") inputs[k] = +f.value * WI[k][1]; }
   try {
-    const { result: r } = await api("/api/scenario", { method: "POST", body: JSON.stringify({ company_id: state.company, event_id: state.current, inputs }) });
-    $("#wiOut").innerHTML = `<div class="wi-total ${r.total_rub < 0 ? "bad" : r.total_rub > 0 ? "ok" : ""}">${rub(r.total_rub)} <span class="muted small">в год к плану${r.share_of_revenue != null ? ` · ${(r.share_of_revenue * 100).toFixed(2).replace(".", ",")}% выручки` : ""}</span></div>
+    const { result: r } = await api("/api/scenario", { method: "POST", body: JSON.stringify({ company_id: state.company, event_id: state.current, role: state.role, inputs }) });
+    $("#wiOut").innerHTML = `<div class="wi-total ${r.total_rub < 0 ? "bad" : r.total_rub > 0 ? "ok" : ""}">${rub(r.total_rub)} <span class="muted small">за 12 месяцев к плану${r.share_of_revenue != null ? ` · ${pctRev(r.share_of_revenue)} выручки` : ""}</span></div>
       ${r.rows.map((x) => `<div class="wi-line"><span>${esc(x.title)}</span><b class="${x.effect_rub < 0 ? "bad" : x.effect_rub > 0 ? "ok" : ""}">${rub(x.effect_rub)}</b><span class="muted small">${esc(x.formula)}</span></div>`).join("")}`;
   } catch (e) { $("#wiOut").textContent = "Не удалось посчитать: " + e.message; }
 }
@@ -670,8 +733,8 @@ function shortBlock(i) {
   return `<div class="takeaway short">
     <div class="sh-head"><span class="claim-kind">КОРОТКО</span>${i.materiality != null ? `<span class="sh-mat m${i.materiality}" title="${esc(i.materiality_why || "")}">${["не касается компании", "слабая связь", "заметное влияние", "существенно для компании"][i.materiality]}</span>` : ""}</div>
     ${fact ? row("Что случилось", esc(fact.text)) : ""}
-    ${row("Что это значит", `${esc(i.takeaway.text)}${base && (lo || hi) ? `<div class="sh-range">На 12 месяцев: <b class="${lo < 0 ? "neg" : "pos"}">${rub(lo)}</b> … <b class="${hi < 0 ? "neg" : "pos"}">${rub(hi)}</b> в год к текущему уровню
-      <span class="sh-note">базовый сценарий по прогнозу Альфа-Банка: ${rub(base.total_rub)} · оценка калькулятора, подробно — в сценариях</span></div>` : ""}`)}
+    ${row("Что это значит", `${esc(i.takeaway.text)}${base && (lo || hi) ? `<div class="sh-range">Эффект за 12 месяцев к текущим условиям: базовый сценарий <b class="${base.total_rub < 0 ? "neg" : base.total_rub > 0 ? "pos" : ""}">${rub(base.total_rub)}</b>
+      <span class="sh-note">диапазон от ${rub(lo)} до ${rub(hi)}${(base.rows || []).length ? " · больше всего — " + esc(base.rows.slice().sort((a, b) => Math.abs(b.effect_rub) - Math.abs(a.effect_rub))[0].title.replace(/^./, (c) => c.toLowerCase())) : ""}${base.start_month ? " · начнётся с " + esc((base.months || [])[base.start_month] || "") : ""} · расчёт и разбивка — в подробном разборе</span></div>` : ""}`)}
     ${act ? row("Что сделать", `${esc(act.text)}${act.owner || act.due ? `<div class="sh-meta">${act.owner ? `👤 ${esc(act.owner)}` : ""}${act.due ? ` · ⏱ ${esc(act.due)}` : ""}</div>` : ""}`) : ""}
     <div class="sh-src">${srcTags(i.takeaway.sources)}</div></div>`;
 }
@@ -698,7 +761,7 @@ function renderInsight(tab) {
       <div class="q"><h4><span class="n">3</span>Возможные последствия</h4>
         <div class="cols"><div><b class="bad small">Риски</b>${claims(i.consequences.risks)}</div><div><b class="ok small">Возможности</b>${claims(i.consequences.opportunities)}</div></div>
         <b class="small muted">Что повлияет на развитие ситуации</b>${claims(i.consequences.drivers)}
-        ${(i.scenarios || []).length ? `<div class="sub-h">Сценарии на 12 месяцев <span class="muted small">— суммы считает калькулятор, а не модель</span></div>${scenarioCards(i.scenarios)}` : ""}
+        ${(i.scenarios || []).length ? `<div class="sub-h">Эффект для компании за 12 месяцев</div>${scenarioCards(i.scenarios)}` : ""}
         ${(i.what_could_change || []).length ? `<div class="sub-h">Что может изменить вывод</div>${claims(i.what_could_change)}` : ""}
         ${whatIfBlock()}</div>
       <div class="q"><h4><span class="n">4</span>Что можно сделать</h4>${claims(i.actions)}
@@ -730,7 +793,7 @@ function renderInsight(tab) {
   }
   $("#insightPanel").innerHTML = `<div class="insight">
     <div><span class="pill ${i.effect}">${EFFECT[i.effect]}</span>
-      <span class="muted small">${i.generated_by.startsWith("llm") ? "Разбор подготовлен ИИ и проверен критиком" : "Быстрый разбор по профилю компании"} · ${allOk ? "<span class='ok'>✓ самопроверка пройдена</span>" : "<span title='Подробности — в блоке «На чём основан вывод»'>самопроверка: есть замечания</span>"}</span>
+      <span class="muted small">${i.generated_by.startsWith("llm") ? "Разбор подготовлен ИИ и проверен на ошибки" : "Быстрый разбор по профилю компании"} · ${allOk ? "<span class='ok'>✓ самопроверка пройдена</span>" : "<span title='Подробности — в блоке «На чём основан вывод»'>самопроверка: есть замечания</span>"}</span>
       <button class="btn ghost small" id="refreshBtn" style="float:right">Пересчитать</button></div>
     <h2 style="margin-top:8px">${esc(i.headline)}</h2>
     ${shortBlock(i)}
@@ -785,7 +848,8 @@ function citeChip(id) {
 }
 function renderChatMd(raw) {
   const inline = (t) => esc(t)
-    .replace(/\[((?:[a-z_]+:[^\]\s,]+)(?:\s*,\s*[a-z_]+:[^\]\s,]+)*)\]/g, (_, ids) => ids.split(/\s*,\s*/).map(citeChip).join(""))
+    .replace(/[\[(]((?:[a-z_]+:[^\])\s,]+)(?:\s*,\s*[a-z_]+:[^\])\s,]+)*)[\])]/g, (_, ids) => ids.split(/\s*,\s*/).map(citeChip).join(""))
+    .replace(/\b(?:news|bank|graph|profile|calc|peers|forecast|doc|insight):[^\s,;<]+/g, "")
     .replace(/\*\*([^*]+?)\*\*/g, "<b>$1</b>")
     .replace(/(^|[\s(])\*([^*\n]+?)\*(?=[\s.,;:!?)]|$)/g, "$1<i>$2</i>")
     .replace(/^(?:<b>)?(Позиция Альфа-Банка|Вывод сервиса(?: \(AI\))?)(?:\s*[:—-])?\s*(?:<\/b>)?\s*/, (_, l) => `<span class="lbl ${l.startsWith("Позиция") ? "bank" : "ai"}">${l}</span> `);
