@@ -626,6 +626,38 @@ async function loadTrace(traceId) {
 }
 
 // ---------------------------------------------------------------- чат
+// Ответ модели — безопасный мини-markdown: сначала экранируем, потом **жирный**, списки, абзацы.
+// Ссылки [news:..], [bank:..] превращаются в компактные метки с подсказкой (и ссылкой на первоисточник, если есть).
+const CITE_KIND = { news: "новость", bank: "банк", forecast: "прогноз банка", profile: "профиль", graph: "контрагенты", insight: "разбор", calc: "расчёт", doc: "документ банка" };
+function citeChip(id) {
+  const kind = id.split(":")[0];
+  const src = (state.insight?.sources || []).find((s) => s.id === id);
+  const label = CITE_KIND[kind] || kind;
+  const title = esc(src ? src.title : id);
+  return src?.url
+    ? `<a class="cite ${esc(kind)}" href="${esc(src.url)}" target="_blank" rel="noopener" title="${title}">${label}</a>`
+    : `<span class="cite ${esc(kind)}" title="${title}">${label}</span>`;
+}
+function renderChatMd(raw) {
+  const inline = (t) => esc(t)
+    .replace(/\[((?:[a-z_]+:[^\]\s,]+)(?:\s*,\s*[a-z_]+:[^\]\s,]+)*)\]/g, (_, ids) => ids.split(/\s*,\s*/).map(citeChip).join(""))
+    .replace(/\*\*([^*]+?)\*\*/g, "<b>$1</b>")
+    .replace(/(^|[\s(])\*([^*\n]+?)\*(?=[\s.,;:!?)]|$)/g, "$1<i>$2</i>")
+    .replace(/^(Позиция Альфа-Банка|Вывод сервиса(?: \(AI\))?)(:?)/, (_, l, c) => `<span class="lbl ${l.startsWith("Позиция") ? "bank" : "ai"}">${l}</span>${c}`);
+  const out = []; let list = null;
+  const close = () => { if (list) { out.push(`</${list}>`); list = null; } };
+  for (const line of raw.replace(/\r/g, "").split("\n")) {
+    const t = line.trim();
+    let m;
+    if (!t) { close(); continue; }
+    if ((m = t.match(/^(?:[-*•])\s+(.*)$/))) { if (list !== "ul") { close(); out.push("<ul>"); list = "ul"; } out.push(`<li>${inline(m[1])}</li>`); continue; }
+    if ((m = t.match(/^\d+[.)]\s+(.*)$/))) { if (list !== "ol") { close(); out.push("<ol>"); list = "ol"; } out.push(`<li>${inline(m[1])}</li>`); continue; }
+    close();
+    out.push(`<p>${inline(t.replace(/^#{1,6}\s+/, ""))}</p>`);
+  }
+  close();
+  return out.join("");
+}
 function chatBlock() {
   return `<div class="chat"><h4>Задать уточняющий вопрос</h4>
     <div class="quick">${["Какие главные риски?", "Что говорит банк?", "Покажи разрез по контрагентам", "Что делать в первую очередь?", "Откуда эти выводы?"].map((t) => `<button data-q="${t}">${t}</button>`).join("")}</div>
@@ -641,9 +673,10 @@ function bindChat() {
     $("#chatInput").value = "";
     $("#chatLog").insertAdjacentHTML("beforeend", `<div class="msg bot typing"></div>`);
     const bubble = [...document.querySelectorAll("#chatLog .msg.bot")].pop();
+    let raw = "";
     try {
       await sse("/api/chat/stream", { method: "POST", body: JSON.stringify({ event_id: state.current, company_id: state.company, role: state.role, question: text }) }, (e) => {
-        if (e.type === "delta") { bubble.classList.remove("typing"); bubble.textContent += e.text; }
+        if (e.type === "delta") { bubble.classList.remove("typing"); raw += e.text; bubble.innerHTML = renderChatMd(raw); }
         if (e.type === "meta") bubble.title = "режим: " + e.mode;
       });
     } catch (e) { bubble.classList.add("bad"); bubble.textContent = e.message; }
