@@ -45,7 +45,7 @@ function tourUi() {
     o.innerHTML = `<div class="tour-spot"></div><div class="tour-pop" role="dialog" aria-live="polite">
       <div class="tour-n"></div><h3></h3><p></p>
       <div class="row"><button class="btn ghost small" data-t="end">Закончить</button>
-        <span><button class="btn ghost small" data-t="prev">Назад</button> <button class="btn small" data-t="next">Далее</button></span></div></div>`;
+        <span><button class="btn ghost small" data-t="prev">Назад</button> <button class="btn btn-red small" data-t="next">Далее</button></span></div></div>`;
     document.body.appendChild(o);
     o.querySelector("[data-t=end]").onclick = endTour;
     o.querySelector("[data-t=prev]").onclick = () => goStep(tourStep - 1);
@@ -112,8 +112,10 @@ function place() {
     return;
   }
   const r = el.getBoundingClientRect();
-  // видимая часть элемента
-  const v = { left: Math.max(r.left - pad, M / 2), top: Math.max(r.top - pad, M / 2),
+  // видимая часть элемента (не заходя под липкую шапку, если подсвечиваем не саму шапку)
+  const bar = document.querySelector(".topbar"), inBar = bar && bar.contains(el);
+  const topMin = inBar ? M / 2 : Math.max(M / 2, (bar ? bar.getBoundingClientRect().bottom : 0) + 4);
+  const v = { left: Math.max(r.left - pad, M / 2), top: Math.max(r.top - pad, topMin),
     right: Math.min(r.right + pad, W - M / 2), bottom: Math.min(r.bottom + pad, H - M / 2) };
   const visible = v.right > v.left && v.bottom > v.top;
   spot.style.display = visible ? "block" : "none";
@@ -144,7 +146,7 @@ function maybeOnboard() {
     <h2>Мы изучили вашу компанию</h2>
     <p class="muted">По продуктам банка, отрасли, ВЭД и графу платежей — вот 5 факторов, которые для вас важнее всего. Новости будем отбирать и объяснять через них.</p>
     <ol class="ob-list">${top.map((e) => `<li><b>${esc(e.title)}</b><div class="muted small">${esc((e.reasons.find((r) => r.basis !== "baseline") || e.reasons[0] || {}).why || "")}</div></li>`).join("")}</ol>
-    <div class="row"><button class="btn ghost" id="obSkip">Смотреть самостоятельно</button><button class="btn" id="obTour">Пройти тур (2 минуты)</button></div></div>`;
+    <div class="row"><button class="btn ghost" id="obSkip">Смотреть самостоятельно</button><button class="btn btn-red" id="obTour">Пройти тур (2 минуты)</button></div></div>`;
   d.showModal();
   document.getElementById("obSkip").onclick = closeOnboarding;
   document.getElementById("obTour").onclick = startTour;
