@@ -45,6 +45,10 @@ class Tracer:
             raise
         finally:
             rec["duration_ms"] = int((time.perf_counter() - t0) * 1000)
+            if rec.get("fallback"):  # причина перехода на правила сохраняется в трассировке, а не только в потоке UI
+                out = rec["output"]
+                rec["output"] = {"fallback": rec["fallback"], **out} if isinstance(out, dict) else \
+                    {"fallback": rec["fallback"], "result": out}
             self.step_no += 1
             rec["step_no"] = self.step_no
             self.steps.append(rec)
