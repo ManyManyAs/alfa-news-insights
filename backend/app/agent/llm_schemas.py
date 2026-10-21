@@ -93,7 +93,9 @@ class InsightDraftOut(BaseModel):
     what_happened: list[ClaimOut]
     why_it_matters: list[ClaimOut]
     consequences: ConsequencesOut
-    actions: list[ActionOut]
+    # модель иногда пропускает раздел целиком — тогда он берётся из детерминированного черновика,
+    # а не весь разбор уходит на правила (замер 21.10: 2 из 12 разборов)
+    actions: list[ActionOut] = Field(default_factory=list)
     bank_view: list[ClaimOut] = Field(default_factory=list)
     products: list[ProductOut] = Field(default_factory=list)
     what_could_change: list[ClaimOut] = Field(default_factory=list)
