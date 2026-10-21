@@ -404,6 +404,9 @@ def get_or_create_insight(event: Event, profile: CompanyProfile, role: str | Non
     if not force and (hit := cached_insight(event.id, profile.uid, role)):
         return hit
     ins = run_agent(event, profile, role, listener=listener)
+    old = cached_insight(event.id, profile.uid, role) if force else None
+    if old and ins.generated_by == "rules" and old.generated_by != "rules":
+        return old  # модель недоступна — не затираем готовый разбор моделью детерминированным
     with db.tx() as conn:
         conn.execute("INSERT OR REPLACE INTO insights(key, event_id, company_uid, role, payload, trace_id) VALUES (?,?,?,?,?,?)",
                      (key, event.id, profile.uid, role, ins.model_dump_json(), ins.trace_id))

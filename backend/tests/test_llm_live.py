@@ -157,3 +157,36 @@ def test_reasoning_model_extras_and_empty_content_retry(live, monkeypatch):
     res = live.complete("chat", [{"role": "user", "content": "проверка думающей модели"}], max_tokens=50, model_key="glm")
     assert res.text == "ОК"
     assert any("reasoning" in p for p in seen) and seen[-1]["max_tokens"] >= 1000
+
+
+def test_provider_spend_wins_over_local_estimate(live, monkeypatch):
+    """Локальная оценка расхода (переносится снапшотом между прогонами) не должна блокировать модели,
+    если провайдер видит реальный расход меньше."""
+    with db.tx() as conn:
+        conn.execute("INSERT OR REPLACE INTO llm_usage(day, model, calls, tokens_in, tokens_out, cost_rub) VALUES (?,?,?,?,?,?)",
+                     (budget_day(), "test-local", 1, 0, 0, 450))
+    try:
+        monkeypatch.setattr(llm_client.LLMClient, "provider_budget", lambda self, max_age_s=60.0: {"spent": 100.0, "max_budget": 500})
+        b = live.budget_status()
+        assert b["source"] == "provider" and b["spent_rub"] == 100.0
+        with llm_priority("background"):
+            assert live.model_for("interpret", "background")
+    finally:
+        with db.tx() as conn:
+            conn.execute("DELETE FROM llm_usage WHERE model='test-local'")
+
+
+def test_refresh_does_not_replace_llm_insight_with_rules(live, monkeypatch):
+    from app.agent import orchestrator
+
+    u, p, ev = _persona()
+    good = orchestrator.get_or_create_insight(ev, p, u["role"], force=True)
+    assert good.generated_by.startswith("llm:")
+
+    def rules_only(*a, **k):
+        raise LLMUnavailable("бюджет")
+
+    monkeypatch.setattr(llm_client.LLMClient, "_post", rules_only)
+    again = orchestrator.get_or_create_insight(ev, p, u["role"], force=True)
+    assert again.generated_by == good.generated_by
+    assert orchestrator.cached_insight(ev.id, p.uid, u["role"]).generated_by.startswith("llm:")
