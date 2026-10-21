@@ -9,7 +9,7 @@ from collections.abc import Iterator
 from contextlib import asynccontextmanager
 from datetime import UTC, date, datetime, timedelta
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -32,18 +32,22 @@ from app.knowledge.bank import get_knowledge
 from app.llm.client import MSK, budget_day, get_llm
 from app.news.ingest import add_news, get_event, list_events, run_ingest, sources_health
 from app.news.models import NewsItem
-from app.news.sources import fetch_url
+from app.news.sources import UnsafeURL, fetch_url
 from app.news.stories import get_story
 from app.ranking.personal import apply_feedback, apply_overrides, get_overrides, set_manual
 from app.ranking.personal import reset as reset_overrides
 from app.ranking.rerank import rerank
 from app.ranking.scorer import rank_feed, score_event
-from app.security.guard import AccessDenied, audit, check_company_access
+from app.security import auth
+from app.security.guard import AccessDenied, MaskIdsFilter, audit, check_company_access
 from app.storage import db
 from app.storage.snapshot import snapshot_dir
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("app")
+for _h in logging.getLogger().handlers:
+    _h.addFilter(MaskIdsFilter())
+logging.getLogger("uvicorn.access").addFilter(MaskIdsFilter())  # в адресах запросов тоже есть company_id
 
 
 @asynccontextmanager
@@ -69,11 +73,71 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Alfa News Insights", version="0.1.0", lifespan=lifespan,
               description="Персонализированная новостная аналитика для клиентов КИБ (прототип хакатона).")
 
+# Заголовки безопасности: скрипты и стили только свои (без inline-скриптов), страница не встраивается в чужие фреймы
+CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+       "connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
 
-def current_user(x_user_id: str | None = Header(default=None)) -> str:
-    if not x_user_id:
-        raise HTTPException(401, "Укажите пользователя (заголовок X-User-Id)")
-    return x_user_id
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    resp = await call_next(request)
+    resp.headers.setdefault("Content-Security-Policy", CSP)
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    resp.headers.setdefault("X-Frame-Options", "DENY")
+    resp.headers.setdefault("Referrer-Policy", "same-origin")
+    resp.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    if request.url.path.startswith("/api/"):
+        resp.headers.setdefault("Cache-Control", "no-store")
+    return resp
+
+
+def current_user(request: Request, x_user_id: str | None = Header(default=None),
+                 authorization: str | None = Header(default=None)) -> str:
+    """Пользователь из подписанной сессии (cookie или Bearer). Заголовок X-User-Id — только при ALLOW_HEADER_AUTH."""
+    token = request.cookies.get(auth.COOKIE)
+    if not token and authorization and authorization.lower().startswith("bearer "):
+        token = authorization[7:].strip()
+    user = auth.verify(token)
+    if user:
+        return user
+    if x_user_id and get_settings().allow_header_auth:
+        return x_user_id
+    raise HTTPException(401, "Требуется вход в интернет-банк")
+
+
+def throttle(user: str, bucket: str, per_min: int) -> None:
+    """Ограничение частоты для дорогих операций (LLM): защищает бюджет и сервис от перебора."""
+    if auth.rate_limited(f"{bucket}:{user}", per_min):
+        audit(user, f"rate_limit:{bucket}", "-", False)
+        raise HTTPException(429, "Слишком много запросов — попробуйте через минуту")
+
+
+# ------------------------------------------------------------------ вход
+class LoginRequest(BaseModel):
+    login: str = Field(..., max_length=64)
+    password: str = Field(..., max_length=128)
+
+
+@app.post("/api/auth/login")
+def login(req: LoginRequest, request: Request, response: Response):
+    ip = request.headers.get("x-real-ip") or (request.client.host if request.client else "?")
+    if auth.rate_limited(f"login:{ip}", 10):
+        raise HTTPException(429, "Слишком много попыток входа — подождите минуту")
+    user = req.login.strip()
+    ok = auth.check_password(user, req.password)
+    audit(user, "login", ip, ok)
+    if not ok:
+        raise HTTPException(401, "Неверный логин или пароль")
+    secure = get_settings().cookie_secure or request.headers.get("x-forwarded-proto") == "https"
+    response.set_cookie(auth.COOKIE, auth.issue(user), max_age=auth.TTL_S, httponly=True, samesite="lax",
+                        secure=secure, path="/")
+    return {"ok": True, "user_id": user}
+
+
+@app.post("/api/auth/logout")
+def logout(response: Response):
+    response.delete_cookie(auth.COOKIE, path="/")
+    return {"ok": True}
 
 
 def authorized_profile(company_id: str, user: str):
@@ -95,8 +159,9 @@ def health():
 
 @app.get("/api/demo-users")
 def demo_users():
-    """Тестовые учётные записи для прохождения сценария (данные обезличены)."""
-    return {"users": load_demo_users(), "roles": role_titles()}
+    """Тестовые учётные записи для прохождения сценария (данные обезличены). Пароль демо-учёток публичный —
+    его передают жюри вместе с логинами (рекомендация организаторов); в продакшене здесь вход через IAM банка."""
+    return {"users": load_demo_users(), "roles": role_titles(), "demo_password": get_settings().demo_password}
 
 
 @app.get("/api/me")
@@ -151,11 +216,36 @@ def reset_preferences(company_id: str, user: str = Depends(current_user)):
     return {"ok": True}
 
 
+_rank_cache: dict[tuple, list] = {}
+
+
+def cached_rank(p, role: str | None, limit: int) -> list:
+    """Ранжирование ленты с кэшем: ключ меняется при новых событиях и при изменении персональных настроек компании.
+
+    Лента — самый частый запрос; без кэша каждый запрос пересчитывает сотни событий (нагрузочный тест: docs/SECURITY.md).
+    """
+    events = list_events(300)
+    from app.news.ingest import _events_cache
+
+    overrides = tuple(sorted((f, o["multiplier"]) for f, o in get_overrides(p.uid).items()))
+    hour = datetime.now(UTC).strftime("%Y%m%d%H")  # свежесть событий зависит от времени — кэш живёт не дольше часа
+    key = (p.uid, role, limit, _events_cache["sig"], overrides, hour)
+    hit = _rank_cache.get(key)
+    if hit is None:
+        if len(_rank_cache) > 512:
+            _rank_cache.clear()
+        hit = _rank_cache[key] = rank_feed(events, p, role, limit)
+    return hit
+
+
 @app.get("/api/feed")
-def feed(company_id: str, role: str | None = None, limit: int = Query(20, le=50), user: str = Depends(current_user)):
+def feed(company_id: str, role: str | None = None, limit: int = Query(20, le=50), show_hidden: bool = False,
+         user: str = Depends(current_user)):
     p = authorized_profile(company_id, user)
+    hidden = {r["event_id"] for r in db.query("SELECT event_id FROM hidden_events WHERE user_id=? AND company_uid=?",
+                                              (user, p.uid))}
     # Сюжет сворачивается в одну карточку (rank_feed): самое релевантное событие, остальные — в таймлайне
-    items = rank_feed(list_events(300), p, role, limit)
+    items = [s for s in cached_rank(p, role, limit + len(hidden)) if show_hidden or s.event.id not in hidden][:limit]
     kb = get_knowledge()
     stories = {s.event.story_id: get_story(s.event.story_id) for s in items if s.event.story_id}
     today = datetime.now(UTC).date()
@@ -182,7 +272,53 @@ def feed(company_id: str, role: str | None = None, limit: int = Query(20, le=50)
     fresh = [s for s in items if (s.event.published_at or "") >= week_ago[:10]]
     quiet = None if fresh else {"days": QUIET_DAYS, "last": ({"event_id": items[0].event.id, "title": items[0].event.title,
                                                               "published_at": items[0].event.published_at} if items else None)}
-    return {"company_id": company_id, "role": role, "quiet": quiet, "items": [card(s) for s in items]}
+    return {"company_id": company_id, "role": role, "quiet": quiet, "hidden_count": len(hidden),
+            "items": [{**card(s), "hidden": s.event.id in hidden} for s in items]}
+
+
+class HideRequest(BaseModel):
+    company_id: str
+    event_id: str
+    hidden: bool = True
+
+
+@app.post("/api/feed/hide")
+def hide_event(req: HideRequest, user: str = Depends(current_user)):
+    """Скрыть карточку из ленты (или вернуть). Скрытие видно только этому пользователю в этой компании."""
+    p = authorized_profile(req.company_id, user)
+    with db.tx() as conn:
+        if req.hidden:
+            conn.execute("INSERT OR IGNORE INTO hidden_events(user_id, company_uid, event_id) VALUES (?,?,?)",
+                         (user, p.uid, req.event_id))
+        else:
+            conn.execute("DELETE FROM hidden_events WHERE user_id=? AND company_uid=? AND event_id=?", (user, p.uid, req.event_id))
+    return {"ok": True}
+
+
+ACTION_KINDS = {"manager": "Связаться с менеджером", "callback": "Обратный звонок", "application": "Заявка на продукт"}
+
+
+class ActionRequest(BaseModel):
+    company_id: str
+    event_id: str | None = None
+    kind: str = Field(..., pattern="^(manager|callback|application)$")
+    product: str | None = Field(None, max_length=200)
+    comment: str | None = Field(None, max_length=1000)
+
+
+@app.post("/api/actions")
+def request_action(req: ActionRequest, user: str = Depends(current_user)):
+    """Естественное действие после инсайта. В прототипе запрос сохраняется; в банке уходит в CRM менеджеру клиента."""
+    p = authorized_profile(req.company_id, user)
+    throttle(user, "action", 5)
+    comment = " · ".join(x for x in (req.product, req.comment) if x)
+    with db.tx() as conn:
+        cur = conn.execute("INSERT INTO action_requests(user_id, company_uid, event_id, kind, comment) VALUES (?,?,?,?,?)",
+                           (user, p.uid, req.event_id, req.kind, comment or None))
+    audit(user, f"action:{req.kind}", p.uid, True)
+    return {"ok": True, "ticket": f"AB-{cur.lastrowid:06d}", "title": ACTION_KINDS[req.kind],
+            "message": "Запрос передан менеджеру. Он свяжется с вами в течение рабочего дня (демо: запрос сохранён, "
+                       "в банке он уходит в CRM)."}
 
 
 QUIET_DAYS = 7
@@ -192,7 +328,8 @@ QUIET_DAYS = 7
 def feed_rerank(company_id: str, role: str | None = None, limit: int = Query(20, le=50), user: str = Depends(current_user)):
     """Уточнение порядка верха ленты моделью (Gemma). Фронтенд вызывает после показа ленты и плавно переставляет карточки."""
     p = authorized_profile(company_id, user)
-    return rerank(rank_feed(list_events(300), p, role, limit), p, role)
+    throttle(user, "rerank", 20)
+    return rerank(cached_rank(p, role, limit), p, role)
 
 
 class ScenarioRequest(BaseModel):
@@ -231,7 +368,7 @@ def digest(company_id: str, role: str | None = None, period: str = Query("week",
     p = authorized_profile(company_id, user)
     days = 1 if period == "day" else 7
     since = (datetime.now(UTC) - timedelta(days=days)).date().isoformat()
-    items = rank_feed(list_events(300), p, role, 30)
+    items = cached_rank(p, role, 30)
     fresh = [s for s in items if (s.event.published_at or "")[:10] >= since]
     top = (fresh or items)[:5]
     today = datetime.now(UTC).date()
@@ -283,6 +420,8 @@ def insight(event_id: str, company_id: str, role: str | None = None, refresh: bo
     ev = get_event(event_id)
     if not ev:
         raise HTTPException(404, "Событие не найдено")
+    if refresh or not cached_insight(ev.id, p.uid, role):
+        throttle(user, "insight", 12)
     return get_or_create_insight(ev, p, role, force=refresh)
 
 
@@ -301,6 +440,8 @@ def insight_stream(event_id: str, company_id: str, role: str | None = None, refr
     ev = get_event(event_id)
     if not ev:
         raise HTTPException(404, "Событие не найдено")
+    if refresh or not cached_insight(ev.id, p.uid, role):
+        throttle(user, "insight", 12)
 
     def gen() -> Iterator[str]:
         if not refresh and (hit := cached_insight(ev.id, p.uid, role)):
@@ -350,13 +491,19 @@ class AnalyzeRequest(BaseModel):
 @app.post("/api/news/analyze")
 def analyze(req: AnalyzeRequest, user: str = Depends(current_user)):
     """Проверка на «невиданной» новости: текст или ссылка -> событие -> (опционально) инсайт для компании."""
+    p = authorized_profile(req.company_id, user) if req.company_id else None  # права — до любой записи в БД
+    throttle(user, "analyze", 6)
     if req.url:
         if not get_settings().allow_url_fetch:
             raise HTTPException(400, "Загрузка по ссылке отключена")
         try:
             item = fetch_url(req.url)
-        except Exception as e:
-            raise HTTPException(400, f"Не удалось загрузить страницу: {e}") from e
+        except UnsafeURL as e:
+            audit(user, "fetch_url_blocked", req.url[:200], False)
+            raise HTTPException(400, str(e)) from e
+        except Exception as e:  # детали сетевой ошибки пользователю не показываем
+            log.info("Загрузка %s не удалась: %s", req.url[:200], e)
+            raise HTTPException(400, "Не удалось загрузить страницу по ссылке") from e
     elif req.text:
         title = req.title or req.text.strip().split(".")[0][:150]
         import hashlib
@@ -369,14 +516,14 @@ def analyze(req: AnalyzeRequest, user: str = Depends(current_user)):
     event_id, is_new = add_news(item)
     ev = get_event(event_id)
     out = {"event_id": event_id, "new_event": is_new, "classification": ev.classification.model_dump()}
-    if req.company_id:
-        p = authorized_profile(req.company_id, user)
+    if p:
         out["insight"] = get_or_create_insight(ev, p, req.role).model_dump()
     return out
 
 
 @app.post("/api/ingest/run")
 def ingest(sources: list[str] | None = None, user: str = Depends(current_user)):
+    throttle(user, "ingest", 1)  # сбор идёт по расписанию; ручной запуск — не чаще раза в минуту
     audit(user, "ingest", ",".join(sources or ["all"]), True)
     return run_ingest(sources)
 
@@ -392,6 +539,7 @@ class ChatRequest(BaseModel):
 @app.post("/api/chat")
 def chat(req: ChatRequest, user: str = Depends(current_user)):
     p = authorized_profile(req.company_id, user)
+    throttle(user, "chat", 20)
     ev = get_event(req.event_id)
     if not ev:
         raise HTTPException(404, "Событие не найдено")
@@ -403,6 +551,7 @@ def chat(req: ChatRequest, user: str = Depends(current_user)):
 def chat_stream(req: ChatRequest, user: str = Depends(current_user)):
     """Потоковый ответ ассистента (SSE): meta, delta..., done."""
     p = authorized_profile(req.company_id, user)
+    throttle(user, "chat", 20)
     ev = get_event(req.event_id)
     if not ev:
         raise HTTPException(404, "Событие не найдено")

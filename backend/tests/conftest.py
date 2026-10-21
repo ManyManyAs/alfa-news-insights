@@ -16,6 +16,7 @@ def app_env(tmp_path_factory):
     os.environ["LLM_MODE"] = "mock"
     os.environ["ALLOW_URL_FETCH"] = "false"
     os.environ["USE_SNAPSHOT"] = "false"
+    os.environ["ALLOW_HEADER_AUTH"] = "true"  # тесты ходят с X-User-Id; вход по паролю проверяется отдельно
     if not (ROOT / "data" / "sample" / "df_Uid_data_hack.csv").exists():
         sys.path.insert(0, str(ROOT / "backend" / "scripts"))
         import make_sample_data

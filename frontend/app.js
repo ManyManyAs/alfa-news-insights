@@ -5,6 +5,12 @@ const EFFECT = { risk: "риск", opportunity: "возможность", mixed:
 const KIND = { fact: "Факт", assumption: "Предположение источника", bank_view: "Позиция Альфа-Банка", ai_inference: "Вывод сервиса (AI)" };
 const DIR = { up: "↑", down: "↓", stable: "→", unknown: "·" };
 const CONF = { high: "уверенность высокая", medium: "уверенность средняя", low: "уверенность низкая" };
+const CONF_DEF = {
+  high: "Высокая: подтверждено источником (новость, материал банка) или прямым признаком компании",
+  medium: "Средняя: вывод сервиса по связи фактора с профилем компании; источники указаны, но связь — расчётная",
+  low: "Низкая: гипотеза без прямого подтверждения — проверьте её, прежде чем действовать",
+};
+const DISCLAIMER = "Материал носит информационно-аналитический характер, не является индивидуальной инвестиционной рекомендацией и предложением заключить сделку. Выводы с пометкой «Вывод сервиса (AI)» сформированы моделью и не являются официальной позицией Альфа-Банка.";
 const TRUST = { official: ["официально", "Регулятор или орган власти"], agency: ["агентство", "Информационное агентство"],
   media: ["СМИ", "Деловое СМИ: мнения и прогнозы помечаются как предположения"], user: ["ваша новость", "Добавлено пользователем"],
   demo: ["демо", "Синтетический демо-пример"] };
@@ -28,19 +34,25 @@ function storyLine(s, current) {
 function esc(s) { return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 function fmtDate(s) { if (!s) return ""; const d = new Date(s); return isNaN(d) ? s : d.toLocaleDateString("ru-RU", { day: "numeric", month: "short" }); }
 
+// Сессия — в HttpOnly-cookie: браузер отправляет её сам, JS её не видит
+function apiError(status, text) {
+  let detail = text;
+  try { detail = JSON.parse(text).detail || text; } catch (e) { /* не JSON */ }
+  const err = new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+  err.status = status;
+  if (status === 401 && !state.loggingIn) showLogin();
+  return err;
+}
 async function api(path, opts = {}) {
-  const headers = { "Content-Type": "application/json" };
-  if (state.user) headers["X-User-Id"] = state.user;
-  const r = await fetch(path, { ...opts, headers: { ...headers, ...(opts.headers || {}) } });
-  if (!r.ok) { const t = await r.text(); throw new Error(`${r.status}: ${t}`); }
+  const r = await fetch(path, { credentials: "same-origin", ...opts, headers: { "Content-Type": "application/json", ...(opts.headers || {}) } });
+  if (!r.ok) throw apiError(r.status, await r.text());
   return r.json();
 }
 
-// SSE поверх fetch (EventSource не умеет заголовки X-User-Id)
+// SSE поверх fetch: прогресс агента и потоковый чат
 async function sse(path, opts, onEvent) {
-  const headers = { "Content-Type": "application/json", "X-User-Id": state.user };
-  const r = await fetch(path, { ...opts, headers });
-  if (!r.ok) { throw new Error(`${r.status}: ${await r.text()}`); }
+  const r = await fetch(path, { credentials: "same-origin", ...opts, headers: { "Content-Type": "application/json" } });
+  if (!r.ok) throw apiError(r.status, await r.text());
   const reader = r.body.getReader(); const dec = new TextDecoder(); let buf = "";
   for (;;) {
     const { value, done } = await reader.read();
@@ -70,17 +82,17 @@ function q(params) { return new URLSearchParams(Object.entries(params).filter(([
 
 // ---------------------------------------------------------------- init / сессия
 async function init() {
-  const { users, roles } = await api("/api/demo-users");
-  state.users = users; state.roles = roles;
-  $("#userSelect").innerHTML = users.map((u) => `<option value="${u.user_id}">${esc(u.label)} (${u.user_id})</option>`).join("");
+  const { users, roles, demo_password: demoPass } = await api("/api/demo-users");
+  state.users = users; state.roles = roles; state.demoPass = demoPass;
   $("#roleSelect").innerHTML = `<option value="">Без роли</option>` + Object.entries(roles).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("");
-  $("#userSelect").onchange = () => selectUser($("#userSelect").value);
+  bindLogin();
   $("#companySelect").onchange = () => { state.company = $("#companySelect").value; reload(); };
   $("#roleSelect").onchange = () => { state.role = $("#roleSelect").value || null; reload(); };
   document.querySelectorAll("[data-view]").forEach((el) => el.onclick = () => show(el.dataset.view));
   document.querySelectorAll("[data-goto]").forEach((el) => el.onclick = () => show(el.dataset.goto));
   $("#analyzeBtn").onclick = () => $("#analyzeDialog").showModal();
   bindFeedControls();
+  $("#showHidden").onclick = () => { state.showHidden = !state.showHidden; loadFeed(); };
   $("#tourBtn").onclick = startTour;
   $("#themeBtn").onclick = toggleTheme;
   document.querySelectorAll("[data-dper]").forEach((b) => b.onclick = () => {
@@ -91,14 +103,48 @@ async function init() {
   document.querySelectorAll(".nav-item[data-view]").forEach((el) => { el.tabIndex = 0; el.setAttribute("role", "link");
     el.onkeydown = (e) => { if (e.key === "Enter") show(el.dataset.view); }; });
   $("#analyzeSubmit").onclick = analyzeNews;
-  if (users.length) await selectUser(users[0].user_id);
+  try { await enterApp(); } catch (e) { if (e.status !== 401) throw e; }
+}
+
+// ---------------------------------------------------------------- вход
+function showLogin() {
+  $("#loginView").hidden = false;
+  document.body.classList.add("logged-out");
+  $("#demoPassHint").textContent = state.demoPass ? `· пароль для всех: ${state.demoPass}` : "";
+  $("#demoList").innerHTML = state.users.map((u) => `<button type="button" class="demo-acc" data-login="${esc(u.user_id)}">
+    <b>${esc(u.label)}</b><span class="muted small">${esc(state.roles[u.role] || "")} · логин ${esc(u.user_id)}</span></button>`).join("");
+  document.querySelectorAll("[data-login]").forEach((b) => b.onclick = () => {
+    $("#loginInput").value = b.dataset.login; $("#passInput").value = state.demoPass || ""; $("#loginForm").requestSubmit();
+  });
+  setTimeout(() => $("#loginInput").focus(), 50);
+}
+function bindLogin() {
+  $("#loginForm").onsubmit = async (e) => {
+    e.preventDefault();
+    $("#loginErr").textContent = "";
+    state.loggingIn = true;
+    try {
+      await api("/api/auth/login", { method: "POST", body: JSON.stringify({ login: $("#loginInput").value.trim(), password: $("#passInput").value }) });
+      $("#passInput").value = "";
+      await enterApp();
+    } catch (err) { $("#loginErr").textContent = err.message; }
+    state.loggingIn = false;
+  };
+  $("#logoutBtn").onclick = async () => { await api("/api/auth/logout", { method: "POST" }); state.user = null; showLogin(); };
+}
+
+async function enterApp() {
+  const me = await api("/api/me");
+  $("#loginView").hidden = true;
+  document.body.classList.remove("logged-out");
+  await selectUser(me.user_id, me);
   maybeOnboard();
 }
 
-async function selectUser(uid) {
+async function selectUser(uid, me) {
   state.user = uid;
   const u = state.users.find((x) => x.user_id === uid);
-  const me = await api("/api/me");
+  $("#userName").textContent = u ? `${u.label} · ${uid}` : uid;
   $("#companySelect").innerHTML = me.companies.map((c) => `<option value="${c.uid}">${esc(c.name)}</option>`).join("");
   state.company = u?.primary_company || me.companies[0]?.uid;
   $("#companySelect").value = state.company;
@@ -234,7 +280,9 @@ function peersBlock(b) {
 // ---------------------------------------------------------------- лента
 async function loadFeed() {
   $("#widgetList").innerHTML = `<div class="skeleton"></div>`;
-  const { items, quiet } = await api(`/api/feed?${q({ company_id: state.company, role: state.role, limit: 40 })}`);
+  const { items, quiet, hidden_count: hiddenCount } = await api(`/api/feed?${q({ company_id: state.company, role: state.role, limit: 40, show_hidden: state.showHidden ? "true" : null })}`);
+  $("#showHidden").hidden = !hiddenCount;
+  $("#showHidden").textContent = state.showHidden ? "Убрать скрытые" : `Показать скрытые (${hiddenCount})`;
   state.feed = items; state.feedKey = `${state.company}|${state.role}`; state.rerank = null; state.quiet = quiet;
   $("#navBadge").textContent = items.filter((i) => i.effect === "risk").length || "";
   renderWidget();
@@ -295,6 +343,7 @@ function renderFeedList(animate = false) {
   list.innerHTML = items.map((it) => {
     const n = notes[it.event_id];
     return `<div class="feed-item ${read.has(it.event_id) ? "read" : ""} ${it.event_id === state.current ? "active" : ""}" data-ev="${it.event_id}" tabindex="0" role="button">
+      ${it.hidden ? `<button class="link-btn unhide" data-unhide="${it.event_id}">Вернуть в ленту</button>` : `<button class="hide-btn" data-hide="${it.event_id}" title="Скрыть из ленты" aria-label="Скрыть из ленты">×</button>`}
       <div><span class="pill ${it.effect}">${EFFECT[it.effect]}</span>${it.has_bank_view ? `<span class="pill bank">есть позиция банка</span>` : ""}${effectiveTag(it.effective)}</div>
       <div class="title">${esc(it.title)}</div>
       <div class="meta">${fmtDate(it.published_at)} · ${esc([...new Set(it.sources.map((x) => x.source))].join(", "))}${it.sources.length > 1 ? ` · ${it.sources.length} ${plural(it.sources.length, "публикация", "публикации", "публикаций")}` : ""} · релевантность ${it.score}</div>
@@ -312,7 +361,17 @@ function renderFeedList(animate = false) {
   }
   bindCards(list);
 }
+async function hideEvent(id, hidden = true) {
+  await api("/api/feed/hide", { method: "POST", body: JSON.stringify({ company_id: state.company, event_id: id, hidden }) });
+  if (hidden) {
+    state.feed = state.feed.filter((x) => x.event_id !== id);
+    renderFeedList(); renderWidget();
+    toast("Карточка скрыта. Вернуть все скрытые — кнопкой «Показать скрытые» над лентой");
+  } else { await loadFeed(); }
+}
 function bindCards(root) {
+  root.querySelectorAll("[data-hide]").forEach((b) => b.onclick = (e) => { e.stopPropagation(); hideEvent(b.dataset.hide); });
+  root.querySelectorAll("[data-unhide]").forEach((b) => b.onclick = (e) => { e.stopPropagation(); hideEvent(b.dataset.unhide, false); });
   root.querySelectorAll("[data-ev]").forEach((el) => {
     const open = () => { show("radar"); openInsight(el.dataset.ev); };
     el.onclick = open;
@@ -389,7 +448,7 @@ async function openInsight(eventId, refresh = false) {
 function srcTags(ids) { return (ids || []).map((s) => `<span class="src" data-src="${esc(s)}">${esc(s.split(":")[0] === "bank" ? "банк " + s.split(":")[1] : s.split(":")[0] === "news" ? "новость" : s)}</span>`).join(""); }
 function claims(list) {
   return (list || []).map((c) => `<div class="claim ${c.kind} ${c.confidence === "low" ? "conf-low" : ""}">
-    <span class="kind">${KIND[c.kind] || c.kind}</span>${esc(c.text)}<div>${srcTags(c.sources)}${c.kind !== "fact" ? `<span class="conf ${c.confidence}" title="Уверенность вывода">${CONF[c.confidence] || ""}</span>` : ""}</div></div>`).join("") || `<div class="muted small">нет данных</div>`;
+    <span class="kind">${KIND[c.kind] || c.kind}</span>${esc(c.text)}<div>${srcTags(c.sources)}${c.kind !== "fact" ? `<span class="conf ${c.confidence}" title="${esc(CONF_DEF[c.confidence] || "")}">${CONF[c.confidence] || ""}</span>` : ""}</div></div>`).join("") || `<div class="muted small">нет данных</div>`;
 }
 
 const SCEN_CLASS = { base: "watch", negative: "risk", positive: "opportunity" };
@@ -461,7 +520,7 @@ function renderInsight(tab) {
   if (tab === "analysis") {
     body = `
       <details class="impact-wrap" open><summary>Карта влияния: как событие доходит до вашей компании</summary>${impactMap(i)}</details>
-      <div class="kinds"><span class="k-fact">Факт</span><span class="k-assumption">Предположение источника</span><span class="k-bank_view">Позиция Альфа-Банка</span><span class="k-ai_inference">Вывод сервиса (AI)</span></div>
+      <div class="kinds"><span class="k-fact" title="Подтверждено новостью или документом">Факт</span><span class="k-assumption" title="Прогноз или мнение из источника — не факт">Предположение источника</span><span class="k-bank_view" title="Тезис или прогноз из аналитики Альфа-Банка со ссылкой на документ и страницу">Позиция Альфа-Банка</span><span class="k-ai_inference" title="Вывод модели, не официальная позиция банка">Вывод сервиса (AI) — не позиция банка</span></div>
       <div class="q"><h4><span class="n">1</span>Что произошло</h4>${claims(i.what_happened)}</div>
       <div class="q"><h4><span class="n">2</span>Почему это важно для вашей компании</h4>${claims(i.why_it_matters)}</div>
       <div class="q"><h4><span class="n">3</span>Возможные последствия</h4>
@@ -471,19 +530,24 @@ function renderInsight(tab) {
         ${(i.what_could_change || []).length ? `<div class="sub-h">Что может изменить вывод</div>${claims(i.what_could_change)}` : ""}
         ${whatIfBlock()}</div>
       <div class="q"><h4><span class="n">4</span>Что можно сделать</h4>${claims(i.actions)}
-        ${i.products.map((p) => `<div class="product"><span class="lbl">${esc(p.label)}</span><br><b>${esc(p.product)}</b> — ${esc(p.why)}</div>`).join("")}</div>
+        ${i.products.map((p) => `<div class="product"><span class="lbl">${esc(p.label)}</span><br><b>${esc(p.product)}</b> — ${esc(p.why)}
+          <div><button class="btn small" data-act="application" data-product="${esc(p.product)}">Оставить заявку</button></div></div>`).join("")}
+        <div class="cta"><button class="btn small" data-act="manager">Обсудить с менеджером</button><button class="btn ghost small" data-act="callback">Заказать обратный звонок</button></div></div>
       <div class="q"><h4><span class="n">5</span>Как это оценивает Альфа-Банк</h4>${claims(i.bank_view)}</div>
       <div class="q"><h4><span class="n">6</span>На чём основан вывод</h4>
         <div class="small muted">Каждое утверждение выше помечено типом и ссылками. Самопроверка (${i.iterations} итер.):</div>
         <ul class="quality">${i.quality.map((c) => `<li class="${c.passed ? "ok" : "bad"}">${c.passed ? "✓" : "✗"} ${esc(c.name)}${c.passed ? "" : " — " + esc(c.detail)}</li>`).join("")}</ul>
+        ${(i.relevance.consistency_issues || []).length ? `<div class="notice">Есть расхождения между новостью и позицией банка — ниже показаны оба взгляда. Выводы сервиса в таких местах — мнение модели, а не банка.</div>` : ""}
         ${(i.relevance.consistency_issues || []).map((x) => `<div class="notice">${esc(x)}</div>`).join("")}
+        <div class="muted small scale">Шкала уверенности: ${Object.values(CONF_DEF).map(esc).join(" · ")}. Эффект: «риск» — событие ухудшает показатели компании, «возможность» — улучшает, «отслеживать» — влияние неоднозначно или ещё не наступило.</div>
       </div>
       <div class="feedback">Полезно? <button class="btn ghost small" data-fb="1">👍</button><button class="btn ghost small" data-fb="-1">👎</button>
         <span id="fbReasons" hidden>Что не так?
           <button class="btn ghost small" data-fbr="not_relevant">Не про мой бизнес</button>
           <button class="btn ghost small" data-fbr="known">Уже знал(а)</button>
           <button class="btn ghost small" data-fbr="inaccurate">Неточный вывод</button></span><span id="fbDone"></span></div>
-      ${chatBlock()}`;
+      ${chatBlock()}
+      <div class="disclaimer">${esc(DISCLAIMER)}</div>`;
   } else if (tab === "sources") {
     body = `<ol class="sources-list">${i.sources.map((s) => `<li id="src-${CSS.escape(s.id)}"><b>[${esc(s.type === "bank" ? "Альфа-Банк" : s.type === "news" ? "Новость" : s.type === "graph" ? "Граф платежей" : s.type === "calc" ? "Расчёт" : s.type === "peers" ? "Похожие компании" : "Профиль")}]</b> ${esc(s.title)}
       ${s.date ? `<span class="muted"> · ${fmtDate(s.date)}</span>` : ""}${s.page ? `<span class="muted"> · стр. ${s.page}</span>` : ""}
@@ -513,6 +577,7 @@ function renderInsight(tab) {
   $("#refreshBtn").onclick = () => openInsight(state.current, true);
   document.querySelectorAll("[data-fb]").forEach((el) => el.onclick = () => +el.dataset.fb > 0 ? sendFeedback(1) : ($("#fbReasons").hidden = false));
   document.querySelectorAll("[data-fbr]").forEach((el) => el.onclick = () => sendFeedback(-1, el.dataset.fbr));
+  document.querySelectorAll("[data-act]").forEach((el) => el.onclick = () => openAction(el.dataset.act, el.dataset.product));
   bindChat();
 }
 
@@ -575,6 +640,24 @@ async function analyzeNews(e) {
     loadFeed();
   } catch (err) { $("#insightPanel").innerHTML = `<div class="insight bad">Ошибка: ${esc(err.message)}</div>`; }
   $("#analyzeUrl").value = ""; $("#analyzeText").value = "";
+}
+
+// ---------------------------------------------------------------- действия после инсайта (менеджер, звонок, заявка)
+const ACT_TITLE = { manager: "Обсудить с менеджером", callback: "Заказать обратный звонок", application: "Оставить заявку" };
+function openAction(kind, product) {
+  const d = $("#actionDialog");
+  d.innerHTML = `<form method="dialog" class="act-form"><h3>${esc(ACT_TITLE[kind])}${product ? ": " + esc(product) : ""}</h3>
+    <p class="muted small">Менеджер увидит, по какому событию вы обращаетесь${state.insight ? ": «" + esc(state.insight.headline) + "»" : ""}.</p>
+    <textarea id="actComment" rows="4" maxlength="1000" placeholder="Комментарий (необязательно): удобное время, вопрос, сумма…"></textarea>
+    <div class="row"><button value="cancel" class="btn ghost">Отмена</button><button class="btn" id="actSend" value="send">Отправить</button></div></form>`;
+  d.showModal();
+  $("#actSend").onclick = async (e) => {
+    e.preventDefault();
+    try {
+      const r = await api("/api/actions", { method: "POST", body: JSON.stringify({ company_id: state.company, event_id: state.current, kind, product: product || null, comment: $("#actComment").value.trim() || null }) });
+      d.close(); toast(`${r.title}: запрос ${r.ticket} принят. ${r.message}`);
+    } catch (err) { toast("Не удалось отправить: " + err.message); }
+  };
 }
 
 // ---------------------------------------------------------------- дайджест под роль

@@ -39,6 +39,12 @@ class Settings(BaseSettings):
     enable_scheduler: bool = False
     # Разрешить загрузку произвольного URL новости через /api/news/analyze
     allow_url_fetch: bool = True
+    # Демо-авторизация: общий пароль демо-учёток, секрет подписи сессий (пусто — сгенерировать и хранить в БД),
+    # заголовок X-User-Id — только для тестов и локальной отладки
+    demo_password: str = "alfa2026"
+    session_secret: str = ""
+    allow_header_auth: bool = False
+    cookie_secure: bool = False
 
     @field_validator("llm_api_key", "llm_base_url", mode="before")
     @classmethod

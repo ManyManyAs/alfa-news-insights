@@ -83,4 +83,10 @@ jobs:
           for _ in $(seq 1 60); do curl -sf localhost:8000/api/health && break; sleep 3; done
           curl -sf localhost:8000/api/health
           curl -sf localhost:8000/api/demo-users | head -c 300
+          # вход демо-пользователя: без сессии данные закрыты, с сессией (cookie) — доступны
+          LOGIN=$(curl -sf localhost:8000/api/demo-users | python3 -c "import json,sys; print(json.load(sys.stdin)['users'][0]['user_id'])")
+          test "$(curl -s -o /dev/null -w '%{http_code}' localhost:8000/api/me)" = "401"
+          curl -sf -c cookies.txt -H 'Content-Type: application/json' -d "{\"login\": \"$LOGIN\", \"password\": \"alfa2026\"}" localhost:8000/api/auth/login
+          curl -sf -b cookies.txt localhost:8000/api/me | head -c 300
+          curl -sI localhost:8000/ | grep -i content-security-policy
           docker compose logs app | tail -20

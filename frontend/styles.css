@@ -401,3 +401,36 @@ dialog { background: var(--surface); color: var(--ink); }
 .push-n { margin-top: 8px; background: var(--soft2); border-radius: 14px; padding: 10px 12px; font-size: 14px; }
 @media (max-width: 900px) { .digest-grid { grid-template-columns: 1fr; } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+/* --- этап 8: вход, действия, дисклеймер --- */
+body.logged-out .layout, body.logged-out .topbar { display: none; }
+.login { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; background: var(--bg); }
+.login[hidden] { display: none; }
+.login-card { display: grid; grid-template-columns: 1fr 1.1fr; max-width: 920px; width: 100%; background: var(--surface); border-radius: 20px; box-shadow: var(--shadow); overflow: hidden; }
+.login-side { background: var(--accent); color: #fff; padding: 32px; display: flex; flex-direction: column; gap: 12px; }
+.login-side .brand-mark { background: #fff; color: var(--accent); }
+.login-side h1 { font-size: 34px; margin: 24px 0 0; }
+.login-side .muted { color: rgba(255,255,255,.8); }
+.login-form { padding: 32px; display: flex; flex-direction: column; gap: 12px; }
+.login-form h2 { margin: 0 0 4px; }
+.login-form label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+.login-form input { max-width: none; }
+.login-err { color: var(--risk); font-size: 13px; min-height: 18px; }
+.demo-list { display: grid; gap: 6px; max-height: 260px; overflow: auto; }
+.demo-acc { text-align: left; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 10px; padding: 8px 12px; cursor: pointer; display: flex; flex-direction: column; font: inherit; }
+.demo-acc:hover { border-color: var(--ink); }
+@media (max-width: 760px) { .login-card { grid-template-columns: 1fr; } .login-side h1 { margin-top: 8px; font-size: 26px; } }
+.user-chip { display: inline-flex; gap: 10px; align-items: center; font-size: 14px; color: var(--ink); padding: 6px 0; }
+.link-btn { border: 0; background: none; color: var(--watch); cursor: pointer; font: inherit; font-size: 13px; padding: 0; text-decoration: underline; }
+.feed-item { position: relative; }
+.hide-btn { position: absolute; top: 8px; right: 8px; border: 0; background: transparent; color: var(--muted); font-size: 18px; line-height: 1; width: 26px; height: 26px; border-radius: 50%; cursor: pointer; }
+.hide-btn:hover { background: var(--soft2); color: var(--ink); }
+.unhide { position: absolute; top: 10px; right: 12px; }
+.cta { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.product .btn { margin-top: 8px; }
+.act-form { display: flex; flex-direction: column; gap: 8px; }
+.act-form textarea { width: 100%; max-width: none; }
+.act-form .row { display: flex; justify-content: flex-end; gap: 8px; }
+.disclaimer { margin-top: 16px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 10px; }
+.scale { margin-top: 8px; }
+.app-foot { margin-top: 32px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 12px; }

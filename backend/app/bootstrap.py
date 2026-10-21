@@ -57,7 +57,7 @@ def pick_demo_users() -> list[dict]:
         for fid, profs in by_fid.items():
             if fid in used:
                 continue
-            match = [p for p in profs if pred(p)]
+            match = [p for p in profs if pred(p) and p.get("client_type") == "CLIENT"]
             if match:
                 p = max(match, key=lambda x: (len(x["counterparties"]) > 0, x.get("revenue") or 0))
                 cand = (len(p["counterparties"]) > 0, len(p["products"]), fid, p["uid"])
@@ -66,7 +66,7 @@ def pick_demo_users() -> list[dict]:
         if best:
             used.add(best[2])
             users.append({"user_id": best[2], "label": label, "role": role, "primary_company": best[3],
-                          "companies": [p["uid"] for p in by_fid[best[2]]]})
+                          "companies": [p["uid"] for p in by_fid[best[2]] if p.get("client_type") == "CLIENT"]})
     demo_users_path().write_text(json.dumps(users, ensure_ascii=False, indent=2), encoding="utf-8")
     return users
 

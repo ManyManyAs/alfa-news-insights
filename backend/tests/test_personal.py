@@ -24,6 +24,7 @@ def _feed(client, demo):
 
 def test_mute_and_reset_preferences(client, demo):
     u, h = demo
+    client.delete(f"/api/companies/{u['primary_company']}/preferences", headers=h)  # 👍 из других тестов тоже поправки
     items = _feed(client, demo)["items"]
     top_factor = next(r["factor"] for r in items[0]["reasons"] if r["factor"] not in ("country", "industry", "region"))
     r = client.put(f"/api/companies/{u['primary_company']}/preferences", headers=h, json={"factor": top_factor, "level": "mute"})
@@ -33,7 +34,8 @@ def test_mute_and_reset_preferences(client, demo):
     prof = client.get(f"/api/companies/{u['primary_company']}", headers=h).json()
     assert any(o["factor"] == top_factor and o["multiplier"] == 0 for o in prof["overrides"])
     assert client.delete(f"/api/companies/{u['primary_company']}/preferences", headers=h).status_code == 200
-    assert _feed(client, demo)["items"][0]["event_id"] == items[0]["event_id"]
+    restored = _feed(client, demo)["items"]
+    assert [i["score"] for i in restored[:3]] == [i["score"] for i in items[:3]]  # порядок равных по скору может меняться
     # чужая компания — нельзя
     assert client.put("/api/companies/U_NOT_MINE/preferences", headers=h, json={"factor": "key_rate", "level": "mute"}).status_code in (403, 404)
 

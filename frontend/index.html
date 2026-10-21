@@ -16,7 +16,7 @@
     <div class="budget-badge" id="budgetBadge" title="Остаток дневного бюджета на модели ИИ (лимит организаторов, сброс в 03:00 МСК)">ИИ-бюджет: …</div>
     <div class="session">
       <label>Пользователь
-        <select id="userSelect"></select>
+        <span class="user-chip"><span id="userName">—</span><button class="link-btn" id="logoutBtn" title="Выйти и войти другим пользователем">Выйти</button></span>
       </label>
       <label>Компания
         <select id="companySelect"></select>
@@ -26,6 +26,27 @@
       </label>
     </div>
   </header>
+
+  <!-- Демо-вход: физлицо входит по логину и паролю и видит свои компании-клиенты -->
+  <section id="loginView" class="login" hidden>
+    <div class="login-card">
+      <div class="login-side">
+        <div class="brand"><span class="brand-mark">Б</span> Альфа-Бизнес</div>
+        <h1>Бизнес-радар</h1>
+        <p>Персональная аналитика новостей для вашей компании: что произошло, почему это важно именно вам и что делать.</p>
+        <p class="muted small">Прототип для хакатона. Данные компаний обезличены.</p>
+      </div>
+      <form class="login-form" id="loginForm">
+        <h2>Вход в интернет-банк</h2>
+        <label>Логин<input id="loginInput" autocomplete="username" placeholder="F_…" required></label>
+        <label>Пароль<input id="passInput" type="password" autocomplete="current-password" required></label>
+        <div class="login-err" id="loginErr" role="alert"></div>
+        <button class="btn" type="submit">Войти</button>
+        <div class="sub-h">Демо-учётки <span class="muted small" id="demoPassHint"></span></div>
+        <div class="demo-list" id="demoList"></div>
+      </form>
+    </div>
+  </section>
 
   <div class="layout">
     <nav class="sidebar">
@@ -89,7 +110,7 @@
                 <select id="fSort" aria-label="Сортировка"><option value="relevance">По важности</option><option value="date">По дате</option></select>
                 <label class="chk"><input type="checkbox" id="fUnread"> непрочитанные</label>
               </div>
-              <div class="tool-row small"><span class="muted" id="feedCount"></span><span class="rerank-note" id="rerankNote"></span></div>
+              <div class="tool-row small"><span class="muted" id="feedCount"></span><button class="link-btn" id="showHidden" hidden>Показать скрытые</button><span class="rerank-note" id="rerankNote"></span></div>
             </div>
             <div id="feedList"></div>
           </div>
@@ -115,6 +136,7 @@
         <h2>Мониторинг качества, персонализации и бюджета LLM</h2>
         <div id="metricsBox" class="metrics"></div>
       </section>
+      <footer class="app-foot">Бизнес-радар — информационно-аналитический сервис. Материалы не являются индивидуальной инвестиционной рекомендацией. Выводы с пометкой «Вывод сервиса (AI)» сформированы моделью и не являются официальной позицией Альфа-Банка.</footer>
     </main>
   </div>
 
@@ -132,6 +154,7 @@
   </dialog>
 
   <dialog id="onboard" aria-label="Знакомство с сервисом"></dialog>
+  <dialog id="actionDialog" aria-label="Запрос менеджеру"></dialog>
 
   <script src="/static/viz.js"></script>
   <script src="/static/tour.js"></script>
