@@ -147,6 +147,8 @@ main { padding: 24px 28px 28px; min-width: 0; }
 .hero { position: relative; display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 8px; align-items: center;
   background: radial-gradient(1200px 520px at 85% 40%, rgba(239, 49, 36, .20), transparent 60%), radial-gradient(700px 400px at 0% 100%, rgba(239, 49, 36, .10), transparent 60%), #0b0b0d;
   color: #fff; border-radius: 28px; padding: 44px 44px 0; margin-bottom: 22px; overflow: hidden; min-height: 520px; isolation: isolate; }
+:root[data-theme="dark"] .hero { box-shadow: 0 0 0 1px rgba(255, 255, 255, .07); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .hero { box-shadow: 0 0 0 1px rgba(255, 255, 255, .07); } }
 .hero::before { content: ""; position: absolute; inset: 0; background-image: radial-gradient(rgba(255, 255, 255, .06) 1px, transparent 1px); background-size: 22px 22px;
   mask-image: linear-gradient(90deg, #000 0%, transparent 60%); z-index: -1; }
 .hero-copy { padding-bottom: 76px; position: relative; z-index: 2; }
