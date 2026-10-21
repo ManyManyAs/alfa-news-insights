@@ -20,6 +20,10 @@ on:
         description: "warmup: строить инсайты для всех ролей"
         type: boolean
         default: false
+      refresh:
+        description: "warmup: пересобрать уже готовые инсайты (после правки промптов)"
+        type: boolean
+        default: false
 
 concurrency:
   group: llm-live
@@ -91,7 +95,9 @@ jobs:
         if: inputs.task == 'warmup' || inputs.task == 'all'
         run: |
           ROLES=""; if [ "${{ inputs.roles }}" = "true" ]; then ROLES="--roles"; fi
-          python scripts/manage.py warmup --top ${{ inputs.top }} --max-rub ${{ inputs.max_rub }} --background $ROLES
+          REFRESH=""; if [ "${{ inputs.refresh }}" = "true" ]; then REFRESH="--refresh"; fi
+          python scripts/manage.py warmup --top ${{ inputs.top }} --max-rub ${{ inputs.max_rub }} --background $ROLES $REFRESH | tee warmup.log
+          grep -E "LLM-судья|Потрачено" warmup.log >> "$GITHUB_STEP_SUMMARY" || true
       - name: Экспорт снапшота
         run: python scripts/manage.py snapshot-export
       - name: Итоги в summary
