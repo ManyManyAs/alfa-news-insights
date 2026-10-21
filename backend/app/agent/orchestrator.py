@@ -348,6 +348,9 @@ def decide_revise(ins: Insight, ctx: AgentContext, issues: list[str], tracer: Tr
         verdict, why = False, "черновик построен правилами — правка правилами"
     elif not (llm_issues or no_bank):
         verdict, why = False, "замечания только формальные — их закрывает детерминированная правка"
+    elif not no_bank and ins.scores and min(ins.scores.values()) >= 4:
+        # критик почти всегда что-то советует; правка моделью окупается, только если есть заметный пробел (оценка < 4)
+        verdict, why = False, f"оценки критика не ниже 4 (минимум {min(ins.scores.values())}) — правка моделью не окупится"
     elif AGENT_TIMEOUT_S - elapsed < REVISE_MIN_LEFT_S:
         verdict, why = False, f"на правку моделью не хватает времени ({AGENT_TIMEOUT_S - elapsed:.0f} с из {REVISE_MIN_LEFT_S} с)"
     elif spent + est > AGENT_MAX_COST_RUB:
