@@ -450,3 +450,24 @@ body.logged-out .layout, body.logged-out .topbar { display: none; }
   #view-radar .feed-head { position: sticky; top: 0; z-index: 2; background: var(--bg); padding-bottom: 4px; }
 }
 .em-btn { border: 0; cursor: pointer; font: inherit; }
+
+/* ---- мониторинг (этап 9) */
+.mon-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.seg button { background: transparent; border: 0; padding: 7px 14px; cursor: pointer; color: inherit; font: inherit; }
+.seg button.on { background: var(--accent); color: var(--accent-ink); }
+.mon-h { margin: 26px 0 0; font-size: 17px; }
+.alerts { display: grid; gap: 8px; margin-top: 14px; }
+.alert { padding: 10px 14px; border-radius: 10px; border: 1px solid var(--line); }
+.alert.warn { background: rgba(239, 160, 36, .12); border-color: rgba(239, 160, 36, .5); }
+.alert.info { background: rgba(60, 130, 230, .1); border-color: rgba(60, 130, 230, .4); }
+.alert.ok { background: rgba(40, 170, 90, .1); border-color: rgba(40, 170, 90, .4); }
+.metric.good { box-shadow: inset 3px 0 0 #2aa55a; }
+.metric.warn { box-shadow: inset 3px 0 0 #e0a024; }
+.funnel { margin-top: 14px; display: grid; gap: 8px; }
+.fn-row { display: grid; grid-template-columns: minmax(150px, 260px) 1fr 48px; gap: 10px; align-items: center; font-size: 14px; }
+.fn-bar { height: 10px; background: var(--line); border-radius: 6px; overflow: hidden; }
+.fn-bar i { display: block; height: 100%; background: var(--accent); border-radius: 6px; }
+.fn-row b { text-align: right; }
+td.num { text-align: right; white-space: nowrap; }
+@media (max-width: 640px) { .fn-row { grid-template-columns: 1fr 40px; } .fn-row .fn-bar { grid-column: 1 / -1; grid-row: 2; } }

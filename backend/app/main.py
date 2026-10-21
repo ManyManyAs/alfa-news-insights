@@ -14,6 +14,7 @@ from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from app import monitoring
 from app.agent.chat import answer, answer_stream
 from app.agent.orchestrator import cached_insight, get_or_create_insight
 from app.agent.scenario import Inputs as ScenarioInputs
@@ -586,7 +587,7 @@ def feedback(req: FeedbackRequest, user: str = Depends(current_user)):
 
 
 @app.get("/api/metrics")
-def metrics():
+def metrics(days: int = Query(7, ge=1, le=90)):
     """Мониторинг: бюджет LLM, качество (проверки критика), обратная связь."""
     usage = [dict(r) for r in db.query("SELECT * FROM llm_usage WHERE day=?", (budget_day(),))]
     rows = db.query("SELECT payload FROM insights ORDER BY created_at DESC LIMIT 200")
@@ -599,12 +600,33 @@ def metrics():
     judge = {"n": len(judged), "avg": round(sum(sum(s.values()) / len(s) for s in judged) / len(judged), 2) if judged else None,
              "by_axis": {a: round(sum(s[a] for s in judged if a in s) / max(1, sum(a in s for s in judged)), 2) for a in axes}}
     fb = db.query_one("SELECT COUNT(*) n, COALESCE(SUM(rating>0),0) pos, COALESCE(SUM(rating<0),0) neg FROM feedback")
+    budget = get_llm().budget_status()
+    product = monitoring.product_metrics(days)
+    health = sources_health()
+    down = sum(1 for s in health["sources"] if s["status"] in ("degraded", "down"))
+    since = (datetime.now(UTC) - timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S")
+    inj = db.query_one("SELECT COUNT(*) n FROM events WHERE created_at >= ? AND classification LIKE '%prompt_injection_suspected%'",
+                       (since,))["n"]
     return {
-        "llm": {"mode": get_llm().mode, **get_llm().budget_status(), "by_model": usage},
+        "llm": {"mode": get_llm().mode, **budget, "by_model": usage},
         "insights": {"total": total, "quality_passed_share": round(passed / total, 3) if total else None, "judge": judge},
         "feedback": dict(fb), "events": db.query_one("SELECT COUNT(*) n FROM events")["n"],
         "companies": db.query_one("SELECT COUNT(*) n FROM companies")["n"],
+        "product": product, "cost": monitoring.cost_per_insight(), "offline": monitoring.offline_metrics(),
+        "sources": {"total": len(health["sources"]), "down": down, "last_ingest": health["last_ingest"]},
+        "alerts": monitoring.alerts(budget, product, judge, down, inj),
     }
+
+
+class TrackRequest(BaseModel):
+    events: list[dict] = Field(default_factory=list, max_length=50)
+
+
+@app.post("/api/track")
+def track_events(req: TrackRequest, user: str = Depends(current_user)):
+    """События интерфейса для продуктовых метрик (тип, событие ленты, число). Только агрегаты, без текста."""
+    throttle(user, "track", 120)
+    return {"stored": monitoring.track(user, req.events, set(companies_of_user(user)))}
 
 
 @app.get("/api/bank/forecasts")

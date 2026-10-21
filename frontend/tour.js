@@ -63,7 +63,7 @@ function tourUi() {
 }
 
 async function goStep(i) {
-  if (i >= TOUR.length) return endTour();
+  if (i >= TOUR.length) { if (typeof track === "function") track("tour_finish", { value: TOUR.length }); return endTour(); }
   if (i < 0) return;
   tourStep = i;
   const s = TOUR[i], o = tourUi();
@@ -130,7 +130,7 @@ function place() {
   pop.classList.toggle("corner", !cands.some((x) => x.ok));
 }
 
-function startTour() { closeOnboarding(); goStep(0); }
+function startTour() { closeOnboarding(); if (typeof track === "function") track("tour_start"); goStep(0); }
 function endTour() { tourStep = -1; const o = document.getElementById("tour"); if (o) o.classList.remove("on"); }
 
 // Онбординг: при первом визите — «мы изучили вашу компанию: 5 факторов» и предложение пройти тур
