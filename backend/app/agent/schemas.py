@@ -24,6 +24,8 @@ class Claim(BaseModel):
 
 class Action(Claim):
     action_type: Literal["analysis", "hedge", "finance", "operations", "monitor", "question"] = "analysis"
+    owner: str = ""  # кто делает: финдиректор, казначей, главбух…
+    due: str = ""  # к какому сроку или событию: «до 23.10 (решение ЦБ)», «в течение месяца»
 
 
 class ProductOffer(BaseModel):
@@ -99,3 +101,7 @@ class Insight(BaseModel):
     generated_by: str = "rules"
     trace_id: str
     data_gaps: list[str] = Field(default_factory=list)
+    # Насколько событие важно именно этой компании по оценке модели: 0 — не касается, 1 — слабо, 2 — заметно,
+    # 3 — существенно. Влияет на ранжирование ленты и на виджет главной (None — разбор по правилам, без оценки)
+    materiality: int | None = None
+    materiality_why: str = ""

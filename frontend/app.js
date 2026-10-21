@@ -421,7 +421,8 @@ async function loadFeed() {
 }
 
 function renderWidget() {
-  const items = state.feed, quiet = state.quiet, read = readSet();
+  // на главную — только то, что модель не считает слабо связанным с компанией
+  const items = state.feed.filter((it) => !(it.ai_relevance && it.ai_relevance.level <= 1)), quiet = state.quiet, read = readSet();
   $("#widgetList").innerHTML = items.slice(0, 4).map((it) => `
     <div class="w-item eff-${it.effect} ${read.has(it.event_id) ? "read" : ""}" data-ev="${it.event_id}" tabindex="0" role="button">
       ${read.has(it.event_id) ? "" : `<span class="new-dot" title="Не прочитано"></span>`}<span class="pill ${it.effect}">${EFFECT[it.effect]}</span><span class="muted small">${fmtDate(it.published_at)}</span>${read.has(it.event_id) ? `<span class="read-mark">✓ прочитано</span>` : ""}
@@ -479,6 +480,8 @@ function renderFeedList(animate = false) {
       <div class="reasons">${esc(reasonText(it))}</div>
       ${it.reasons.find((r) => r.personal) ? `<div class="personal">⚙ ${esc(it.reasons.find((r) => r.personal).personal.why)}</div>` : ""}
       ${n ? `<div class="ai-note"><b>ИИ:</b> ${esc(n.why)} <span class="rel r${n.relevance}">${"●".repeat(n.relevance)}${"○".repeat(3 - n.relevance)}</span></div>` : ""}
+      ${it.ai_relevance && it.ai_relevance.level <= 1 ? `<div class="ai-weak" title="${esc(it.ai_relevance.why)}">ИИ после разбора: ${it.ai_relevance.level === 0 ? "не касается компании" : "слабо связано с бизнесом"} — карточка ниже в ленте</div>` : ""}
+      ${it.ai_relevance && it.ai_relevance.level === 3 ? `<div class="ai-strong" title="${esc(it.ai_relevance.why)}">ИИ после разбора: существенно для компании</div>` : ""}
       ${it.story ? `<div class="story-badge">Сюжет · ${it.story.count} ${plural(it.story.count, "событие", "события", "событий")}: ${esc(fmtDate(it.story.timeline[0].published_at))} → ${esc(fmtDate(it.story.timeline[it.story.timeline.length - 1].published_at))}</div>` : ""}
       <div class="score-bar"><i style="width:${Math.min(100, it.score * 60)}%"></i></div>
     </div>`;
@@ -593,7 +596,7 @@ function srcTags(ids) {
 }
 function claims(list) {
   return (list || []).map((c) => `<div class="claim ${c.kind} ${c.confidence === "low" ? "conf-low" : ""}">
-    <span class="kind">${KIND[c.kind] || c.kind}</span>${esc(c.text)}<div>${srcTags(c.sources)}${c.kind !== "fact" ? `<span class="conf ${c.confidence}" title="${esc(CONF_DEF[c.confidence] || "")}">${CONF[c.confidence] || ""}</span>` : ""}</div></div>`).join("") || `<div class="muted small">нет данных</div>`;
+    <span class="kind">${KIND[c.kind] || c.kind}</span>${esc(c.text)}${c.owner || c.due ? `<div class="act-meta">${c.owner ? `<span class="am-owner">👤 ${esc(c.owner)}</span>` : ""}${c.due ? `<span class="am-due">⏱ ${esc(c.due)}</span>` : ""}</div>` : ""}<div>${srcTags(c.sources)}${c.kind !== "fact" ? `<span class="conf ${c.confidence}" title="${esc(CONF_DEF[c.confidence] || "")}">${CONF[c.confidence] || ""}</span>` : ""}</div></div>`).join("") || `<div class="muted small">нет данных</div>`;
 }
 
 const SCEN_CLASS = { base: "watch", negative: "risk", positive: "opportunity" };
@@ -657,6 +660,30 @@ async function recalc() {
   } catch (e) { $("#wiOut").textContent = "Не удалось посчитать: " + e.message; }
 }
 
+// «Коротко»: что случилось → что это значит (с оценкой в ₽ из калькулятора) → что сделать (кто и к какому сроку)
+function shortBlock(i) {
+  const fact = (i.what_happened || []).find((c) => c.kind === "fact") || (i.what_happened || [])[0];
+  const sc = Object.fromEntries((i.scenarios || []).map((s) => [s.name, s]));
+  const base = sc.base, lo = Math.min(...(i.scenarios || []).map((s) => s.total_rub)), hi = Math.max(...(i.scenarios || []).map((s) => s.total_rub));
+  const act = (i.actions || []).find((a) => a.due) || (i.actions || [])[0];
+  const row = (t, html) => `<div class="sh-row"><div class="sh-k">${t}</div><div class="sh-v">${html}</div></div>`;
+  return `<div class="takeaway short">
+    <div class="sh-head"><span class="claim-kind">КОРОТКО</span>${i.materiality != null ? `<span class="sh-mat m${i.materiality}" title="${esc(i.materiality_why || "")}">${["не касается компании", "слабая связь", "заметное влияние", "существенно для компании"][i.materiality]}</span>` : ""}</div>
+    ${fact ? row("Что случилось", esc(fact.text)) : ""}
+    ${row("Что это значит", `${esc(i.takeaway.text)}${base && (lo || hi) ? `<div class="sh-range">На 12 месяцев: <b class="${lo < 0 ? "neg" : "pos"}">${rub(lo)}</b> … <b class="${hi < 0 ? "neg" : "pos"}">${rub(hi)}</b> в год к текущему уровню
+      <span class="sh-note">базовый сценарий по прогнозу Альфа-Банка: ${rub(base.total_rub)} · оценка калькулятора, подробно — в сценариях</span></div>` : ""}`)}
+    ${act ? row("Что сделать", `${esc(act.text)}${act.owner || act.due ? `<div class="sh-meta">${act.owner ? `👤 ${esc(act.owner)}` : ""}${act.due ? ` · ⏱ ${esc(act.due)}` : ""}</div>` : ""}`) : ""}
+    <div class="sh-src">${srcTags(i.takeaway.sources)}</div></div>`;
+}
+// Новость и позиция банка расходятся — показываем наверху оба взгляда, без выбора «кто прав»
+function divergenceBlock(i) {
+  const issues = (i.relevance && i.relevance.consistency_issues) || [];
+  if (!issues.length) return "";
+  return `<div class="diverge"><div class="dv-head">Рынок и Альфа-Банк смотрят по-разному</div>
+    ${issues.slice(0, 2).map((x) => `<div class="dv-row">${esc(x)}</div>`).join("")}
+    <div class="muted small">Сервис показывает оба взгляда. Вывод в таких местах — мнение модели, а не позиция банка.</div></div>`;
+}
+
 function renderInsight(tab) {
   const i = state.insight;
   const allOk = i.quality.every((c) => c.passed);
@@ -682,8 +709,6 @@ function renderInsight(tab) {
       <div class="q"><h4><span class="n">6</span>На чём основан вывод</h4>
         <div class="small muted">Каждое утверждение выше помечено типом и ссылками. Самопроверка (${i.iterations} итер.):</div>
         <ul class="quality">${i.quality.map((c) => `<li class="${c.passed ? "ok" : "bad"}">${c.passed ? "✓" : "✗"} ${esc(c.name)}${c.passed ? "" : " — " + esc(c.detail)}</li>`).join("")}</ul>
-        ${(i.relevance.consistency_issues || []).length ? `<div class="notice">Есть расхождения между новостью и позицией банка — ниже показаны оба взгляда. Выводы сервиса в таких местах — мнение модели, а не банка.</div>` : ""}
-        ${(i.relevance.consistency_issues || []).map((x) => `<div class="notice">${esc(x)}</div>`).join("")}
         <div class="muted small scale">Шкала уверенности: ${Object.values(CONF_DEF).map(esc).join(" · ")}. Эффект: «риск» — событие ухудшает показатели компании, «возможность» — улучшает, «отслеживать» — влияние неоднозначно или ещё не наступило.</div>
       </div>
       <div class="feedback">Полезно? <button class="btn ghost small" data-fb="1">👍</button><button class="btn ghost small" data-fb="-1">👎</button>
@@ -708,11 +733,17 @@ function renderInsight(tab) {
       <span class="muted small">${i.generated_by.startsWith("llm") ? "Разбор подготовлен ИИ и проверен критиком" : "Быстрый разбор по профилю компании"} · ${allOk ? "<span class='ok'>✓ самопроверка пройдена</span>" : "<span title='Подробности — в блоке «На чём основан вывод»'>самопроверка: есть замечания</span>"}</span>
       <button class="btn ghost small" id="refreshBtn" style="float:right">Пересчитать</button></div>
     <h2 style="margin-top:8px">${esc(i.headline)}</h2>
-    <div class="takeaway"><span class="claim-kind small" style="color:var(--ai)">ВЫВОД СЕРВИСА · </span>${esc(i.takeaway.text)}<div>${srcTags(i.takeaway.sources)}</div></div>
+    ${shortBlock(i)}
+    ${divergenceBlock(i)}
+    ${state.detail ? `
     ${i.data_gaps.length ? `<div class="notice">Учтены пробелы в данных: ${esc(i.data_gaps.join("; "))}</div>` : ""}
     ${(() => { const f = state.feed.find((x) => x.event_id === state.current); return f && f.story ? `<details class="story" open><summary>Развитие сюжета · ${f.story.count} ${plural(f.story.count, "событие", "события", "событий")}</summary>${storyLine(f.story, state.current)}</details>` : ""; })()}
     <div class="tabs" role="tablist">${tabs.map(([k, t]) => `<button class="tab ${k === tab ? "active" : ""}" role="tab" aria-selected="${k === tab}" data-tab="${k}">${t}</button>`).join("")}</div>
-    ${body}</div>`;
+    ${body}<button class="btn ghost detail-toggle" id="detailToggle">Свернуть подробный разбор ▴</button>` : `
+    <div class="cta"><button class="btn small" data-act="manager">Обсудить с менеджером</button><button class="btn ghost small" data-act="callback">Заказать обратный звонок</button></div>
+    <button class="btn detail-toggle" id="detailToggle">Подробный разбор: карта влияния, сценарии, позиция банка, источники ▾</button>
+    <div class="disclaimer">${esc(DISCLAIMER)}</div>`}</div>`;
+  $("#detailToggle").onclick = () => { state.detail = !state.detail; track(state.detail ? "detail_open" : "detail_close", { event_id: state.current }); renderInsight("analysis"); if (!state.detail) $("#insightPanel").scrollTop = 0; };
   document.querySelectorAll("[data-tab]").forEach((el) => el.onclick = () => renderInsight(el.dataset.tab));
   bindImpactMap($("#insightPanel"));
   const wi = document.getElementById("whatIf");

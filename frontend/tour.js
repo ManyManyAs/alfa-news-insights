@@ -75,6 +75,7 @@ async function goStep(i) {
   o.querySelector(".tour-spot").style.display = "none";
   show(s.view);
   if (s.open) {
+    if (!state.detail) { state.detail = true; if (state.insight) renderInsight("analysis"); }  // шаги про детали разбора
     if (!document.querySelector("#insightPanel .tabs") && state.feed.length) openInsight(state.feed[0].event_id);
     else if (!document.querySelector(s.sel) && state.insight) renderInsight("analysis");  // открыта другая вкладка разбора
   }
