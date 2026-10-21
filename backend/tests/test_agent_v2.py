@@ -112,3 +112,37 @@ def test_index_versions_all_static(client):
     html = client.get("/").text
     for name in ("viz.js", "tour.js", "app.js", "styles.css"):
         assert f"/static/{name}?v=" in html
+
+
+def test_humanize_removes_internal_ids():
+    from app.agent.humanize import humanize_text as h
+
+    assert h("74% платежей идёт поставщикам из отрасли «Строительство зданий» (graph:out:41) — риск") == \
+        "74% платежей идёт поставщикам из отрасли «Строительство зданий» — риск"
+    assert h("Компания использует гарантии (profile:CL_PRODUCT_GAR_MARK) — вероятно") == "Компания использует гарантии — вероятно"
+    assert h("маржинальность компании (OKVED 62)") == "маржинальность компании (ОКВЭД 62)"
+    out = h("Новость говорит о «рост» по фактору credit_conditions, а тезис банка bank:t72 (2П26) — о «снижение». "
+            "Возможно, это разные горизонты; покажите оба взгляда с этой оговоркой")
+    assert "credit_conditions" not in out and "bank:" not in out and "покажите" not in out
+    assert "Кредитные условия" in out
+
+
+def test_business_levers_demand_costs_and_start():
+    from app.agent.scenario import business_levers, scenarios, start_month
+    from app.data.models import CompanyProfile
+
+    p = CompanyProfile(uid="X", okved="56.10", okved_name="Рестораны", products=[], revenue=1e9, workers="16-100",
+                       industry_mix=[{"direction": "out", "okved2": "46", "name": "Оптовая торговля", "share": 0.6}])
+    demand = {"factor": "consumer_demand", "factor_title": "Потребительский спрос", "effect": "opportunity",
+              "direction": "up", "contribution": 0.6, "basis": ["profile:OKVED=56"], "evidence": "оборот вырос на 5,3%"}
+    fuel = {"factor": "inflation", "factor_title": "Инфляция", "effect": "risk", "direction": "up", "contribution": 0.6,
+            "basis": ["graph:out:46"], "evidence": "цены выросли"}
+    spec = business_levers(p, [demand, fuel])
+    assert spec["demand"]["shock"] == 5.3 and spec["demand"]["share"] == 0.5
+    assert spec["costs"]["share"] == 0.6 and "Оптовая торговля" in spec["costs"]["basis"]
+    sc = {s["name"]: s for s in scenarios(p, ["consumer_demand", "inflation"], reasons=[demand, fuel])}
+    assert sc["positive"]["total_rub"] > sc["base"]["total_rub"] > sc["negative"]["total_rub"]
+    assert all(len(s["monthly"]) == 12 and s["monthly"][-1] == s["total_rub"] for s in sc.values())
+    # связь только через общий макрофон — отраслевой рычаг не создаётся
+    assert business_levers(p, [{**demand, "basis": ["baseline"]}]) == {}
+    assert start_month(["2099-01-01"]) == 11 and start_month(["2000-01-01"]) == 0

@@ -198,7 +198,7 @@ def draft_rules(ctx: AgentContext) -> Insight:
     if top and pb.get(top["factor"]):
         play = pb[top["factor"]]
         key = {"risk": "risk", "opportunity": "opportunity", "mixed": "risk"}.get(effect, "stable")
-        text = f"Для компании ({_company_short(ctx)}) это {EFFECT_RU[effect].lower()}: {play[key]}"
+        text = f"Для компании ({_company_short(ctx)}) это {EFFECT_RU[effect].lower()}: {play[key][:1].lower() + play[key][1:]}"
         bank_ref = [bank_ids[top["factor"]]] if top["factor"] in bank_ids else []
         t_src = [b for b in top.get("basis", []) if b != "baseline"][:2] + news_src[:1] + bank_ref
     else:
@@ -209,7 +209,7 @@ def draft_rules(ctx: AgentContext) -> Insight:
     from app.agent.scenario import money, scenarios, triggers
 
     factors = [r["factor"] for r in reasons] + scored.matched_factors
-    scen = [Scenario(**s) for s in scenarios(ctx.profile, factors)]
+    scen = [Scenario(**s) for s in scenarios(ctx.profile, factors, reasons=scored.reasons, effective_dates=cls.effective_dates)]
     change = [Claim(text=t["text"], kind="ai_inference", confidence="medium",
                     sources=news_src[:1] if t["source"] in (None, "news") else [t["source"]])
               for t in triggers(ctx.profile, factors, cls.effective_dates)]

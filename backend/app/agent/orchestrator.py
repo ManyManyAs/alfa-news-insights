@@ -16,6 +16,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 from app.agent import prompts
+from app.agent.humanize import humanize, humanize_insight, humanize_text
 from app.agent.llm_schemas import CriticOut, InsightDraftOut, PlanOut
 from app.agent.rules import critique_rules, draft_rules, fix_headline, repair_rules
 from app.agent.schemas import Insight, SourceRef
@@ -331,9 +332,14 @@ def _profile_label(sid: str, p: CompanyProfile) -> str:
         from app.data.peers import PRODUCT_TITLES, peer_stats
 
         st = peer_stats(p.peer_key) or {}
+        if ref not in PRODUCT_TITLES:
+            return f"Похожие компании ({st.get('n', '?')}): " + {"buyer_concentration_vs_peers": "концентрация покупателей в сравнении",
+                                                               "median_revenue": "медианная выручка"}.get(ref, "сравнение с группой")
         share = (st.get("products") or {}).get(ref, 0)
         return f"Похожие компании ({st.get('n', '?')}): {PRODUCT_TITLES.get(ref, ref)} есть у {share:.0%}"
-    return labels.get(ref, ref)
+    from app.agent.humanize import _FIELDS
+
+    return labels.get(ref) or ("Профиль компании: " + _FIELDS[ref] if ref in _FIELDS else "Профиль компании")
 
 
 def decide_revise(ins: Insight, ctx: AgentContext, issues: list[str], tracer: Tracer) -> bool:
@@ -376,8 +382,8 @@ def run_agent(event: Event, profile: CompanyProfile, role: str | None = None, li
         with tracer.step("preview", "rules") as rec:
             pv = draft_rules(ctx)
             rec["output"] = {"headline": pv.headline, "takeaway": pv.takeaway.text}
-        tracer._emit({"type": "preview", "insight": {"headline": pv.headline, "effect": pv.effect,
-                                                      "takeaway": pv.takeaway.model_dump(),
+        tracer._emit({"type": "preview", "insight": {"headline": humanize_text(pv.headline), "effect": pv.effect,
+                                                      "takeaway": humanize(pv.takeaway.model_dump()),
                                                       "scenarios": [s.model_dump() for s in pv.scenarios]}})
 
     with llm_deadline(AGENT_TIMEOUT_S):
@@ -423,12 +429,14 @@ def insight_key(event_id: str, company_uid: str, role: str | None) -> str:
 
 def cached_insight(event_id: str, company_uid: str, role: str | None) -> Insight | None:
     row = db.query_one("SELECT payload FROM insights WHERE key=?", (insight_key(event_id, company_uid, role),))
-    return ensure_scenarios(Insight.model_validate_json(row["payload"])) if row else None
+    return humanize_insight(ensure_scenarios(Insight.model_validate_json(row["payload"]))) if row else None
 
 
 def ensure_scenarios(ins: Insight) -> Insight:
     """Разборы, построенные до появления сценариев (кэш, снапшот), дополняются расчётом без LLM."""
-    if ins.scenarios:
+    from app.agent.scenario import CALC_VERSION
+
+    if ins.scenarios and ins.scenarios[0].version == CALC_VERSION:
         return ins
     from app.agent.scenario import scenarios
     from app.agent.schemas import Scenario
@@ -437,7 +445,12 @@ def ensure_scenarios(ins: Insight) -> Insight:
     p = get_profile(ins.company_uid)
     factors = [r["factor"] for r in ins.relevance.get("reasons", []) if "factor" in r]
     if p:
-        ins.scenarios = [Scenario(**s) for s in scenarios(p, factors)]
+        from app.news.ingest import get_event
+
+        ev = get_event(ins.event_id)
+        dates = ev.classification.effective_dates if ev else []
+        ins.scenarios = [Scenario(**s) for s in scenarios(p, factors, reasons=ins.relevance.get("reasons", []),
+                                                          effective_dates=dates)]
     return ins
 
 
@@ -446,7 +459,7 @@ def get_or_create_insight(event: Event, profile: CompanyProfile, role: str | Non
     key = insight_key(event.id, profile.uid, role)
     if not force and (hit := cached_insight(event.id, profile.uid, role)):
         return hit
-    ins = run_agent(event, profile, role, listener=listener)
+    ins = humanize_insight(run_agent(event, profile, role, listener=listener))
     old = cached_insight(event.id, profile.uid, role) if force else None
     if old and ins.generated_by == "rules" and old.generated_by != "rules":
         return old  # модель недоступна — не затираем готовый разбор моделью детерминированным
