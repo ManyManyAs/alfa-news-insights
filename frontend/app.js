@@ -179,6 +179,7 @@ async function selectUser(uid, me) {
 }
 
 function show(view) {
+  document.body.dataset.view = view;
   document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.id === `view-${view}`));
   document.querySelectorAll(".nav-item[data-view]").forEach((n) => n.classList.toggle("active", n.dataset.view === view));
   if (view === "metrics") loadMetrics();
