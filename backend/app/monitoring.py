@@ -142,5 +142,5 @@ def alerts(budget: dict, product: dict, judge: dict, sources_down: int, injectio
     if injections_24h > 5:
         add("warn", f"Всплеск подозрений на prompt injection за сутки: {injections_24h} — все перехвачены фильтром, проверить источники")
     if judge.get("avg") is not None and judge["avg"] < 4.2:
-        add("info", f"Оценка LLM-судьи {judge['avg']} — ниже цели 4,2")
+        add("info", f"Оценка LLM-судьи {str(judge['avg']).replace('.', ',')} — ниже цели 4,2")
     return out

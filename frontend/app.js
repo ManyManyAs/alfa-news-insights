@@ -114,6 +114,7 @@ async function init() {
   bindFeedControls();
   $("#showHidden").onclick = () => { state.showHidden = !state.showHidden; loadFeed(); };
   $("#tourBtn").onclick = startTour;
+  $("#heroTour").onclick = startTour;
   $("#themeBtn").onclick = toggleTheme;
   document.querySelectorAll("[data-dper]").forEach((b) => b.onclick = () => {
     state.digestPeriod = b.dataset.dper;
@@ -130,6 +131,7 @@ async function init() {
 function showLogin() {
   $("#loginView").hidden = false;
   document.body.classList.add("logged-out");
+  initLoginGlobe();
   $("#demoPassHint").textContent = state.demoPass ? `· пароль для всех: ${state.demoPass}` : "";
   $("#demoList").innerHTML = state.users.map((u) => `<button type="button" class="demo-acc" data-login="${esc(u.user_id)}">
     <b>${esc(u.label)}</b><span class="muted small">${esc(state.roles[u.role] || "")} · логин ${esc(u.user_id)}</span></button>`).join("");
@@ -157,6 +159,7 @@ async function enterApp() {
   const me = await api("/api/me");
   $("#loginView").hidden = true;
   document.body.classList.remove("logged-out");
+  initHeroGlobe();
   await selectUser(me.user_id, me);
   if ($("#view-home").classList.contains("active")) track("home_view");
   maybeOnboard();
@@ -165,7 +168,8 @@ async function enterApp() {
 async function selectUser(uid, me) {
   state.user = uid;
   const u = state.users.find((x) => x.user_id === uid);
-  $("#userName").textContent = u ? `${u.label} · ${uid}` : uid;
+  $("#userName").textContent = u ? u.label : uid;
+  $("#userName").title = "Логин " + uid;
   $("#companySelect").innerHTML = me.companies.map((c) => `<option value="${c.uid}">${esc(c.name)}</option>`).join("");
   state.company = u?.primary_company || me.companies[0]?.uid;
   $("#companySelect").value = state.company;
@@ -212,6 +216,7 @@ async function loadBank() {
       <polyline points="${xy.map((p) => p.join(",")).join(" ")}" fill="none" stroke="var(--accent)" stroke-width="2.5"/>
       ${xy.map((p, i) => `<circle cx="${p[0]}" cy="${p[1]}" r="3.5" fill="var(--accent)"/><text x="${p[0]}" y="${p[1] - 7}" text-anchor="middle">${String(pts[i][1]).replace(".", ",")}%</text><text x="${p[0]}" y="${H - 1}" text-anchor="middle" class="lbl">${esc(pts[i][0])}</text>`).join("")}</svg>`;
   }
+  renderTicker(d, by);
   $("#bankCard").innerHTML = `<div class="eyebrow">Позиция Альфа-Банка</div>
     <h3>Макропрогноз банка</h3>
     ${spark ? `<div class="muted small">Траектория ключевой ставки (прогноз от ${fmtDate(d.rate_path.date)})</div>${spark}` : ""}
@@ -219,11 +224,91 @@ async function loadBank() {
     <div class="muted small">${d.theses_count} тезисов из ${d.documents.length} аналитических материалов · ▲▼ — пересмотр прогноза банком</div>`;
 }
 
+// ---------------------------------------------------------------- герой главной: глобус сигналов, цифры дня, бегущая строка прогнозов
+function renderTicker(d, by) {
+  const items = d.forecasts.filter((f) => f.period >= "2026").slice(0, 12).map((f) => {
+    const r = f.revision;
+    return `<span class="tk"><span class="tk-t">${esc(f.title)} ${esc(f.period)}</span><b>${fmtVal(f.value, f.unit)}</b>${r ? `<span class="tk-r ${r.direction}">${r.direction === "up" ? "▲" : "▼"} было ${fmtVal(r.from, f.unit)}</span>` : ""}</span>`;
+  }).join("");
+  if (!items) return;
+  $("#tickerTrack").innerHTML = `<span class="tk-head">Прогноз Альфа-Банка</span>${items}<span class="tk-head">Прогноз Альфа-Банка</span>${items}`;
+  void by;
+}
+function countUp(el, to) {
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches, t0 = performance.now(), from = +el.dataset.v || 0;
+  el.dataset.v = to;
+  if (reduce || from === to) { el.textContent = to; return; }
+  const step = (now) => { const k = Math.min(1, (now - t0) / 900), e = 1 - Math.pow(1 - k, 3); el.textContent = Math.round(from + (to - from) * e); if (k < 1) requestAnimationFrame(step); };
+  requestAnimationFrame(step);
+}
+function initHeroGlobe() {
+  if (state.globe || typeof BizGlobe === "undefined") return;
+  state.globe = new BizGlobe($("#globe"), { tip: $("#globeTip"), onPick: (s) => { show("radar"); openInsight(s.id, false, "globe"); } });
+}
+function initLoginGlobe() {
+  if (state.loginGlobe || typeof BizGlobe === "undefined") return;
+  state.loginGlobe = new BizGlobe($("#loginGlobe"), { ambient: true });
+  const hq = { geo: GEO["Москва"], label: "" };
+  const pts = [["КИТАЙ", "risk"], ["ТУРЦИЯ", "opportunity"], ["ОАЭ", "watch"], ["Новосибирская область", "opportunity"], ["Приморский край", "risk"],
+    ["ИНДИЯ", "watch"], ["Свердловская область", "mixed"], ["Калининградская область", "watch"], ["КАЗАХСТАН", "opportunity"], ["Республика Татарстан", "risk"]];
+  state.loginGlobe.setData({ hq, signals: pts.map(([n, e], i) => ({ id: "x" + i, geo: geoOf(n), effect: e, weight: 0.3 + (i % 3) * 0.2 })) });
+}
+function signalOrigin(it) {
+  for (const r of it.regions || []) { const g = geoOf(r); if (g) return [g, geoShort(r)]; }
+  for (const c of it.countries || []) { const g = geoOf(c); if (g) return [g, geoShort(c)]; }
+  return [GEO["Москва"], "Москва, федеральный уровень"];
+}
+function renderHero() {
+  const p = state.profile;
+  if (!p || !state.feed) return;
+  const feed = state.feed;
+  const cnt = (e) => feed.filter((x) => x.effect === e).length;
+  const opt = $("#companySelect").selectedOptions[0];
+  const company = opt ? opt.textContent.split(" · ")[0] : p.okved_name;
+  const region = p.region || "";
+  const roleTitle = state.role ? (state.roles[state.role] || "").toLowerCase() : "";
+  $("#heroDate").textContent = "Бизнес-радар · " + new Date().toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" });
+  $("#heroTitle").innerHTML = `Что в мире меняется <span class="red">для вашего бизнеса</span>`;
+  $("#heroSub").innerHTML = `${esc(company)}${region ? ` · ${esc(region)}` : ""}${roleTitle ? ` · взгляд: ${esc(roleTitle)}` : ""}.<br>Из живого потока новостей отобрано <b>${feed.length}</b> ${plural(feed.length, "событие", "события", "событий")}, которые касаются именно компании — каждое с объяснением «почему вам».`;
+  const stats = [["risk", "рисков", cnt("risk")], ["opportunity", "возможностей", cnt("opportunity")], ["watch", "отслеживать", cnt("watch") + cnt("mixed")]];
+  const box = $("#heroStats");
+  if (!box.children.length) box.innerHTML = stats.map(([k, t]) => `<button class="hs ${k}" data-hs="${k}"><b data-v="0">0</b><span>${t}</span></button>`).join("")
+    + `<div class="hs bank"><b>${feed.filter((x) => x.has_bank_view).length}</b><span>с позицией банка</span></div>`;
+  stats.forEach(([k, , v]) => countUp(box.querySelector(`[data-hs=${k}] b`), v));
+  box.querySelector(".hs.bank b").textContent = feed.filter((x) => x.has_bank_view).length;
+  box.querySelectorAll("[data-hs]").forEach((b) => b.onclick = () => {
+    const eff = b.dataset.hs;
+    filters.effect = eff;
+    document.querySelectorAll("[data-feff]").forEach((x) => x.classList.toggle("on", x.dataset.feff === eff));
+    show("radar"); renderFeedList();
+  });
+  if (!state.globe) return;
+  const hqGeo = geoOf(region) || GEO["Москва"];
+  const maxScore = Math.max(0.01, ...feed.map((x) => x.score));
+  // событие в том же регионе, что и компания (чаще всего — федеральный уровень, Москва), — точка на орбите вокруг компании,
+  // чтобы дуга «событие → компания» оставалась видимой; в подсказке — настоящее место
+  let near = 0;
+  const signals = feed.slice(0, 16).map((it) => {
+    let [geo, place] = signalOrigin(it);
+    if (Math.hypot(geo[0] - hqGeo[0], (geo[1] - hqGeo[1]) * Math.cos(hqGeo[0] * Math.PI / 180)) < 4) {
+      const b = (near * 137.5 + 200) * Math.PI / 180, d = 7 + (near % 4) * 2.6;
+      geo = [hqGeo[0] + d * Math.cos(b) * 0.7, hqGeo[1] + d * Math.sin(b) / Math.cos(hqGeo[0] * Math.PI / 180)];
+      near += 1;
+    }
+    return { id: it.event_id, geo, effect: it.effect, weight: it.score / maxScore,
+      tipHtml: `<div class="gt-top"><span class="pill ${it.effect}">${EFFECT[it.effect]}</span><span class="muted small">📍 ${esc(place)}</span></div>
+        <b>${esc(it.title)}</b><div class="small gt-why">${esc(it.reasons[0]?.why || "")}</div><div class="gt-cta">Нажмите — открыть разбор →</div>` };
+  });
+  const partners = (p.fts_countries || []).slice(0, 6).map((c) => ({ geo: geoOf(c), label: geoShort(c) }));
+  state.globe.setData({ hq: { geo: hqGeo, label: "Ваша компания · " + geoShort(region || "Москва") }, partners, signals });
+}
+
 // ---------------------------------------------------------------- профиль
 async function loadProfile() {
   const { profile: p, exposures, peers, overrides, factors } = await api(`/api/companies/${state.company}?${q({ role: state.role })}`);
-  state.factors = factors; state.exposures = exposures;
+  state.factors = factors; state.exposures = exposures; state.profile = p;
   renderRadar();
+  renderHero();
   const money = (v) => v == null ? "нет данных" : (v >= 1e9 ? (v / 1e9).toFixed(1) + " млрд ₽" : (v / 1e6).toFixed(1) + " млн ₽");
   const products = { CL_PRODUCT_RKO_MARK: "РКО", CL_PRODUCT_LOA_MARK: "Кредит", CL_PRODUCT_LEA_MARK: "Лизинг", CL_PRODUCT_DEP_MARK: "Депозит", CL_PRODUCT_ZPP_MARK: "Зарплатный проект", CL_PRODUCT_GAR_MARK: "Гарантии", FACTORING_MARK: "Факторинг", FTS_FLAG: "ВЭД" };
   $("#profileCard").innerHTML = `
@@ -312,13 +397,14 @@ async function loadFeed() {
   fillFactorFilter();
   renderFeedList();
   renderRadar();
+  renderHero();
   applyRerank(state.feedKey);
 }
 
 function renderWidget() {
   const items = state.feed, quiet = state.quiet, read = readSet();
   $("#widgetList").innerHTML = items.slice(0, 4).map((it) => `
-    <div class="w-item ${read.has(it.event_id) ? "read" : ""}" data-ev="${it.event_id}" tabindex="0" role="button">
+    <div class="w-item eff-${it.effect} ${read.has(it.event_id) ? "read" : ""}" data-ev="${it.event_id}" tabindex="0" role="button">
       ${read.has(it.event_id) ? "" : `<span class="new-dot" title="Не прочитано"></span>`}<span class="pill ${it.effect}">${EFFECT[it.effect]}</span><span class="muted small">${fmtDate(it.published_at)}</span>${read.has(it.event_id) ? `<span class="read-mark">✓ прочитано</span>` : ""}
       <div class="title"><b>${esc(it.title)}</b></div>
       <div class="why">Почему вам: ${esc(it.reasons[0]?.why || "")}</div>
@@ -365,7 +451,7 @@ function renderFeedList(animate = false) {
   $("#feedCount").textContent = `${items.length} из ${state.feed.length}`;
   list.innerHTML = items.map((it) => {
     const n = notes[it.event_id];
-    return `<div class="feed-item ${read.has(it.event_id) ? "read" : ""} ${it.event_id === state.current ? "active" : ""}" data-ev="${it.event_id}" tabindex="0" role="button">
+    return `<div class="feed-item eff-${it.effect} ${read.has(it.event_id) ? "read" : ""} ${it.event_id === state.current ? "active" : ""}" data-ev="${it.event_id}" tabindex="0" role="button">
       ${it.hidden ? `<button class="link-btn unhide" data-unhide="${it.event_id}">Вернуть в ленту</button>` : `<button class="hide-btn" data-hide="${it.event_id}" title="Скрыть из ленты" aria-label="Скрыть из ленты">×</button>`}
       <div><span class="pill ${it.effect}">${EFFECT[it.effect]}</span>${it.has_bank_view ? `<span class="pill bank">есть позиция банка</span>` : ""}${effectiveTag(it.effective)}</div>
       <div class="title">${read.has(it.event_id) ? "" : `<span class="new-dot" title="Не прочитано"></span>`}${esc(it.title)}${read.has(it.event_id) ? `<span class="read-mark">✓ прочитано</span>` : ""}</div>

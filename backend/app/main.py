@@ -259,7 +259,7 @@ def feed(company_id: str, role: str | None = None, limit: int = Query(20, le=50)
             "event_id": s.event.id, "title": s.event.title, "published_at": s.event.published_at,
             "summary": cls.summary, "score": s.score, "effect": s.effect,
             "reasons": s.reasons[:3], "sources": s.event.sources, "importance": cls.importance,
-            "trust": cls.trust, "regions": cls.regions,
+            "trust": cls.trust, "regions": cls.regions, "countries": cls.countries,
             "industries": [{"code": c, "name": okved_class_name(c)} for c in cls.industries],
             "effective": ({"date": upcoming[0], "days": (date.fromisoformat(upcoming[0]) - today).days}
                           if upcoming else None),
