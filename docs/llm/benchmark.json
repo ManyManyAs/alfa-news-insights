@@ -1,0 +1,92 @@
+{
+  "run_at": "2026-10-20T22:20:19.637639+00:00",
+  "classification": {
+    "rules": {
+      "scores": {
+        "precision": 0.8,
+        "recall": 0.882,
+        "f1": 0.839,
+        "direction_acc": 0.812,
+        "n": 36
+      },
+      "json_first_try": 1.0,
+      "latency_s": 0.0,
+      "cost_rub": 0.0
+    },
+    "gemma": {
+      "scores": {
+        "precision": 0.915,
+        "recall": 0.794,
+        "f1": 0.85,
+        "direction_acc": 0.913,
+        "n": 36
+      },
+      "json_first_try": 1.0,
+      "errors": 0,
+      "latency_s": 3.41,
+      "cost_rub": 1.118
+    },
+    "qwen": {
+      "scores": {
+        "precision": 0.881,
+        "recall": 0.765,
+        "f1": 0.819,
+        "direction_acc": 0.844,
+        "n": 36
+      },
+      "json_first_try": 0.97,
+      "errors": 0,
+      "latency_s": 2.99,
+      "cost_rub": 1.857
+    },
+    "glm": {
+      "scores": {
+        "precision": 0.891,
+        "recall": 0.838,
+        "f1": 0.864,
+        "direction_acc": 0.898,
+        "n": 36
+      },
+      "json_first_try": 1.0,
+      "errors": 0,
+      "latency_s": 5.34,
+      "cost_rub": 2.869
+    },
+    "deepseek": {
+      "scores": {
+        "precision": 0.783,
+        "recall": 0.956,
+        "f1": 0.861,
+        "direction_acc": 0.94,
+        "n": 36
+      },
+      "json_first_try": 1.0,
+      "errors": 0,
+      "latency_s": 2.56,
+      "cost_rub": 2.498
+    },
+    "kimi": {
+      "scores": {
+        "precision": 0.776,
+        "recall": 0.765,
+        "f1": 0.77,
+        "direction_acc": 0.93,
+        "n": 36
+      },
+      "json_first_try": 0.83,
+      "errors": 4,
+      "latency_s": 8.17,
+      "cost_rub": 4.474
+    }
+  },
+  "interpretation": {},
+  "spent_rub": 20.0,
+  "models": {
+    "gemma": "google/gemma-4-26b-a4b-it",
+    "glm": "z-ai/glm-5.3-flash",
+    "qwen": "qwen/qwen3.6-35b-a3b",
+    "deepseek": "deepseek/deepseek-v4.1-flash",
+    "qwen_vl": "qwen/qwen3-vl-30b-a3b-instruct",
+    "kimi": "moonshotai/kimi-k2.6"
+  }
+}

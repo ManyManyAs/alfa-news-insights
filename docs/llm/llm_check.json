@@ -1,0 +1,93 @@
+{
+  "checked_at": "2026-10-20T21:58:55.560572+00:00",
+  "models": {
+    "gemma": {
+      "configured_id": "google/gemma-4-26b-a4b-it",
+      "ping_s": 0.1,
+      "ping_error": null,
+      "ping": "ОК",
+      "json_s": 0.0,
+      "json_error": null,
+      "json_ok": true
+    },
+    "glm": {
+      "configured_id": "z-ai/glm-5.3-flash",
+      "ping_s": 0.0,
+      "ping_error": null,
+      "ping": "ОК",
+      "json_s": 0.0,
+      "json_error": null,
+      "json_ok": true
+    },
+    "qwen": {
+      "configured_id": "qwen/qwen3.6-35b-a3b",
+      "ping_s": 0.0,
+      "ping_error": null,
+      "ping": "ОК",
+      "json_s": 0.0,
+      "json_error": null,
+      "json_ok": true
+    },
+    "deepseek": {
+      "configured_id": "deepseek/deepseek-v4.1-flash",
+      "ping_s": 0.0,
+      "ping_error": null,
+      "ping": "ОК",
+      "json_s": 0.0,
+      "json_error": null,
+      "json_ok": true
+    },
+    "qwen_vl": {
+      "configured_id": "qwen/qwen3-vl-30b-a3b-instruct",
+      "ping_s": 0.0,
+      "ping_error": null,
+      "ping": "ОК",
+      "json_s": 0.0,
+      "json_error": null,
+      "json_ok": true,
+      "vision_s": 0.0,
+      "vision_error": null,
+      "vision": "Красный",
+      "vision_ok": true
+    },
+    "kimi": {
+      "configured_id": "moonshotai/kimi-k2.6",
+      "ping_s": 0.0,
+      "ping_error": null,
+      "ping": "ОК",
+      "json_s": 0.0,
+      "json_error": null,
+      "json_ok": true
+    }
+  },
+  "endpoint_models": [
+    "google/gemma-4-26b-a4b-it",
+    "z-ai/glm-5.3-flash",
+    "qwen/qwen3.6-35b-a3b",
+    "deepseek/deepseek-v4.1-flash",
+    "qwen/qwen3-vl-30b-a3b-instruct",
+    "moonshotai/kimi-k2.6",
+    "deepseek-cost-test"
+  ],
+  "endpoint_models_error": null,
+  "id_match": {
+    "gemma": "google/gemma-4-26b-a4b-it",
+    "glm": "z-ai/glm-5.3-flash",
+    "qwen": "qwen/qwen3.6-35b-a3b",
+    "deepseek": "deepseek/deepseek-v4.1-flash",
+    "qwen_vl": "qwen/qwen3-vl-30b-a3b-instruct",
+    "kimi": "moonshotai/kimi-k2.6"
+  },
+  "budget": {
+    "day": "2026-10-20",
+    "spent_rub": 13.22,
+    "budget_rub": 500.0,
+    "soft_limit_rub": 400.0,
+    "background_limit_rub": 300.0,
+    "left_rub": 486.78,
+    "source": "provider",
+    "spent_this_server_rub": 0.65,
+    "reset_at": "2026-10-21T00:00:00+00:00",
+    "mode": "live"
+  }
+}
