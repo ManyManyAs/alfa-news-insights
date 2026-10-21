@@ -4,6 +4,7 @@ const $ = (s) => document.querySelector(s);
 const EFFECT = { risk: "риск", opportunity: "возможность", mixed: "риски и возможности", watch: "отслеживать" };
 const KIND = { fact: "Факт", assumption: "Предположение источника", bank_view: "Позиция Альфа-Банка", ai_inference: "Вывод сервиса (AI)" };
 const DIR = { up: "↑", down: "↓", stable: "→", unknown: "·" };
+const CONF = { high: "уверенность высокая", medium: "уверенность средняя", low: "уверенность низкая" };
 const TRUST = { official: ["официально", "Регулятор или орган власти"], agency: ["агентство", "Информационное агентство"],
   media: ["СМИ", "Деловое СМИ: мнения и прогнозы помечаются как предположения"], user: ["ваша новость", "Добавлено пользователем"],
   demo: ["демо", "Синтетический демо-пример"] };
@@ -54,7 +55,9 @@ async function sse(path, opts, onEvent) {
 }
 
 const STEP_RU = { relevance: "Оценка релевантности", plan: "План анализа", draft: "Черновик интерпретации", finalize: "Итог",
-  "repair:rules": "Удаление неподтверждённого", revise: "Правка по замечаниям" };
+  "repair:rules": "Удаление неподтверждённого", revise: "Правка по замечаниям", preview: "Быстрый вывод по профилю",
+  limit: "Лимит времени или стоимости — дальше без LLM", "tool:scenario_calc": "Расчёт сценариев",
+  "tool:get_story_timeline": "Хронология сюжета", "tool:get_regulation_dates": "Даты вступления в силу" };
 function stepTitle(name) {
   if (STEP_RU[name]) return STEP_RU[name];
   if (name.startsWith("tool:")) return "Инструмент: " + name.slice(5);
@@ -273,7 +276,7 @@ async function applyRerank(key) {
 async function openInsight(eventId, refresh = false) {
   state.current = eventId;
   document.querySelectorAll(".feed-item").forEach((el) => el.classList.toggle("active", el.dataset.ev === eventId));
-  $("#insightPanel").innerHTML = `<div class="insight"><div class="eyebrow">Агент анализирует событие</div>
+  $("#insightPanel").innerHTML = `<div class="insight"><div id="previewBox"></div><div class="eyebrow">Агент анализирует событие</div>
     <ol class="progress" id="agentProgress"></ol></div>`;
   const prog = () => document.getElementById("agentProgress");
   try {
@@ -284,6 +287,13 @@ async function openInsight(eventId, refresh = false) {
       } else if (e.type === "step_end") {
         const li = [...prog().querySelectorAll("li.run")].reverse().find((x) => x.dataset.step === e.name);
         if (li) { li.className = e.fallback ? "fallback" : "ok"; li.querySelector("span").textContent = ` · ${e.model ? e.model + " · " : ""}${e.duration_ms} мс${e.fallback ? " · без LLM" : ""}`; }
+      } else if (e.type === "preview") {
+        // главный вывод сразу, полный разбор догружается
+        const p = e.insight;
+        $("#previewBox").innerHTML = `<span class="pill ${p.effect}">${EFFECT[p.effect]}</span> <span class="muted small">быстрый вывод по профилю · полный разбор готовится…</span>
+          <h2 style="margin-top:8px">${esc(p.headline)}</h2>
+          <div class="takeaway"><span class="claim-kind small" style="color:var(--ai)">ВЫВОД СЕРВИСА · </span>${esc(p.takeaway.text)}</div>
+          ${scenarioCards(p.scenarios)}`;
       } else if (e.type === "done") {
         state.insight = e.insight; renderInsight("analysis");
       } else if (e.type === "error") { throw new Error(e.detail); }
@@ -294,7 +304,68 @@ async function openInsight(eventId, refresh = false) {
 function srcTags(ids) { return (ids || []).map((s) => `<span class="src" data-src="${esc(s)}">${esc(s.split(":")[0] === "bank" ? "банк " + s.split(":")[1] : s.split(":")[0] === "news" ? "новость" : s)}</span>`).join(""); }
 function claims(list) {
   return (list || []).map((c) => `<div class="claim ${c.kind} ${c.confidence === "low" ? "conf-low" : ""}">
-    <span class="kind">${KIND[c.kind] || c.kind}</span>${esc(c.text)}<div>${srcTags(c.sources)}</div></div>`).join("") || `<div class="muted small">нет данных</div>`;
+    <span class="kind">${KIND[c.kind] || c.kind}</span>${esc(c.text)}<div>${srcTags(c.sources)}${c.kind !== "fact" ? `<span class="conf ${c.confidence}" title="Уверенность вывода">${CONF[c.confidence] || ""}</span>` : ""}</div></div>`).join("") || `<div class="muted small">нет данных</div>`;
+}
+
+const SCEN_CLASS = { base: "watch", negative: "risk", positive: "opportunity" };
+function scenarioCards(list) {
+  if (!list || !list.length) return "";
+  const est = list[0].estimated || [];
+  return `<div class="scenarios">${list.map((s) => `<div class="scen ${SCEN_CLASS[s.name]}">
+      <div class="scen-t">${esc(s.title)}</div>
+      <div class="scen-v ${s.total_rub < 0 ? "bad" : s.total_rub > 0 ? "ok" : ""}">${rub(s.total_rub)}<span class="muted small"> в год</span></div>
+      ${s.share_of_revenue != null ? `<div class="muted small">${(s.share_of_revenue * 100).toFixed(2).replace(".", ",")}% выручки</div>` : ""}
+      <div class="small">${esc(s.assumptions)}</div>
+      ${s.name === "base" ? `<div>${srcTags(s.sources)}</div>` : ""}</div>`).join("")}</div>
+    ${est.length ? `<div class="muted small">Оценка по профилю: ${esc(est.join("; "))}. Свои цифры — в блоке «Что если».</div>` : ""}`;
+}
+function rub(v) {
+  if (v == null) return "—";
+  const a = Math.abs(v), sign = v < 0 ? "−" : v > 0 ? "+" : "";
+  const n = (x) => x.toFixed(1).replace(".", ",");
+  return sign + (a >= 1e9 ? n(a / 1e9) + " млрд ₽" : a >= 1e6 ? n(a / 1e6) + " млн ₽" : Math.round(a / 1e3) + " тыс. ₽");
+}
+
+// «Что если»: слайдеры шоков и свои суммы → пересчёт на сервере тем же калькулятором, что у агента
+function whatIfBlock() {
+  return `<details class="whatif" id="whatIf"><summary>Что если — посчитать для своих цифр</summary><div id="whatIfBody" class="muted small">Загрузка…</div></details>`;
+}
+const WI = { debt_rub: ["Долг, млн ₽", 1e6], floating_share: ["Доля под плавающей ставкой, %", 0.01], import_rub: ["Импорт в год, млн ₽", 1e6], payroll_rub: ["ФОТ в год, млн ₽", 1e6] };
+async function initWhatIf() {
+  const box = document.getElementById("whatIfBody");
+  if (!box) return;
+  const r = await api("/api/scenario", { method: "POST", body: JSON.stringify({ company_id: state.company, event_id: state.current }) });
+  const b = r.baseline, d = r.defaults;
+  const slider = (id, label, min, max, step, val, hint) => `<label class="wi-row"><span>${label}</span>
+    <input type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${val}"><b id="${id}V"></b><span class="muted small">${hint}</span></label>`;
+  const field = (k) => `<label class="wi-field">${WI[k][0]}<input type="number" min="0" step="any" id="wi_${k}" value="${d[k] != null ? +(d[k] / WI[k][1]).toFixed(2) : ""}" placeholder="нет данных"></label>`;
+  box.className = "";
+  box.innerHTML = `
+    <div class="wi-grid">
+      ${slider("wiRate", "Ключевая ставка, изменение", -4, 4, 0.25, b.rate_delta_pp, `прогноз банка: ${b.rate_delta_pp > 0 ? "+" : ""}${String(b.rate_delta_pp).replace(".", ",")} п.п. (средняя ${String(b.key_rate_avg_next).replace(".", ",")}% против ${String(b.key_rate_now).replace(".", ",")}% сейчас)`)}
+      ${slider("wiFx", "Курс рубля: ослабление, %", -20, 40, 0.1, b.fx_change_pct, `прогноз банка: ${String(b.fx_change_pct).replace(".", ",")}% (${b.usd_rub.join(" → ")} ₽/$)`)}
+      ${slider("wiWage", "Рост зарплат за год, %", 0, 25, 0.1, b.wage_growth_pct, `прогноз банка: ${String(b.wage_growth_pct).replace(".", ",")}% — заложен в бюджет как база`)}
+    </div>
+    <div class="wi-fields">${Object.keys(WI).map(field).join("")}</div>
+    <div id="wiOut" class="wi-out"></div>
+    <div class="muted small">${r.estimated.length ? "Значения по умолчанию — оценки по профилю: " + esc(r.estimated.join("; ")) + ". Замените своими — расчёт мгновенно обновится." : ""}</div>`;
+  let timer;
+  const run = () => { clearTimeout(timer); timer = setTimeout(recalc, 120); };
+  box.querySelectorAll("input").forEach((el) => el.addEventListener("input", run));
+  recalc();
+}
+async function recalc() {
+  const v = (id) => +document.getElementById(id).value;
+  $("#wiRateV").textContent = `${v("wiRate") > 0 ? "+" : ""}${String(v("wiRate")).replace(".", ",")} п.п.`;
+  $("#wiFxV").textContent = `${v("wiFx") > 0 ? "+" : ""}${String(v("wiFx")).replace(".", ",")}%`;
+  $("#wiWageV").textContent = `${String(v("wiWage")).replace(".", ",")}%`;
+  const inputs = { rate_delta_pp: v("wiRate"), fx_change_pct: v("wiFx"), wage_growth_pct: v("wiWage") };
+  for (const k of Object.keys(WI)) { const el = document.getElementById("wi_" + k); if (el.value !== "") inputs[k] = +el.value * WI[k][1]; }
+  try {
+    const { result: r } = await api("/api/scenario", { method: "POST", body: JSON.stringify({ company_id: state.company, event_id: state.current, inputs }) });
+    $("#wiOut").innerHTML = `<div class="wi-total ${r.total_rub < 0 ? "bad" : r.total_rub > 0 ? "ok" : ""}">${rub(r.total_rub)} <span class="muted small">в год к плану${r.share_of_revenue != null ? ` · ${(r.share_of_revenue * 100).toFixed(2).replace(".", ",")}% выручки` : ""}</span></div>
+      ${r.rows.map((x) => `<div class="wi-line"><span>${esc(x.title)}</span><b class="${x.effect_rub < 0 ? "bad" : x.effect_rub > 0 ? "ok" : ""}">${rub(x.effect_rub)}</b><span class="muted small">${esc(x.formula)}</span></div>`).join("")}`;
+  } catch (e) { $("#wiOut").textContent = "Не удалось посчитать: " + e.message; }
 }
 
 function renderInsight(tab) {
@@ -308,7 +379,10 @@ function renderInsight(tab) {
       <div class="q"><h4><span class="n">2</span>Почему это важно для вашей компании</h4>${claims(i.why_it_matters)}</div>
       <div class="q"><h4><span class="n">3</span>Возможные последствия</h4>
         <div class="cols"><div><b class="bad small">Риски</b>${claims(i.consequences.risks)}</div><div><b class="ok small">Возможности</b>${claims(i.consequences.opportunities)}</div></div>
-        <b class="small muted">Что повлияет на развитие ситуации</b>${claims(i.consequences.drivers)}</div>
+        <b class="small muted">Что повлияет на развитие ситуации</b>${claims(i.consequences.drivers)}
+        ${(i.scenarios || []).length ? `<div class="sub-h">Сценарии на 12 месяцев <span class="muted small">— суммы считает калькулятор, а не модель</span></div>${scenarioCards(i.scenarios)}` : ""}
+        ${(i.what_could_change || []).length ? `<div class="sub-h">Что может изменить вывод</div>${claims(i.what_could_change)}` : ""}
+        ${whatIfBlock()}</div>
       <div class="q"><h4><span class="n">4</span>Что можно сделать</h4>${claims(i.actions)}
         ${i.products.map((p) => `<div class="product"><span class="lbl">${esc(p.label)}</span><br><b>${esc(p.product)}</b> — ${esc(p.why)}</div>`).join("")}</div>
       <div class="q"><h4><span class="n">5</span>Как это оценивает Альфа-Банк</h4>${claims(i.bank_view)}</div>
@@ -324,7 +398,7 @@ function renderInsight(tab) {
           <button class="btn ghost small" data-fbr="inaccurate">Неточный вывод</button></span><span id="fbDone"></span></div>
       ${chatBlock()}`;
   } else if (tab === "sources") {
-    body = `<ol class="sources-list">${i.sources.map((s) => `<li id="src-${CSS.escape(s.id)}"><b>[${esc(s.type === "bank" ? "Альфа-Банк" : s.type === "news" ? "Новость" : s.type === "graph" ? "Граф платежей" : "Профиль")}]</b> ${esc(s.title)}
+    body = `<ol class="sources-list">${i.sources.map((s) => `<li id="src-${CSS.escape(s.id)}"><b>[${esc(s.type === "bank" ? "Альфа-Банк" : s.type === "news" ? "Новость" : s.type === "graph" ? "Граф платежей" : s.type === "calc" ? "Расчёт" : s.type === "peers" ? "Похожие компании" : "Профиль")}]</b> ${esc(s.title)}
       ${s.date ? `<span class="muted"> · ${fmtDate(s.date)}</span>` : ""}${s.page ? `<span class="muted"> · стр. ${s.page}</span>` : ""}
       ${s.stale ? `<span class="pill mixed">материал устарел</span>` : ""}
       ${s.url ? ` <a href="${esc(s.url)}" target="_blank" rel="noopener">первоисточник ↗</a>` : ""}
@@ -344,6 +418,8 @@ function renderInsight(tab) {
     <div class="tabs">${tabs.map(([k, t]) => `<div class="tab ${k === tab ? "active" : ""}" data-tab="${k}">${t}</div>`).join("")}</div>
     ${body}</div>`;
   document.querySelectorAll("[data-tab]").forEach((el) => el.onclick = () => renderInsight(el.dataset.tab));
+  const wi = document.getElementById("whatIf");
+  if (wi) wi.addEventListener("toggle", () => { if (wi.open && !wi.dataset.ready) { wi.dataset.ready = "1"; initWhatIf(); } });
   document.querySelectorAll("[data-story-ev]").forEach((el) => el.onclick = () => { if (el.dataset.storyEv !== state.current) openInsight(el.dataset.storyEv); });
   document.querySelectorAll("[data-src]").forEach((el) => el.onclick = () => { renderInsight("sources"); const li = document.getElementById("src-" + CSS.escape(el.dataset.src)); if (li) { li.classList.add("hl"); li.scrollIntoView({ block: "center" }); } });
   $("#refreshBtn").onclick = () => openInsight(state.current, true);
@@ -423,6 +499,8 @@ async function loadMetrics() {
     card("Инсайтов построено", m.insights.total),
     card("Прошли самопроверку", m.insights.quality_passed_share != null ? Math.round(m.insights.quality_passed_share * 100) + "%" : "—"),
     card("Обратная связь", `👍 ${m.feedback.pos} · 👎 ${m.feedback.neg}`),
+    card("Оценка LLM-судьи (1–5)", m.insights.judge && m.insights.judge.avg != null ? String(m.insights.judge.avg).replace(".", ",") : "—",
+      m.insights.judge && m.insights.judge.n ? `${m.insights.judge.n} разборов · ` + Object.entries(m.insights.judge.by_axis).map(([k, v]) => `${({ personalization: "персонализация", depth: "глубина", grounding: "обоснованность", bank_view: "позиция банка", actionability: "конкретность" })[k] || k} ${String(v).replace(".", ",")}`).join(" · ") : "появится после разборов моделью"),
     card("События / компании", `${m.events} / ${m.companies}`),
   ].join("");
 }

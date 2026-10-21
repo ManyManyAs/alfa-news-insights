@@ -34,7 +34,7 @@ class ProductOffer(BaseModel):
 
 class SourceRef(BaseModel):
     id: str
-    type: Literal["news", "bank", "profile", "graph", "peers"]
+    type: Literal["news", "bank", "profile", "graph", "peers", "calc"]
     title: str
     url: str | None = None
     date: str | None = None
@@ -47,6 +47,26 @@ class Consequences(BaseModel):
     risks: list[Claim] = Field(default_factory=list)
     opportunities: list[Claim] = Field(default_factory=list)
     drivers: list[Claim] = Field(default_factory=list)  # что будет влиять на развитие ситуации
+
+
+class ScenarioRow(BaseModel):
+    lever: str
+    title: str
+    effect_rub: float
+    formula: str = ""
+
+
+class Scenario(BaseModel):
+    """Сценарий на 12 месяцев. Числа считает калькулятор (app/agent/scenario.py), а не модель."""
+    name: Literal["base", "negative", "positive"]
+    title: str
+    assumptions: str
+    params: dict = Field(default_factory=dict)
+    total_rub: float = 0
+    share_of_revenue: float | None = None
+    rows: list[ScenarioRow] = Field(default_factory=list)
+    estimated: list[str] = Field(default_factory=list)  # какие параметры компании оценены по профилю
+    sources: list[str] = Field(default_factory=list)
 
 
 class QualityCheck(BaseModel):
@@ -69,6 +89,8 @@ class Insight(BaseModel):
     # 06 На чём основан вывод — sources + basis в каждом Claim
     sources: list[SourceRef]
     products: list[ProductOffer] = Field(default_factory=list)
+    scenarios: list[Scenario] = Field(default_factory=list)  # базовый (прогноз банка) / негативный / позитивный
+    what_could_change: list[Claim] = Field(default_factory=list)  # триггеры, при которых вывод изменится
     relevance: dict = Field(default_factory=dict)
     effect: str = "watch"
     quality: list[QualityCheck] = Field(default_factory=list)

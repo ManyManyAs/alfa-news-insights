@@ -17,7 +17,7 @@ from app.news.dedup import jaccard, stems
 from app.news.models import Event
 from app.ranking.scorer import Scored
 
-MAX_TOOL_CALLS = 12
+MAX_TOOL_CALLS = 14
 
 
 @dataclass
@@ -144,6 +144,36 @@ def t_check_consistency(ctx: AgentContext) -> dict:
     return {"issues": issues}
 
 
+def t_get_story_timeline(ctx: AgentContext) -> dict:
+    """Сюжет события: что было до и после (решение → реакция рынка → прогнозы)."""
+    from app.news.stories import get_story
+
+    if not ctx.event.story_id:
+        return {"note": "событие не входит в сюжет"}
+    st = get_story(ctx.event.story_id) or {}
+    return {"title": st.get("title"), "events": [{k: e[k] for k in ("event_id", "title", "published_at", "summary",
+                                                                   "factor", "direction")} for e in st.get("events", [])]}
+
+
+def t_get_regulation_dates(ctx: AgentContext) -> dict:
+    """Даты вступления в силу и сколько до них дней — для регуляторных событий."""
+    from app.agent.rules import due_text, upcoming_date
+
+    dates = ctx.event.classification.effective_dates
+    up = upcoming_date(dates)
+    return {"effective_dates": dates, "next": ({"date": up[0].isoformat(), "days": up[1], "text": due_text(up[1])}
+                                               if up else None)}
+
+
+def t_scenario_calc(ctx: AgentContext) -> dict:
+    """Сценарии на 12 мес. (база — прогноз Альфа-Банка) с эффектом в ₽ по оценкам профиля. Числа — только отсюда."""
+    from app.agent.scenario import scenarios, triggers
+
+    factors = ctx.scored.matched_factors
+    return {"source_id": "calc:scenario", "scenarios": scenarios(ctx.profile, factors),
+            "what_could_change": [t["text"] for t in triggers(ctx.profile, factors, ctx.event.classification.effective_dates)]}
+
+
 TOOLS: dict[str, tuple[Callable[..., dict], str]] = {
     "get_company_profile": (t_get_company_profile, "Профиль компании и её чувствительность к факторам"),
     "get_event": (t_get_event, "Факты, прогнозы, числа и источники события (классификация)"),
@@ -156,6 +186,9 @@ TOOLS: dict[str, tuple[Callable[..., dict], str]] = {
     "get_peer_benchmark": (t_get_peer_benchmark, "Сравнение с похожими компаниями (отрасль и масштаб): продукты, концентрация"),
     "get_playbook": (t_get_playbook, "Типовые каналы влияния, действия и продукты по факторам"),
     "check_consistency": (t_check_consistency, "Проверка противоречий между источниками и позицией банка"),
+    "get_story_timeline": (t_get_story_timeline, "Хронология сюжета: связанные события до и после"),
+    "get_regulation_dates": (t_get_regulation_dates, "Даты вступления в силу и сколько до них дней"),
+    "scenario_calc": (t_scenario_calc, "Сценарии (база = прогноз банка, негативный, позитивный) с эффектом в ₽ и триггерами"),
 }
 
 

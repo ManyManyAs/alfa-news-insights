@@ -120,6 +120,17 @@ def main() -> None:
     print(f"Сущности ({len(ent_gold)} новостей): регионы F1={ent['regions']['f1']}, отрасли F1={ent['industries']['f1']}, "
           f"даты вступления в силу F1={ent['effective_dates']['f1']}, фильтр шума accuracy={ent['noise_accuracy']}")
 
+    # LLM-судья: средняя оценка разборов, построенных моделью (критик оценивает 5 осей по шкале 1–5; цель ≥ 4,2)
+    import json
+
+    from app.storage import db
+
+    judged = [json.loads(r["payload"])["scores"] for r in db.query("SELECT payload FROM insights")
+              if json.loads(r["payload"]).get("scores")]
+    if judged:
+        avg = sum(sum(s.values()) / len(s) for s in judged) / len(judged)
+        print(f"LLM-судья: средняя оценка {avg:.2f} по {len(judged)} разборам")
+
     if args.insights:
         from app.agent.orchestrator import run_agent
 

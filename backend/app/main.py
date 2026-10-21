@@ -16,6 +16,11 @@ from pydantic import BaseModel, Field
 
 from app.agent.chat import answer, answer_stream
 from app.agent.orchestrator import cached_insight, get_or_create_insight
+from app.agent.scenario import Inputs as ScenarioInputs
+from app.agent.scenario import bank_baseline, relevant_levers
+from app.agent.scenario import calc as scenario_calc
+from app.agent.scenario import defaults as scenario_defaults
+from app.agent.scenario import scenarios as scenario_set
 from app.agent.schemas import Insight
 from app.agent.trace import load_trace
 from app.bootstrap import bootstrap, load_demo_users
@@ -188,6 +193,28 @@ def feed_rerank(company_id: str, role: str | None = None, limit: int = Query(20,
     """Уточнение порядка верха ленты моделью (Gemma). Фронтенд вызывает после показа ленты и плавно переставляет карточки."""
     p = authorized_profile(company_id, user)
     return rerank(rank_feed(list_events(300), p, role, limit), p, role)
+
+
+class ScenarioRequest(BaseModel):
+    company_id: str
+    event_id: str | None = None
+    inputs: ScenarioInputs = Field(default_factory=ScenarioInputs)
+
+
+@app.post("/api/scenario")
+def scenario(req: ScenarioRequest, user: str = Depends(current_user)):
+    """«Что если» без LLM: эффект шоков ставки, курса и зарплат на компанию; база — прогноз Альфа-Банка.
+
+    Параметры компании (долг, импорт, ФОТ) по умолчанию оцениваются по профилю, пользователь может ввести свои.
+    """
+    p = authorized_profile(req.company_id, user)
+    factors = []
+    if req.event_id and (ev := get_event(req.event_id)):
+        factors = [f.factor for f in ev.classification.factors]
+    defaults, estimated = scenario_defaults(p)
+    return {"result": scenario_calc(p, req.inputs), "defaults": defaults, "estimated": estimated,
+            "levers": relevant_levers(factors) if factors else ["rate", "fx", "wages"], "baseline": bank_baseline(),
+            "scenarios": scenario_set(p, factors, req.inputs)}
 
 
 @app.get("/api/stories/{story_id}")
@@ -371,11 +398,17 @@ def metrics():
     usage = [dict(r) for r in db.query("SELECT * FROM llm_usage WHERE day=?", (budget_day(),))]
     rows = db.query("SELECT payload FROM insights ORDER BY created_at DESC LIMIT 200")
     total = len(rows)
-    passed = sum(1 for r in rows if all(c["passed"] for c in json.loads(r["payload"]).get("quality", [])))
+    payloads = [json.loads(r["payload"]) for r in rows]
+    passed = sum(1 for p in payloads if all(c["passed"] for c in p.get("quality", [])))
+    # LLM-судья (критик) ставит 1–5 по пяти осям: средние по осям и общая — метрика качества разборов
+    judged = [p["scores"] for p in payloads if p.get("scores")]
+    axes = sorted({k for s in judged for k in s})
+    judge = {"n": len(judged), "avg": round(sum(sum(s.values()) / len(s) for s in judged) / len(judged), 2) if judged else None,
+             "by_axis": {a: round(sum(s[a] for s in judged if a in s) / max(1, sum(a in s for s in judged)), 2) for a in axes}}
     fb = db.query_one("SELECT COUNT(*) n, COALESCE(SUM(rating>0),0) pos, COALESCE(SUM(rating<0),0) neg FROM feedback")
     return {
         "llm": {"mode": get_llm().mode, **get_llm().budget_status(), "by_model": usage},
-        "insights": {"total": total, "quality_passed_share": round(passed / total, 3) if total else None},
+        "insights": {"total": total, "quality_passed_share": round(passed / total, 3) if total else None, "judge": judge},
         "feedback": dict(fb), "events": db.query_one("SELECT COUNT(*) n FROM events")["n"],
         "companies": db.query_one("SELECT COUNT(*) n FROM companies")["n"],
     }
