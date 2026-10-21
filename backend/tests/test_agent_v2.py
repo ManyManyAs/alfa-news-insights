@@ -125,6 +125,9 @@ def test_humanize_removes_internal_ids():
             "Возможно, это разные горизонты; покажите оба взгляда с этой оговоркой")
     assert "credit_conditions" not in out and "bank:" not in out and "покажите" not in out
     assert "Кредитные условия" in out
+    # банк не считает эффект для конкретной компании — это оценка сервиса
+    assert h("по расчёту банка, при ставке 15% расходы вырастут на 165 тыс. ₽.").startswith("по оценке сервиса")
+    assert h("По оценке банка, рынок труда не охлаждается. Расходы — 5 млн ₽.").startswith("По оценке банка")
 
 
 def test_business_levers_demand_costs_and_start():

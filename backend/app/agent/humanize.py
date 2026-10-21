@@ -53,7 +53,7 @@ def _inline(ref: str) -> str:
 
 
 def humanize_text(s: str) -> str:
-    if not s or not isinstance(s, str) or (":" not in s and "_" not in s and "OKVED" not in s):
+    if not s or not isinstance(s, str) or (":" not in s and "_" not in s and "OKVED" not in s and "банка" not in s):
         return s
     titles = _factor_titles()
 
@@ -85,6 +85,11 @@ def humanize_text(s: str) -> str:
     # уборка после вырезания: пустые скобки, двойные пробелы, пробел перед знаками
     s = re.sub(r"\(\s*[,;]?\s*\)|\[\s*\]", "", s)
     s = re.sub(r"\(\s*[,;]\s*", "(", s)
+    s = re.sub(r"\s*[,;]\s*\)", ")", s)
+    # банк не считает эффект для конкретной компании — это оценка калькулятора сервиса
+    s = re.sub(r"[Пп]о (расчёту|оценке) банка(?=(?:[^.]|\.(?!\s[А-ЯЁ])){0,100}?(?:₽|долг\s*≈|выручки))",
+               lambda m: ("П" if m.group(0)[0] == "П" else "п") + "о оценке сервиса", s)
+    s = re.sub(r"оценка банка: долг", "оценка сервиса: долг", s)
     s = re.sub(r"\s+([,.;:!?)])", r"\1", s)
     s = re.sub(r"([(«])\s+", r"\1", s)
     s = re.sub(r",\s*,", ",", s)
