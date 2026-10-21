@@ -21,13 +21,19 @@ from app.news.ingest import list_events, run_ingest
 
 
 def warmup(top: int = 5, max_rub: float | None = None, background: bool = False, roles: bool = False,
-           refresh: bool = False) -> None:
+           refresh: bool = False, max_minutes: float | None = None) -> None:
     """Предрасчёт: разборы всех событий (уровень 1) + инсайты демо-персон по топ-событиям ленты (уровень 2).
 
     --background: приоритет «фон» — не трогает резерв бюджета под пользователей.
     --roles: дополнительно строить инсайты для всех ролей (персонализация по роли в снапшоте).
     --refresh: пересобрать инсайты, даже если они уже есть (после правки промптов); ответы моделей не из кэша.
+    --max-minutes: мягкий лимит времени — прогон останавливается сам, и снапшот успевает выгрузиться
+    (иначе таймаут CI убивает job и все результаты теряются).
+    Порядок: сначала основная роль каждой демо-персоны, потом остальные роли — при остановке важное уже готово.
     """
+    import time
+
+    deadline = time.monotonic() + max_minutes * 60 if max_minutes else None
     from app.agent.event_brief import get_event_brief
     from app.agent.orchestrator import get_or_create_insight
     from app.data.profiles import get_profile
@@ -45,6 +51,8 @@ def warmup(top: int = 5, max_rub: float | None = None, background: bool = False,
     start = llm.budget_status()["spent_rub"]
 
     def over() -> bool:
+        if deadline and time.monotonic() >= deadline:
+            return True
         return max_rub is not None and llm.budget_status()["spent_rub"] - start >= max_rub
 
     events = list_events(300)
@@ -56,17 +64,19 @@ def warmup(top: int = 5, max_rub: float | None = None, background: bool = False,
                     break
                 _, by, _ = get_event_brief(e)
                 print(f"brief  | {e.title[:60]:60s} | {by}")
-            for u in load_demo_users():
-                p = get_profile(u["primary_company"])
-                for role in ([u["role"], *[r for r in role_titles() if r != u["role"]]] if roles else [u["role"]]):
-                    for s in rank_feed(events, p, role, limit=top):
-                        if over():
-                            raise LLMUnavailable(f"лимит прогона {max_rub} ₽")
-                        ins = get_or_create_insight(s.event, p, role, force=refresh)
-                        if ins.scores:
-                            judged.append(sum(ins.scores.values()) / len(ins.scores))
-                        print(f"insight| {u['label'][:28]:28s} | {role:10s} | {s.event.title[:44]:44s} | {ins.generated_by} | "
-                              f"quality={all(c.passed for c in ins.quality)} | scores={ins.scores}")
+            users = [(u, get_profile(u["primary_company"])) for u in load_demo_users()]
+            plan = [(u, p, u["role"]) for u, p in users]
+            if roles:
+                plan += [(u, p, r) for u, p in users for r in role_titles() if r != u["role"]]
+            for u, p, role in plan:
+                for s in rank_feed(events, p, role, limit=top):
+                    if over():
+                        raise LLMUnavailable(f"лимит прогона: {max_rub} ₽ или {max_minutes} мин")
+                    ins = get_or_create_insight(s.event, p, role, force=refresh)
+                    if ins.scores:
+                        judged.append(sum(ins.scores.values()) / len(ins.scores))
+                    print(f"insight| {u['label'][:28]:28s} | {role:10s} | {s.event.title[:44]:44s} | {ins.generated_by} | "
+                          f"quality={all(c.passed for c in ins.quality)} | scores={ins.scores}")
         except LLMUnavailable as e:
             print("Остановлено:", e)
     if judged:
@@ -84,13 +94,14 @@ def main() -> None:
     ap.add_argument("--background", action="store_true")
     ap.add_argument("--roles", action="store_true")
     ap.add_argument("--refresh", action="store_true", help="warmup: пересобрать уже готовые инсайты")
+    ap.add_argument("--max-minutes", type=float, help="warmup: мягкий лимит времени прогона")
     a = ap.parse_args()
     if a.cmd == "bootstrap":
         print(json.dumps(bootstrap(force=a.force), ensure_ascii=False, indent=2))
     elif a.cmd == "ingest":
         print(json.dumps(run_ingest(a.source), ensure_ascii=False, indent=2))
     elif a.cmd == "warmup":
-        warmup(a.top, a.max_rub, a.background, a.roles, a.refresh)
+        warmup(a.top, a.max_rub, a.background, a.roles, a.refresh, a.max_minutes)
     elif a.cmd == "snapshot-export":
         from app.storage.snapshot import export_snapshot
 
