@@ -112,7 +112,8 @@ def t_get_counterparties(ctx: AgentContext) -> dict:
             "network_percentile": p.network_pct, "affiliated_companies": len(p.affiliates),
             "top_counterparties": [
         {"role": "покупатель" if c.direction == "in" else "поставщик", "okved": c.okved, "okved_name": c.okved_name,
-         "share": round(c.share, 3), "basis": f"graph:{c.direction}:{c.okved}"} for c in ctx.profile.counterparties],
+         "share": round(c.share, 3), "share_pct": f"{c.share:.0%}", "basis": f"graph:{c.direction}:{c.okved[:2]}"}
+        for c in ctx.profile.counterparties if c.okved],  # без ОКВЭД ссылку graph:<...> построить нельзя
         "top_buyer_share": ctx.profile.top_buyer_share, "top_supplier_share": ctx.profile.top_supplier_share}
 
 
