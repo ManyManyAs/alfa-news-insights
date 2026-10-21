@@ -1,8 +1,8 @@
 {
   "relevance": {
     "p3": 0.958,
-    "ndcg5": 0.812,
-    "critical_recall10": 0.816,
+    "ndcg5": 0.82,
+    "critical_recall10": 0.842,
     "cases": 8,
     "pairs": 336
   },
@@ -40,5 +40,5 @@
     "borderline_to_arbiter": 8
   },
   "selfcheck_passed": 1.0,
-  "generated_at": "2026-10-21T13:45:48Z"
+  "generated_at": "2026-10-21T18:07:49Z"
 }
