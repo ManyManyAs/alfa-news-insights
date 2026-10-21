@@ -157,7 +157,7 @@ def allowed_sources(ctx: AgentContext) -> list[str]:
         elif k.startswith("get_bank_forecast"):
             ids += [f["ref"] for f in v.get("forecasts", []) if f.get("ref")]
         elif k.startswith("get_counterparties"):
-            ids += [m["basis"] for m in v.get("industry_mix", [])]
+            ids += [m["basis"] for m in v.get("industry_mix", [])] + [c["basis"] for c in v.get("top_counterparties", [])]
         elif k.startswith("scenario_calc"):
             ids.append("calc:scenario")
     for r in ctx.scored.reasons:
