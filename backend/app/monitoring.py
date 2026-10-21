@@ -122,7 +122,8 @@ def offline_metrics() -> dict | None:
     return json.loads(p.read_text(encoding="utf-8")) if p.exists() else None
 
 
-def alerts(budget: dict, product: dict, judge: dict, sources_down: int, injections_24h: int) -> list[dict]:
+def alerts(budget: dict, product: dict, judge: dict, sources_down: int, injections_24h: int,
+           cost: dict | None = None) -> list[dict]:
     out = []
 
     def add(level: str, text: str) -> None:
@@ -141,6 +142,11 @@ def alerts(budget: dict, product: dict, judge: dict, sources_down: int, injectio
     js = product.get("counts", {}).get("js_error", 0)
     if js >= 5:
         add("warn", f"Ошибок в браузере за период: {js} — смотреть журнал ui_events (type=js_error)")
+    full = product["speed_ms"].get("full_fresh_p95")
+    if full is not None and full > 60000:
+        add("warn", f"Полный разбор p95 = {full / 1000:.0f} с — дольше цели 60 с")
+    if cost and cost.get("avg_rub") is not None and cost["avg_rub"] > 2:
+        add("warn", f"Средняя стоимость разбора {cost['avg_rub']:.2f} ₽ — выше цели 2 ₽".replace(".", ","))
     if sources_down:
         add("warn", f"Источников новостей с ошибками: {sources_down}")
     if injections_24h > 5:

@@ -48,6 +48,25 @@ def llm_priority(value: str):
         _priority.reset(token)
 
 
+# Крайний срок для вызовов модели в текущем запросе (time.monotonic): агент передаёт остаток своего бюджета времени,
+# и HTTP-таймаут запроса к модели не выходит за него
+_deadline: ContextVar[float | None] = ContextVar("llm_deadline", default=None)
+
+
+@contextmanager
+def llm_deadline(seconds: float):
+    token = _deadline.set(time.monotonic() + seconds)
+    try:
+        yield
+    finally:
+        _deadline.reset(token)
+
+
+def time_left() -> float | None:
+    d = _deadline.get()
+    return None if d is None else d - time.monotonic()
+
+
 class LLMUnavailable(RuntimeError):
     def __init__(self, message: str = ""):
         super().__init__(redact(str(message)))
@@ -384,12 +403,19 @@ class LLMClient:
         url = self.settings.llm_base_url.rstrip("/") + "/chat/completions"
         delay = 1.5
         for i in range(attempts):
-            with httpx.Client(timeout=self.settings.llm_timeout_s) as client:
+            left = time_left()
+            if left is not None and left < 3:
+                raise LLMUnavailable("не осталось времени на вызов модели в этом запросе")
+            timeout = self.settings.llm_timeout_s if left is None else min(self.settings.llm_timeout_s, left)
+            with httpx.Client(timeout=timeout) as client:
                 r = client.post(url, json=payload, headers=self._headers())
             if "budget has been exceeded" in r.text.lower():
                 raise LLMUnavailable("Бюджет ключа на сегодня исчерпан (сброс в 03:00 МСК)")
             if r.status_code in RETRY_STATUS and i < attempts - 1:
                 wait = float(r.headers.get("retry-after") or delay)
+                left = time_left()
+                if left is not None and left < wait + 5:
+                    raise LLMUnavailable(f"LLM API {r.status_code}, на повтор не хватает времени")
                 log.warning("LLM API %s, повтор через %.1f с", r.status_code, wait)
                 time.sleep(min(wait, 20))
                 delay *= 2

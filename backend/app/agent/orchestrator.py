@@ -9,9 +9,11 @@
 """
 from __future__ import annotations
 
+import contextvars
 import json
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 from app.agent import prompts
 from app.agent.llm_schemas import CriticOut, InsightDraftOut, PlanOut
@@ -23,18 +25,24 @@ from app.config import load_yaml
 from app.data.models import CompanyProfile
 from app.data.sensitivity import compute_exposures
 from app.knowledge.bank import get_knowledge
-from app.llm.client import LLMResult, LLMUnavailable, get_llm
+from app.llm.client import LLMResult, LLMUnavailable, get_llm, llm_deadline
 from app.news.models import Event
 from app.ranking.scorer import score_event
 from app.security.guard import UNTRUSTED_NOTICE, sanitize_untrusted
 from app.storage import db
 
 log = logging.getLogger(__name__)
-MAX_ITERATIONS = 2
+MAX_ITERATIONS = 2  # черновик + одна правка (решение о правке — decide_revise)
 MANDATORY = ["get_event_brief", "get_company_profile", "get_bank_theses", "scenario_calc"]
-# Ограничители на один запрос: по исчерпании оставшиеся шаги идут без LLM (правила), отказ виден в трассировке
-AGENT_TIMEOUT_S = 90
+# Ограничители на один запрос: по исчерпании оставшиеся шаги идут без LLM (правила), отказ виден в трассировке.
+# Остаток времени передаётся и в HTTP-таймаут вызова модели (llm_deadline), поэтому лимит не превышается «на хвосте».
+AGENT_TIMEOUT_S = 60
 AGENT_MAX_COST_RUB = 4.0
+# Правка моделью — только если она нужна (замечания LLM-критика или нет позиции банка) и на неё хватает
+# времени и денег; иначе замечания закрываются детерминированной правкой (repair_rules)
+REVISE_MIN_LEFT_S = 25
+CRITIC2_MIN_LEFT_S = 12
+REVISE_COST_FALLBACK_RUB = 1.5
 # Полный разбор с триггерами и сценариями длиннее 2200 токенов — обрезанный JSON уводил черновик на правила
 DRAFT_MAX_TOKENS = 4000
 
@@ -205,13 +213,13 @@ def draft(ctx: AgentContext, tracer: Tracer) -> Insight:
         return ins
 
 
-def critique(ins: Insight, ctx: AgentContext, tracer: Tracer, iteration: int) -> list[str]:
+def critique(ins: Insight, ctx: AgentContext, tracer: Tracer, iteration: int, use_llm: bool = True) -> list[str]:
     with tracer.step(f"critique:rules#{iteration}", "rules", input={"claims": "all"}) as rec:
         checks, issues = critique_rules(ins, ctx)
         ins.quality = checks
         rec["output"] = {"checks": [c.model_dump() for c in checks], "issues": issues}
     llm = get_llm()
-    if llm.enabled and ins.generated_by.startswith("llm") and llm_allowed(ctx, tracer):
+    if use_llm and llm.enabled and ins.generated_by.startswith("llm") and llm_allowed(ctx, tracer):
         with tracer.step(f"critique:llm#{iteration}", "llm") as rec:
             # сценарии и триггеры считает калькулятор — критик оценивает только текст модели
             draft_json = ins.model_dump_json(exclude={"scenarios", "what_could_change", "quality", "scores", "relevance",
@@ -237,7 +245,7 @@ def critique(ins: Insight, ctx: AgentContext, tracer: Tracer, iteration: int) ->
     return issues
 
 
-def adapt(ins: Insight, ctx: AgentContext, issues: list[str], tracer: Tracer) -> Insight:
+def adapt(ins: Insight, ctx: AgentContext, issues: list[str], tracer: Tracer, use_llm: bool = True) -> Insight:
     """Корректировка процесса: доп. поиск при нехватке данных + правка черновика."""
     if any("аналитику банка" in i or "Позиция банка" in i for i in issues):
         titles = load_yaml("factors.yaml")["factors"]
@@ -248,7 +256,7 @@ def adapt(ins: Insight, ctx: AgentContext, issues: list[str], tracer: Tracer) ->
             ctx.memory["search_bank_analytics#retry"] = res
             rec["output"] = res
     llm = get_llm()
-    if llm.enabled and ins.generated_by.startswith("llm") and llm_allowed(ctx, tracer):
+    if use_llm and llm.enabled and ins.generated_by.startswith("llm") and llm_allowed(ctx, tracer):
         with tracer.step("revise", "llm", input={"issues": issues}) as rec:
             msg = [{"role": "system", "content": prompts.REVISE_SYSTEM.format(notice=UNTRUSTED_NOTICE)},
                    {"role": "user", "content": _context_for_llm(ctx) + "\n<draft>\n" + ins.model_dump_json()
@@ -262,8 +270,8 @@ def adapt(ins: Insight, ctx: AgentContext, issues: list[str], tracer: Tracer) ->
                 rec["output"] = ins.model_dump()
             except Exception as e:
                 rec["output"] = {"fallback": str(e)}
-    elif any("аналитику банка" in i or "Позиция банка" in i for i in issues):
-        ins = draft_rules(ctx)
+    elif not ins.generated_by.startswith("llm") and any("аналитику банка" in i or "Позиция банка" in i for i in issues):
+        ins = draft_rules(ctx)  # черновик правил пересобираем с найденными фрагментами аналитики
     with tracer.step("repair:rules", "rules") as rec:
         ins = repair_rules(ins, ctx)
         rec["output"] = {"removed_unsupported": True}
@@ -328,6 +336,30 @@ def _profile_label(sid: str, p: CompanyProfile) -> str:
     return labels.get(ref, ref)
 
 
+def decide_revise(ins: Insight, ctx: AgentContext, issues: list[str], tracer: Tracer) -> bool:
+    """Нужна ли правка моделью и хватает ли на неё времени и денег. Решение и причина — в трассировке."""
+    llm_issues = [i for i in issues if i.startswith("LLM-критик")]
+    no_bank = any("аналитику банка" in i or "Позиция банка" in i for i in issues)
+    elapsed = time.perf_counter() - ctx.memory["_t0"]
+    spent = sum(s.get("cost_rub") or 0 for s in tracer.steps)
+    est = next((s.get("cost_rub") for s in tracer.steps if s.get("name") == "draft" and s.get("cost_rub")), None)
+    est = est or REVISE_COST_FALLBACK_RUB
+    if not ins.generated_by.startswith("llm") or not get_llm().enabled:
+        verdict, why = False, "черновик построен правилами — правка правилами"
+    elif not (llm_issues or no_bank):
+        verdict, why = False, "замечания только формальные — их закрывает детерминированная правка"
+    elif AGENT_TIMEOUT_S - elapsed < REVISE_MIN_LEFT_S:
+        verdict, why = False, f"на правку моделью не хватает времени ({AGENT_TIMEOUT_S - elapsed:.0f} с из {REVISE_MIN_LEFT_S} с)"
+    elif spent + est > AGENT_MAX_COST_RUB:
+        verdict, why = False, f"правка выйдет за лимит стоимости ({spent:.2f} + ~{est:.2f} ₽ > {AGENT_MAX_COST_RUB} ₽)"
+    else:
+        verdict, why = True, f"замечаний критика: {len(llm_issues)}" + (", нет позиции банка" if no_bank else "")
+    with tracer.step("decide:revise", "rules", input={"issues": len(issues), "elapsed_s": round(elapsed, 1),
+                                                       "cost_rub": round(spent, 3)}) as rec:
+        rec["output"] = {"revise_with_llm": verdict, "why": why}
+    return verdict
+
+
 def run_agent(event: Event, profile: CompanyProfile, role: str | None = None, listener=None) -> Insight:
     tracer = Tracer(listener=listener)
     exposures = compute_exposures(profile, role)
@@ -345,18 +377,25 @@ def run_agent(event: Event, profile: CompanyProfile, role: str | None = None, li
                                                       "takeaway": pv.takeaway.model_dump(),
                                                       "scenarios": [s.model_dump() for s in pv.scenarios]}})
 
-    p = plan(ctx, tracer)
-    execute(ctx, p, tracer)
-    ins = draft(ctx, tracer)
-    iterations = 1
-    for i in range(1, MAX_ITERATIONS + 1):
-        issues = critique(ins, ctx, tracer, i)
-        if not issues:
-            break
-        if i == MAX_ITERATIONS:
-            break
-        ins = adapt(ins, ctx, issues, tracer)
-        iterations += 1
+    with llm_deadline(AGENT_TIMEOUT_S):
+        # разбор события (общий для всех клиентов, самый долгий инструмент) строится параллельно с планом
+        pool = ThreadPoolExecutor(max_workers=1)
+        if get_llm().enabled:
+            from app.agent.event_brief import get_event_brief
+
+            ctx.memory["_brief_future"] = pool.submit(contextvars.copy_context().run, get_event_brief, event)
+        p = plan(ctx, tracer)
+        execute(ctx, p, tracer)
+        pool.shutdown(wait=False)
+        ins = draft(ctx, tracer)
+        iterations = 1
+        issues = critique(ins, ctx, tracer, 1)
+        if issues:
+            revise = decide_revise(ins, ctx, issues, tracer)
+            ins = adapt(ins, ctx, issues, tracer, use_llm=revise)
+            iterations = 2
+            left = AGENT_TIMEOUT_S - (time.perf_counter() - ctx.memory["_t0"])
+            critique(ins, ctx, tracer, 2, use_llm=revise and left >= CRITIC2_MIN_LEFT_S)
     if any(not c.passed for c in ins.quality):
         ins = repair_rules(ins, ctx)
         ins.quality, _ = critique_rules(ins, ctx)
