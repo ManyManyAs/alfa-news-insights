@@ -96,3 +96,19 @@ def test_cached_insight_gets_scenarios(client, demo):
     ins = client.get(f"/api/insights/{ev}?company_id={u['primary_company']}", headers=h).json()
     assert len(ins["scenarios"]) == 3
     assert "judge" in client.get("/api/metrics").json()["insights"]
+
+
+def test_digest(client, demo):
+    u, h = demo
+    for period in ("week", "day"):
+        d = client.get(f"/api/digest?company_id={u['primary_company']}&role=cfo&period={period}", headers=h).json()
+        assert d["role_title"] == "Финансовый директор" and "top" in d and "dates" in d
+        assert all(x["days"] >= 0 for x in d["dates"])
+    assert client.get(f"/api/digest?company_id={u['primary_company']}&period=year", headers=h).status_code == 422
+    assert client.get("/api/digest?company_id=U_NOT_MINE", headers=h).status_code in (403, 404)
+
+
+def test_index_versions_all_static(client):
+    html = client.get("/").text
+    for name in ("viz.js", "tour.js", "app.js", "styles.css"):
+        assert f"/static/{name}?v=" in html

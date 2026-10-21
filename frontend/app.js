@@ -80,8 +80,19 @@ async function init() {
   document.querySelectorAll("[data-view]").forEach((el) => el.onclick = () => show(el.dataset.view));
   document.querySelectorAll("[data-goto]").forEach((el) => el.onclick = () => show(el.dataset.goto));
   $("#analyzeBtn").onclick = () => $("#analyzeDialog").showModal();
+  bindFeedControls();
+  $("#tourBtn").onclick = startTour;
+  $("#themeBtn").onclick = toggleTheme;
+  document.querySelectorAll("[data-dper]").forEach((b) => b.onclick = () => {
+    state.digestPeriod = b.dataset.dper;
+    document.querySelectorAll("[data-dper]").forEach((x) => x.classList.toggle("on", x === b));
+    loadDigest();
+  });
+  document.querySelectorAll(".nav-item[data-view]").forEach((el) => { el.tabIndex = 0; el.setAttribute("role", "link");
+    el.onkeydown = (e) => { if (e.key === "Enter") show(el.dataset.view); }; });
   $("#analyzeSubmit").onclick = analyzeNews;
   if (users.length) await selectUser(users[0].user_id);
+  maybeOnboard();
 }
 
 async function selectUser(uid) {
@@ -101,12 +112,14 @@ function show(view) {
   document.querySelectorAll(".nav-item[data-view]").forEach((n) => n.classList.toggle("active", n.dataset.view === view));
   if (view === "metrics") loadMetrics();
   if (view === "sources") loadSources();
+  if (view === "digest") loadDigest();
 }
 
 async function reload() {
   state.insight = null; state.current = null;
   $("#insightPanel").innerHTML = `<div class="empty">Выберите событие — сервис объяснит, что оно значит именно для вашей компании.</div>`;
   await Promise.all([loadProfile(), loadFeed(), state.bankLoaded ? null : loadBank()]);
+  if ($("#view-digest").classList.contains("active")) loadDigest();
 }
 
 // ---------------------------------------------------------------- позиция банка (макропрогноз)
@@ -140,7 +153,8 @@ async function loadBank() {
 // ---------------------------------------------------------------- профиль
 async function loadProfile() {
   const { profile: p, exposures, peers, overrides, factors } = await api(`/api/companies/${state.company}?${q({ role: state.role })}`);
-  state.factors = factors;
+  state.factors = factors; state.exposures = exposures;
+  renderRadar();
   const money = (v) => v == null ? "нет данных" : (v >= 1e9 ? (v / 1e9).toFixed(1) + " млрд ₽" : (v / 1e6).toFixed(1) + " млн ₽");
   const products = { CL_PRODUCT_RKO_MARK: "РКО", CL_PRODUCT_LOA_MARK: "Кредит", CL_PRODUCT_LEA_MARK: "Лизинг", CL_PRODUCT_DEP_MARK: "Депозит", CL_PRODUCT_ZPP_MARK: "Зарплатный проект", CL_PRODUCT_GAR_MARK: "Гарантии", FACTORING_MARK: "Факторинг", FTS_FLAG: "ВЭД" };
   $("#profileCard").innerHTML = `
@@ -220,12 +234,20 @@ function peersBlock(b) {
 // ---------------------------------------------------------------- лента
 async function loadFeed() {
   $("#widgetList").innerHTML = `<div class="skeleton"></div>`;
-  const { items, quiet } = await api(`/api/feed?${q({ company_id: state.company, role: state.role })}`);
-  state.feed = items; state.feedKey = `${state.company}|${state.role}`;
+  const { items, quiet } = await api(`/api/feed?${q({ company_id: state.company, role: state.role, limit: 40 })}`);
+  state.feed = items; state.feedKey = `${state.company}|${state.role}`; state.rerank = null; state.quiet = quiet;
   $("#navBadge").textContent = items.filter((i) => i.effect === "risk").length || "";
-  const reasonText = (it) => it.reasons.slice(0, 2).map((r) => `${r.factor_title}${r.direction && r.direction !== "unknown" ? " " + DIR[r.direction] : ""}`).join(" · ");
+  renderWidget();
+  fillFactorFilter();
+  renderFeedList();
+  renderRadar();
+  applyRerank(state.feedKey);
+}
+
+function renderWidget() {
+  const items = state.feed, quiet = state.quiet;
   $("#widgetList").innerHTML = items.slice(0, 4).map((it) => `
-    <div class="w-item" data-ev="${it.event_id}">
+    <div class="w-item" data-ev="${it.event_id}" tabindex="0" role="button">
       <span class="pill ${it.effect}">${EFFECT[it.effect]}</span><span class="muted small">${fmtDate(it.published_at)}</span>
       <div class="title"><b>${esc(it.title)}</b></div>
       <div class="why">Почему вам: ${esc(it.reasons[0]?.why || "")}</div>
@@ -234,20 +256,81 @@ async function loadFeed() {
   if (quiet) {
     $("#widgetList").insertAdjacentHTML("afterbegin", `<div class="quiet">За последние ${quiet.days} дней значимых для вашей компании событий не было — это тоже ответ: менять планы не нужно.${quiet.last ? ` Последнее важное — ниже.` : ""}</div>`);
   }
-  $("#feedList").innerHTML = items.map((it) => `
-    <div class="feed-item" data-ev="${it.event_id}">
+  bindCards($("#widgetList"));
+}
+
+// ---- фильтры ленты: эффект, фактор, период, поиск, сортировка, «непрочитанные»
+const filters = { effect: "all", factor: "", period: "all", text: "", sort: "relevance", unread: false };
+function readSet() { try { return new Set(JSON.parse(localStorage.getItem("read:" + state.company) || "[]")); } catch (e) { return new Set(); } }
+function markRead(id) {
+  const s = readSet(); s.add(id);
+  try { localStorage.setItem("read:" + state.company, JSON.stringify([...s].slice(-500))); } catch (e) { /* хранилище недоступно */ }
+  document.querySelectorAll(`.feed-item[data-ev="${CSS.escape(id)}"]`).forEach((el) => el.classList.add("read"));
+}
+function fillFactorFilter() {
+  const seen = new Map();
+  state.feed.forEach((it) => it.reasons.forEach((r) => { if (!["country", "industry", "region"].includes(r.factor)) seen.set(r.factor, r.factor_title); }));
+  $("#fFactor").innerHTML = `<option value="">Все факторы</option>` + [...seen].map(([k, v]) => `<option value="${esc(k)}">${esc(v)}</option>`).join("");
+  $("#fFactor").value = seen.has(filters.factor) ? filters.factor : "";
+}
+function visibleFeed() {
+  const read = readSet(), now = Date.now(), days = { week: 7, month: 30 }[filters.period];
+  const t = filters.text.toLowerCase();
+  let list = state.feed.filter((it) =>
+    (filters.effect === "all" || it.effect === filters.effect)
+    && (!filters.factor || it.reasons.some((r) => r.factor === filters.factor))
+    && (!days || (now - new Date(it.published_at)) / 864e5 <= days)
+    && (!t || (it.title + " " + it.summary).toLowerCase().includes(t))
+    && (!filters.unread || !read.has(it.event_id)));
+  if (filters.sort === "date") list = [...list].sort((a, b) => String(b.published_at).localeCompare(String(a.published_at)));
+  return list;
+}
+function renderFeedList(animate = false) {
+  const list = $("#feedList");
+  const before = animate ? new Map([...list.children].map((el) => [el.dataset.ev, el.getBoundingClientRect().top])) : null;
+  const read = readSet(), notes = (state.rerank && state.rerank.notes) || {};
+  const reasonText = (it) => it.reasons.slice(0, 2).map((r) => `${r.factor_title}${r.direction && r.direction !== "unknown" ? " " + DIR[r.direction] : ""}`).join(" · ");
+  const items = visibleFeed();
+  $("#feedCount").textContent = `${items.length} из ${state.feed.length}`;
+  list.innerHTML = items.map((it) => {
+    const n = notes[it.event_id];
+    return `<div class="feed-item ${read.has(it.event_id) ? "read" : ""} ${it.event_id === state.current ? "active" : ""}" data-ev="${it.event_id}" tabindex="0" role="button">
       <div><span class="pill ${it.effect}">${EFFECT[it.effect]}</span>${it.has_bank_view ? `<span class="pill bank">есть позиция банка</span>` : ""}${effectiveTag(it.effective)}</div>
       <div class="title">${esc(it.title)}</div>
-      <div class="meta">${fmtDate(it.published_at)} · ${esc([...new Set(it.sources.map((s) => s.source))].join(", "))}${it.sources.length > 1 ? ` · ${it.sources.length} ${plural(it.sources.length, "публикация", "публикации", "публикаций")}` : ""} · релевантность ${it.score}</div>
+      <div class="meta">${fmtDate(it.published_at)} · ${esc([...new Set(it.sources.map((x) => x.source))].join(", "))}${it.sources.length > 1 ? ` · ${it.sources.length} ${plural(it.sources.length, "публикация", "публикации", "публикаций")}` : ""} · релевантность ${it.score}</div>
       <div class="chips">${entityChips(it)}</div>
       <div class="reasons">${esc(reasonText(it))}</div>
       ${it.reasons.find((r) => r.personal) ? `<div class="personal">⚙ ${esc(it.reasons.find((r) => r.personal).personal.why)}</div>` : ""}
-      <div class="ai-note" hidden></div>
+      ${n ? `<div class="ai-note"><b>ИИ:</b> ${esc(n.why)} <span class="rel r${n.relevance}">${"●".repeat(n.relevance)}${"○".repeat(3 - n.relevance)}</span></div>` : ""}
       ${it.story ? `<div class="story-badge">Сюжет · ${it.story.count} ${plural(it.story.count, "событие", "события", "событий")}: ${esc(fmtDate(it.story.timeline[0].published_at))} → ${esc(fmtDate(it.story.timeline[it.story.timeline.length - 1].published_at))}</div>` : ""}
       <div class="score-bar"><i style="width:${Math.min(100, it.score * 60)}%"></i></div>
-    </div>`).join("") || `<div class="empty">Значимых событий нет.</div>`;
-  document.querySelectorAll("[data-ev]").forEach((el) => el.onclick = () => { show("radar"); openInsight(el.dataset.ev); });
-  applyRerank(state.feedKey);
+    </div>`;
+  }).join("") || `<div class="empty">${state.feed.length ? "Под фильтры ничего не подошло — сбросьте их." : "Значимых событий нет."}</div>`;
+  if (before) for (const el of list.children) {
+    const dy = (before.get(el.dataset.ev) ?? el.getBoundingClientRect().top) - el.getBoundingClientRect().top;
+    if (dy) el.animate([{ transform: `translateY(${dy}px)` }, { transform: "none" }], { duration: 450, easing: "ease-out" });
+  }
+  bindCards(list);
+}
+function bindCards(root) {
+  root.querySelectorAll("[data-ev]").forEach((el) => {
+    const open = () => { show("radar"); openInsight(el.dataset.ev); };
+    el.onclick = open;
+    el.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } };
+  });
+}
+function bindFeedControls() {
+  document.querySelectorAll("[data-feff]").forEach((b) => b.onclick = () => {
+    filters.effect = b.dataset.feff;
+    document.querySelectorAll("[data-feff]").forEach((x) => x.classList.toggle("on", x === b));
+    renderFeedList();
+  });
+  $("#fFactor").onchange = (e) => { filters.factor = e.target.value; renderFeedList(); };
+  $("#fPeriod").onchange = (e) => { filters.period = e.target.value; renderFeedList(); };
+  $("#fSort").onchange = (e) => { filters.sort = e.target.value; renderFeedList(); };
+  $("#fUnread").onchange = (e) => { filters.unread = e.target.checked; renderFeedList(); };
+  let t;
+  $("#fText").oninput = (e) => { clearTimeout(t); t = setTimeout(() => { filters.text = e.target.value.trim(); renderFeedList(); }, 150); };
 }
 
 // ИИ уточняет порядок верха ленты в фоне: карточки плавно переставляются, у каждой — короткая причина модели
@@ -255,26 +338,28 @@ async function applyRerank(key) {
   if (state.llmMode === "mock" || !state.feed.length) return;
   $("#rerankNote").textContent = "ИИ уточняет порядок…";
   let r;
-  try { r = await api(`/api/feed/rerank?${q({ company_id: state.company, role: state.role })}`); } catch (e) { r = { applied: false }; }
+  try { r = await api(`/api/feed/rerank?${q({ company_id: state.company, role: state.role, limit: 40 })}`); } catch (e) { r = { applied: false }; }
   if (key !== state.feedKey) return;  // пользователь уже сменил компанию или роль
   if (!r.applied) { $("#rerankNote").textContent = ""; return; }
-  const list = $("#feedList");
-  const before = new Map([...list.children].map((el) => [el.dataset.ev, el.getBoundingClientRect().top]));
-  r.order.forEach((id) => { const el = list.querySelector(`.feed-item[data-ev="${CSS.escape(id)}"]`); if (el) list.appendChild(el); });
-  for (const el of list.children) {
-    const n = r.notes[el.dataset.ev];
-    const box = el.querySelector(".ai-note");
-    if (n && box) { box.hidden = false; box.innerHTML = `<b>ИИ:</b> ${esc(n.why)} <span class="rel r${n.relevance}">${"●".repeat(n.relevance)}${"○".repeat(3 - n.relevance)}</span>`; }
-    const dy = (before.get(el.dataset.ev) ?? 0) - el.getBoundingClientRect().top;
-    if (dy) el.animate([{ transform: `translateY(${dy}px)` }, { transform: "none" }], { duration: 450, easing: "ease-out" });
-  }
-  state.feed.sort((a, b) => r.order.indexOf(a.event_id) - r.order.indexOf(b.event_id));
+  state.rerank = r;
+  const pos = new Map(r.order.map((id, i) => [id, i]));
+  state.feed.sort((a, b) => (pos.get(a.event_id) ?? 1e9) - (pos.get(b.event_id) ?? 1e9));
+  renderFeedList(true);
+  renderWidget();
   $("#rerankNote").innerHTML = `✨ Порядок уточнён ИИ <span class="muted">(${esc(r.model || "")}${r.cached ? ", из кэша" : ""})</span>`;
+}
+
+// Радар на главной: чувствительность компании и сигналы ленты
+function renderRadar() {
+  const box = document.getElementById("radarChart");
+  if (!box || !state.exposures) return;
+  box.innerHTML = factorRadar(state.exposures, state.feed) || `<div class="muted small">Недостаточно данных о компании.</div>`;
 }
 
 // ---------------------------------------------------------------- инсайт
 async function openInsight(eventId, refresh = false) {
   state.current = eventId;
+  markRead(eventId);
   document.querySelectorAll(".feed-item").forEach((el) => el.classList.toggle("active", el.dataset.ev === eventId));
   $("#insightPanel").innerHTML = `<div class="insight"><div id="previewBox"></div><div class="eyebrow">Агент анализирует событие</div>
     <ol class="progress" id="agentProgress"></ol></div>`;
@@ -375,6 +460,8 @@ function renderInsight(tab) {
   let body = "";
   if (tab === "analysis") {
     body = `
+      <details class="impact-wrap" open><summary>Карта влияния: как событие доходит до вашей компании</summary>${impactMap(i)}</details>
+      <div class="kinds"><span class="k-fact">Факт</span><span class="k-assumption">Предположение источника</span><span class="k-bank_view">Позиция Альфа-Банка</span><span class="k-ai_inference">Вывод сервиса (AI)</span></div>
       <div class="q"><h4><span class="n">1</span>Что произошло</h4>${claims(i.what_happened)}</div>
       <div class="q"><h4><span class="n">2</span>Почему это важно для вашей компании</h4>${claims(i.why_it_matters)}</div>
       <div class="q"><h4><span class="n">3</span>Возможные последствия</h4>
@@ -415,9 +502,10 @@ function renderInsight(tab) {
     <div class="takeaway"><span class="claim-kind small" style="color:var(--ai)">ВЫВОД СЕРВИСА · </span>${esc(i.takeaway.text)}<div>${srcTags(i.takeaway.sources)}</div></div>
     ${i.data_gaps.length ? `<div class="notice">Учтены пробелы в данных: ${esc(i.data_gaps.join("; "))}</div>` : ""}
     ${(() => { const f = state.feed.find((x) => x.event_id === state.current); return f && f.story ? `<details class="story" open><summary>Развитие сюжета · ${f.story.count} ${plural(f.story.count, "событие", "события", "событий")}</summary>${storyLine(f.story, state.current)}</details>` : ""; })()}
-    <div class="tabs">${tabs.map(([k, t]) => `<div class="tab ${k === tab ? "active" : ""}" data-tab="${k}">${t}</div>`).join("")}</div>
+    <div class="tabs" role="tablist">${tabs.map(([k, t]) => `<button class="tab ${k === tab ? "active" : ""}" role="tab" aria-selected="${k === tab}" data-tab="${k}">${t}</button>`).join("")}</div>
     ${body}</div>`;
   document.querySelectorAll("[data-tab]").forEach((el) => el.onclick = () => renderInsight(el.dataset.tab));
+  bindImpactMap($("#insightPanel"));
   const wi = document.getElementById("whatIf");
   if (wi) wi.addEventListener("toggle", () => { if (wi.open && !wi.dataset.ready) { wi.dataset.ready = "1"; initWhatIf(); } });
   document.querySelectorAll("[data-story-ev]").forEach((el) => el.onclick = () => { if (el.dataset.storyEv !== state.current) openInsight(el.dataset.storyEv); });
@@ -431,7 +519,7 @@ function renderInsight(tab) {
 async function loadTrace(traceId) {
   const { steps } = await api(`/api/trace/${traceId}`);
   $("#traceBox").classList.remove("loading");
-  $("#traceBox").innerHTML = steps.map((s) => `<div class="trace-step">
+  $("#traceBox").innerHTML = traceTimeline(steps) + `<div class="sub-h">Шаги подробно</div>` + steps.map((s) => `<div class="trace-step">
     <div><span class="k">${esc(s.kind)}</span> <b>${s.step_no}. ${esc(s.name)}</b>
     <span class="muted small">${s.model ? "· " + esc(s.model) : ""} · ${s.duration_ms} мс${s.tokens_in ? ` · ${s.tokens_in}/${s.tokens_out} ток. · ${(+s.cost_rub).toFixed(3)} ₽` : ""}</span></div>
     <details><summary class="small muted">вход/выход</summary><pre>${esc(JSON.stringify({ input: s.input, output: s.output }, null, 2))}</pre></details></div>`).join("");
@@ -488,6 +576,52 @@ async function analyzeNews(e) {
   } catch (err) { $("#insightPanel").innerHTML = `<div class="insight bad">Ошибка: ${esc(err.message)}</div>`; }
   $("#analyzeUrl").value = ""; $("#analyzeText").value = "";
 }
+
+// ---------------------------------------------------------------- дайджест под роль
+async function loadDigest() {
+  const box = $("#digestBox");
+  box.innerHTML = `<div class="skeleton"></div>`;
+  const d = await api(`/api/digest?${q({ company_id: state.company, role: state.role, period: state.digestPeriod || "week" })}`);
+  const per = d.period === "day" ? "за день" : "за неделю";
+  const item = (t) => `<li class="dg-item" data-ev="${t.event_id}" tabindex="0" role="button"><span class="pill ${t.effect}">${EFFECT[t.effect]}</span> <b>${esc(t.title)}</b>
+    <div class="muted small">${fmtDate(t.published_at)} · ${esc(t.why)}</div></li>`;
+  const counts = Object.entries(d.counts).filter(([, v]) => v).map(([k, v]) => `${v} — ${EFFECT[k]}`).join(", ");
+  const lead = d.quiet ? `За период значимых для компании событий не было — это тоже ответ: менять планы не нужно.`
+    : `${counts || "Есть события для отслеживания"}. Фокус для роли «${d.role_title}»: ${d.focus}.`;
+  box.innerHTML = `
+    <div class="card dg-main">
+      <div class="eyebrow">${esc(d.role_title)} · ${per}</div>
+      <h3>${esc(d.company)}</h3>
+      <p>${esc(lead)}</p>
+      <div class="sub-h">Главное</div><ul class="dg-list">${d.top.map(item).join("") || `<li class="muted">Нет событий</li>`}</ul>
+      ${d.dates.length ? `<div class="sub-h">Сроки</div><ul class="dg-list">${d.dates.map((x) => `<li data-ev="${x.event_id}" tabindex="0" role="button">⏱ <b>${fmtDate(x.date)}</b> — через ${x.days} ${plural(x.days, "день", "дня", "дней")}: ${esc(x.title)}</li>`).join("")}</ul>` : ""}
+      ${d.stories.length ? `<div class="sub-h">Сюжеты, которые развивались</div><ul class="dg-list">${d.stories.map((x) => `<li>${esc(x.title)} <span class="muted small">· ${x.count} ${plural(x.count, "событие", "события", "событий")}</span></li>`).join("")}</ul>` : ""}
+      ${d.bank_revisions.length ? `<div class="sub-h">Альфа-Банк пересмотрел прогнозы</div><ul class="dg-list">${d.bank_revisions.map((x) => `<li>${esc(x.text)}</li>`).join("")}</ul>` : ""}
+    </div>
+    <div class="dg-side">
+      <div class="card email">
+        <div class="muted small">Предпросмотр письма</div>
+        <div class="em-head"><div><b>Альфа-Бизнес · Бизнес-радар</b></div><div class="muted small">Тема: ${esc(d.quiet ? `Спокойная ${d.period === "day" ? "день" : "неделя"} для вашего бизнеса` : `${d.top.length} ${plural(d.top.length, "событие", "события", "событий")} ${per}: ${d.top[0] ? d.top[0].title.slice(0, 60) : ""}`)}</div></div>
+        <div class="em-body"><p>Здравствуйте! Подборка ${per} для роли «${esc(d.role_title)}».</p>
+          <ol>${d.top.slice(0, 3).map((t) => `<li><b>${esc(t.title)}</b><br><span class="muted">${esc(t.why)}</span></li>`).join("")}</ol>
+          <p><span class="em-btn">Открыть Бизнес-радар</span></p>
+          <p class="muted small">Это демонстрация: письмо не отправляется.</p></div>
+      </div>
+      <div class="card push"><div class="muted small">Предпросмотр push</div>
+        <div class="push-n"><b>Альфа-Бизнес</b><div>${esc(d.top[0] ? `${EFFECT[d.top[0].effect][0].toUpperCase() + EFFECT[d.top[0].effect].slice(1)}: ${d.top[0].title}` : "Важных событий нет")}</div></div></div>
+    </div>`;
+  bindCards(box);
+}
+
+// ---------------------------------------------------------------- тема
+function applyTheme(t) { document.documentElement.dataset.theme = t; }
+function toggleTheme() {
+  const cur = document.documentElement.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  const next = cur === "dark" ? "light" : "dark";
+  applyTheme(next);
+  try { localStorage.setItem("theme", next); } catch (e) { /* хранилище недоступно */ }
+}
+try { const t = localStorage.getItem("theme"); if (t) applyTheme(t); } catch (e) { /* хранилище недоступно */ }
 
 // ---------------------------------------------------------------- метрики
 async function loadMetrics() {

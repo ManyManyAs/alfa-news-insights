@@ -9,6 +9,10 @@
 <body>
   <header class="topbar">
     <div class="brand"><span class="brand-mark">Б</span> Интернет-банк для бизнеса <span class="proto">прототип хакатона</span></div>
+    <div class="top-actions">
+      <button class="btn small tour-btn" id="tourBtn" title="Пошаговый сценарий проверки решения">▶ Тур для жюри</button>
+      <button class="icon-btn" id="themeBtn" title="Светлая / тёмная тема" aria-label="Переключить тему"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></button>
+    </div>
     <div class="budget-badge" id="budgetBadge" title="Остаток дневного бюджета на модели ИИ (лимит организаторов, сброс в 03:00 МСК)">ИИ-бюджет: …</div>
     <div class="session">
       <label>Пользователь
@@ -27,6 +31,7 @@
     <nav class="sidebar">
       <a class="nav-item active" data-view="home">Главная</a>
       <a class="nav-item" data-view="radar">Бизнес-радар <span class="badge" id="navBadge"></span></a>
+      <a class="nav-item" data-view="digest">Дайджест</a>
       <a class="nav-item muted">Счета и платежи</a>
       <a class="nav-item muted">Кредиты</a>
       <a class="nav-item muted">ВЭД</a>
@@ -54,6 +59,11 @@
             </div>
             <div id="widgetList" class="widget-list"><div class="skeleton"></div></div>
           </div>
+          <div class="card radar-card" id="radarCard">
+            <div class="eyebrow">Что сейчас давит на бизнес</div>
+            <div id="radarChart" class="radar-chart"><div class="skeleton"></div></div>
+            <div class="muted small"><span class="dot" style="background:var(--risk)"></span> риски <span class="dot" style="background:var(--opp)"></span> возможности — сигналы из ленты; контур — чувствительность компании</div>
+          </div>
           <div class="card profile-card" id="profileCard"></div>
           <div class="card bank-card" id="bankCard"></div>
         </div>
@@ -67,10 +77,19 @@
               <h2>Персональная лента</h2>
               <button class="btn ghost" id="analyzeBtn">+ Проверить новость</button>
             </div>
-            <div class="rerank-note small" id="rerankNote"></div>
-            <div class="legend">
-              <span class="pill risk">риск</span><span class="pill opportunity">возможность</span>
-              <span class="pill mixed">риски и возможности</span><span class="pill watch">отслеживать</span>
+            <div class="feed-tools">
+              <div class="seg" role="group" aria-label="Эффект">
+                <button class="on" data-feff="all">Все</button><button data-feff="risk">Риски</button>
+                <button data-feff="opportunity">Возможности</button><button data-feff="mixed">Смешанные</button><button data-feff="watch">Отслеживать</button>
+              </div>
+              <div class="tool-row">
+                <input id="fText" type="search" placeholder="Поиск по ленте" aria-label="Поиск по ленте">
+                <select id="fFactor" aria-label="Фактор"></select>
+                <select id="fPeriod" aria-label="Период"><option value="all">За всё время</option><option value="week">За неделю</option><option value="month">За месяц</option></select>
+                <select id="fSort" aria-label="Сортировка"><option value="relevance">По важности</option><option value="date">По дате</option></select>
+                <label class="chk"><input type="checkbox" id="fUnread"> непрочитанные</label>
+              </div>
+              <div class="tool-row small"><span class="muted" id="feedCount"></span><span class="rerank-note" id="rerankNote"></span></div>
             </div>
             <div id="feedList"></div>
           </div>
@@ -78,6 +97,12 @@
             <div class="empty">Выберите событие слева — сервис объяснит, что оно значит именно для вашей компании.</div>
           </div>
         </div>
+      </section>
+
+      <section id="view-digest" class="view">
+        <div class="feed-head"><h2>Дайджест</h2>
+          <div class="seg" role="group" aria-label="Период дайджеста"><button class="on" data-dper="week">Неделя</button><button data-dper="day">День</button></div></div>
+        <div id="digestBox" class="digest-grid"><div class="skeleton"></div></div>
       </section>
 
       <section id="view-sources" class="view">
@@ -106,6 +131,10 @@
     </form>
   </dialog>
 
+  <dialog id="onboard" aria-label="Знакомство с сервисом"></dialog>
+
+  <script src="/static/viz.js"></script>
+  <script src="/static/tour.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>

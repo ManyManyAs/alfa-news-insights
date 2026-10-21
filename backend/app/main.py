@@ -217,6 +217,50 @@ def scenario(req: ScenarioRequest, user: str = Depends(current_user)):
             "scenarios": scenario_set(p, factors, req.inputs)}
 
 
+ROLE_FOCUS = {
+    "owner": "стратегия, регуляторика и спрос", "ceo": "спрос, кадры и внешнеторговые ограничения",
+    "cfo": "стоимость денег, курс и кредитные условия", "treasurer": "ставки, курс и ликвидность",
+    "accountant": "налоги, отчётность и сроки вступления норм в силу",
+}
+
+
+@app.get("/api/digest")
+def digest(company_id: str, role: str | None = None, period: str = Query("week", pattern="^(day|week)$"),
+           user: str = Depends(current_user)):
+    """Дайджест под роль за день или неделю: главное, сроки, сюжеты, пересмотры прогнозов банка. Без LLM — быстро."""
+    p = authorized_profile(company_id, user)
+    days = 1 if period == "day" else 7
+    since = (datetime.now(UTC) - timedelta(days=days)).date().isoformat()
+    items = rank_feed(list_events(300), p, role, 30)
+    fresh = [s for s in items if (s.event.published_at or "")[:10] >= since]
+    top = (fresh or items)[:5]
+    today = datetime.now(UTC).date()
+    dates = []
+    for s in items:
+        for d in s.event.classification.effective_dates:
+            if d >= today.isoformat():
+                dates.append({"date": d, "days": (date.fromisoformat(d) - today).days, "event_id": s.event.id,
+                              "title": s.event.title})
+    stories = []
+    for sid in dict.fromkeys(s.event.story_id for s in items if s.event.story_id):
+        st = get_story(sid)
+        if st and len(st["events"]) > 1 and (st["last_at"] or "")[:10] >= since:
+            stories.append({"id": sid, "title": st["title"], "count": len(st["events"]), "last_at": st["last_at"]})
+    kb = get_knowledge()
+    titles = role_titles()
+    counts = {e: sum(1 for s in fresh if s.effect == e) for e in ("risk", "opportunity", "mixed", "watch")}
+    return {
+        "period": period, "since": since, "role": role, "role_title": titles.get(role or "", "Руководитель"),
+        "focus": ROLE_FOCUS.get(role or "", "главные риски и возможности"),
+        "company": p.display_name(), "quiet": not fresh, "counts": counts,
+        "top": [{"event_id": s.event.id, "title": s.event.title, "published_at": s.event.published_at,
+                 "effect": s.effect, "why": (s.reasons[0]["why"] if s.reasons else ""),
+                 "summary": s.event.classification.summary} for s in top],
+        "dates": sorted(dates, key=lambda x: x["date"])[:5], "stories": stories[:3],
+        "bank_revisions": [{"title": f["title"], "period": f["period"], "text": f["text"]} for f in kb.revisions()][:3],
+    }
+
+
 @app.get("/api/stories/{story_id}")
 def story(story_id: str):
     """Сюжет: хронология связанных событий (решение → реакция рынка → новые прогнозы)."""
@@ -456,11 +500,12 @@ if FRONTEND.exists():
     def index():
         """index.html с версией статики в адресах (?v=хэш), чтобы после деплоя браузер не брал старый JS/CSS из кэша."""
         import hashlib
+        import re
 
         from fastapi.responses import HTMLResponse
 
         html = (FRONTEND / "index.html").read_text(encoding="utf-8")
-        for name in ("app.js", "styles.css"):
+        for name in sorted(set(re.findall(r"/static/([\w.-]+\.(?:js|css))", html))):
             v = hashlib.sha1((FRONTEND / name).read_bytes()).hexdigest()[:10]
             html = html.replace(f"/static/{name}", f"/static/{name}?v={v}")
         return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
