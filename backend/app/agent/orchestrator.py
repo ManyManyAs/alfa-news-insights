@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 
 from app.agent import prompts
 from app.agent.llm_schemas import CriticOut, InsightDraftOut, PlanOut
@@ -30,7 +31,26 @@ from app.storage import db
 
 log = logging.getLogger(__name__)
 MAX_ITERATIONS = 2
-MANDATORY = ["get_event_brief", "get_company_profile", "get_bank_theses"]
+MANDATORY = ["get_event_brief", "get_company_profile", "get_bank_theses", "scenario_calc"]
+# Ограничители на один запрос: по исчерпании оставшиеся шаги идут без LLM (правила), отказ виден в трассировке
+AGENT_TIMEOUT_S = 90
+AGENT_MAX_COST_RUB = 4.0
+
+
+def llm_allowed(ctx: AgentContext, tracer: Tracer) -> bool:
+    """Можно ли ещё звать модель в этом запросе: время и стоимость считаются по уже выполненным шагам."""
+    if ctx.memory.get("_limit"):
+        return False
+    spent = sum(s.get("cost_rub") or 0 for s in tracer.steps)
+    elapsed = time.perf_counter() - ctx.memory.get("_t0", time.perf_counter())
+    reason = (f"превышено время на запрос ({elapsed:.0f} с > {AGENT_TIMEOUT_S} с)" if elapsed > AGENT_TIMEOUT_S else
+              f"превышена стоимость запроса ({spent:.2f} ₽ > {AGENT_MAX_COST_RUB} ₽)" if spent > AGENT_MAX_COST_RUB else None)
+    if reason:
+        ctx.memory["_limit"] = reason
+        with tracer.step("limit", "rules", input={"elapsed_s": round(elapsed, 1), "cost_rub": round(spent, 3)}) as rec:
+            rec["output"] = {"stop_llm": reason, "next": "оставшиеся шаги выполняются правилами"}
+        return False
+    return True
 
 
 def _record_llm(rec: dict, res: LLMResult) -> None:
@@ -47,6 +67,10 @@ def _rule_plan(ctx: AgentContext) -> dict:
     if ctx.profile.industry_mix or ctx.profile.counterparties:
         steps.append({"tool": "get_counterparties", "args": {}, "why": "проверить эффекты через отрасли контрагентов"})
     steps.append({"tool": "get_peer_benchmark", "args": {}, "why": "сравнить с похожими компаниями"})
+    if ctx.event.story_id:
+        steps.append({"tool": "get_story_timeline", "args": {}, "why": "событие — часть сюжета, нужен контекст развития"})
+    if ctx.event.classification.effective_dates:
+        steps.append({"tool": "get_regulation_dates", "args": {}, "why": "есть дата вступления в силу"})
     steps += [{"tool": "get_bank_forecast", "args": {}, "why": "числовые прогнозы банка и их пересмотры"},
               {"tool": "get_playbook", "args": {}, "why": "типовые каналы влияния и действия"},
               {"tool": "search_related_news", "args": {}, "why": "контекст связанных событий"},
@@ -56,9 +80,10 @@ def _rule_plan(ctx: AgentContext) -> dict:
 
 def plan(ctx: AgentContext, tracer: Tracer) -> dict:
     llm = get_llm()
-    with tracer.step("plan", "llm" if llm.enabled else "rules", input={"factors": ctx.scored.matched_factors}) as rec:
+    use_llm = llm.enabled and llm_allowed(ctx, tracer)
+    with tracer.step("plan", "llm" if use_llm else "rules", input={"factors": ctx.scored.matched_factors}) as rec:
         p = None
-        if llm.enabled:
+        if use_llm:
             tools = "\n".join(f"- {k}: {v[1]}" for k, v in TOOLS.items())
             msg = [{"role": "system", "content": prompts.PLAN_SYSTEM.format(notice=UNTRUSTED_NOTICE, tools=tools)},
                    {"role": "user", "content": json.dumps({
@@ -72,7 +97,7 @@ def plan(ctx: AgentContext, tracer: Tracer) -> dict:
                 rejected = [s["tool"] for s in p["steps"] if s.get("tool") not in TOOLS]
                 if rejected:
                     rec["rejected_tools"] = rejected  # allowlist: неизвестные инструменты не выполняются
-                p["steps"] = [s for s in p["steps"] if s.get("tool") in TOOLS][:7]
+                p["steps"] = [s for s in p["steps"] if s.get("tool") in TOOLS][:8]
                 have = {s["tool"] for s in p["steps"]}
                 p["steps"] = [{"tool": t, "args": {}, "why": "обязательный шаг"} for t in MANDATORY if t not in have] + p["steps"]
             except (LLMUnavailable, ValueError, KeyError, AttributeError) as e:
@@ -115,13 +140,34 @@ def _context_for_llm(ctx: AgentContext) -> str:
                 r["ref"] = f"bank:{r['id']}"
     mem["relevance_reasons"] = ctx.scored.reasons
     mem["role"] = ctx.role
+    mem["allowed_sources"] = allowed_sources(ctx)
     return "<context>\n" + json.dumps(mem, ensure_ascii=False, default=str)[:24000] + "\n</context>"
+
+
+def allowed_sources(ctx: AgentContext) -> list[str]:
+    """Полный список id, на которые можно ссылаться: модели не нужно угадывать, какие тезисы «существуют»."""
+    ids = [f"news:{n.id}" for n in ctx.event.news]
+    for k, v in ctx.memory.items():
+        if k.startswith("get_bank_theses"):
+            ids += [f"bank:{t['id']}" for t in v.get("theses", [])]
+        elif k.startswith("search_bank_analytics"):
+            ids += [f"bank:{r['id']}" for r in v.get("results", [])]
+        elif k.startswith("get_bank_forecast"):
+            ids += [f["ref"] for f in v.get("forecasts", []) if f.get("ref")]
+        elif k.startswith("get_counterparties"):
+            ids += [m["basis"] for m in v.get("industry_mix", [])]
+        elif k.startswith("scenario_calc"):
+            ids.append("calc:scenario")
+    for r in ctx.scored.reasons:
+        ids += [b for b in r.get("basis", []) if b.startswith(("profile:", "graph:", "peers:"))]
+    return list(dict.fromkeys(ids))
 
 
 def _parse_insight(data: dict, ctx: AgentContext, generated_by: str) -> Insight:
     base = draft_rules(ctx)  # недостающие поля берём из детерминированного черновика
     merged = base.model_dump()
-    for k in ("headline", "takeaway", "what_happened", "why_it_matters", "consequences", "actions", "bank_view", "products"):
+    for k in ("headline", "takeaway", "what_happened", "why_it_matters", "consequences", "actions", "bank_view", "products",
+              "what_could_change"):
         if data.get(k):
             merged[k] = data[k]
     merged["generated_by"] = generated_by
@@ -130,8 +176,9 @@ def _parse_insight(data: dict, ctx: AgentContext, generated_by: str) -> Insight:
 
 def draft(ctx: AgentContext, tracer: Tracer) -> Insight:
     llm = get_llm()
-    with tracer.step("draft", "llm" if llm.enabled else "rules", input={"prompt_version": prompts.PROMPT_VERSION}) as rec:
-        if llm.enabled:
+    use_llm = llm.enabled and llm_allowed(ctx, tracer)
+    with tracer.step("draft", "llm" if use_llm else "rules", input={"prompt_version": prompts.PROMPT_VERSION}) as rec:
+        if use_llm:
             msg = [{"role": "system", "content": prompts.INTERPRET_SYSTEM.format(notice=UNTRUSTED_NOTICE)},
                    {"role": "user", "content": _context_for_llm(ctx)}]
             try:
@@ -155,13 +202,16 @@ def critique(ins: Insight, ctx: AgentContext, tracer: Tracer, iteration: int) ->
         ins.quality = checks
         rec["output"] = {"checks": [c.model_dump() for c in checks], "issues": issues}
     llm = get_llm()
-    if llm.enabled and ins.generated_by.startswith("llm"):
+    if llm.enabled and ins.generated_by.startswith("llm") and llm_allowed(ctx, tracer):
         with tracer.step(f"critique:llm#{iteration}", "llm") as rec:
             msg = [{"role": "system", "content": prompts.CRITIC_SYSTEM.format(notice=UNTRUSTED_NOTICE)},
                    {"role": "user", "content": _context_for_llm(ctx) + "\n<draft>\n" + ins.model_dump_json() + "\n</draft>"}]
             try:
-                data, res = llm.complete_json("critique", msg, CriticOut, max_tokens=700)
+                raw, res = llm.complete_json("critique", msg, None, max_tokens=1600)
                 _record_llm(rec, res)
+                if isinstance(raw, list):  # модель иногда возвращает только список замечаний
+                    raw = {"verdict": "revise", "issues": [str(x) for x in raw]}
+                data = CriticOut.model_validate(raw).model_dump()
                 if data["scores"]:
                     ins.scores = {k: int(v) for k, v in data["scores"].items()}
                 low = [k for k, v in ins.scores.items() if v < 4]
@@ -170,7 +220,7 @@ def critique(ins: Insight, ctx: AgentContext, tracer: Tracer, iteration: int) ->
                     if low and not data["issues"]:
                         issues.append(f"LLM-критик: низкие оценки по осям {', '.join(low)}")
                 rec["output"] = data
-            except (LLMUnavailable, ValueError) as e:
+            except (LLMUnavailable, ValueError) as e:  # pydantic ValidationError — подкласс ValueError
                 rec["output"] = {"skipped": str(e)}
     return issues
 
@@ -186,7 +236,7 @@ def adapt(ins: Insight, ctx: AgentContext, issues: list[str], tracer: Tracer) ->
             ctx.memory["search_bank_analytics#retry"] = res
             rec["output"] = res
     llm = get_llm()
-    if llm.enabled and ins.generated_by.startswith("llm"):
+    if llm.enabled and ins.generated_by.startswith("llm") and llm_allowed(ctx, tracer):
         with tracer.step("revise", "llm", input={"issues": issues}) as rec:
             msg = [{"role": "system", "content": prompts.REVISE_SYSTEM.format(notice=UNTRUSTED_NOTICE)},
                    {"role": "user", "content": _context_for_llm(ctx) + "\n<draft>\n" + ins.model_dump_json()
@@ -233,6 +283,8 @@ def build_sources(ins: Insight, ctx: AgentContext) -> list[SourceRef]:
                                   page=(th or {}).get("page") or (chunk.page if chunk else None),
                                   quote=(th or {}).get("quote") or (chunk.text[:200] if chunk else None),
                                   stale=bool((th or {}).get("stale"))))
+        elif sid == "calc:scenario":
+            refs.append(SourceRef(id=sid, type="calc", title="Калькулятор сценариев: формулы и допущения в блоке «Что если»"))
         elif kind in ("profile", "graph", "peers"):
             refs.append(SourceRef(id=sid, type=kind, title=_profile_label(sid, ctx.profile)))
     return refs
@@ -269,8 +321,17 @@ def run_agent(event: Event, profile: CompanyProfile, role: str | None = None, li
     exposures = compute_exposures(profile, role)
     scored = score_event(event, profile, exposures)
     ctx = AgentContext(event=event, profile=profile, role=role, exposures=exposures, scored=scored)
+    ctx.memory["_t0"] = time.perf_counter()
     with tracer.step("relevance", "rules", input={"company": profile.uid, "role": role}) as rec:
         rec["output"] = {"score": scored.score, "effect": scored.effect, "reasons": scored.reasons}
+    # Прогрессивная выдача: главный вывод по скорингу и плейбуку — сразу, полный разбор догружается
+    if listener:
+        with tracer.step("preview", "rules") as rec:
+            pv = draft_rules(ctx)
+            rec["output"] = {"headline": pv.headline, "takeaway": pv.takeaway.text}
+        tracer._emit({"type": "preview", "insight": {"headline": pv.headline, "effect": pv.effect,
+                                                      "takeaway": pv.takeaway.model_dump(),
+                                                      "scenarios": [s.model_dump() for s in pv.scenarios]}})
 
     p = plan(ctx, tracer)
     execute(ctx, p, tracer)
@@ -294,6 +355,8 @@ def run_agent(event: Event, profile: CompanyProfile, role: str | None = None, li
     ins.relevance = {"score": scored.score, "reasons": scored.reasons, "focus": p.get("focus")}
     if issues_ := (ctx.memory.get("check_consistency") or {}).get("issues"):
         ins.relevance["consistency_issues"] = issues_
+    if ctx.memory.get("_limit"):
+        ins.relevance["limit"] = ctx.memory["_limit"]
     with tracer.step("finalize", "rules") as rec:
         rec["output"] = {"sources": len(ins.sources), "quality_passed": all(c.passed for c in ins.quality)}
     return ins
@@ -305,7 +368,22 @@ def insight_key(event_id: str, company_uid: str, role: str | None) -> str:
 
 def cached_insight(event_id: str, company_uid: str, role: str | None) -> Insight | None:
     row = db.query_one("SELECT payload FROM insights WHERE key=?", (insight_key(event_id, company_uid, role),))
-    return Insight.model_validate_json(row["payload"]) if row else None
+    return ensure_scenarios(Insight.model_validate_json(row["payload"])) if row else None
+
+
+def ensure_scenarios(ins: Insight) -> Insight:
+    """Разборы, построенные до появления сценариев (кэш, снапшот), дополняются расчётом без LLM."""
+    if ins.scenarios:
+        return ins
+    from app.agent.scenario import scenarios
+    from app.agent.schemas import Scenario
+    from app.data.profiles import get_profile
+
+    p = get_profile(ins.company_uid)
+    factors = [r["factor"] for r in ins.relevance.get("reasons", []) if "factor" in r]
+    if p:
+        ins.scenarios = [Scenario(**s) for s in scenarios(p, factors)]
+    return ins
 
 
 def get_or_create_insight(event: Event, profile: CompanyProfile, role: str | None, force: bool = False,

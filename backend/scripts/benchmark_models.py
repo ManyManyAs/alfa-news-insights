@@ -1,6 +1,6 @@
 """Бенчмарк разрешённых моделей на задачах сервиса → обоснованный роутинг (config/models.yaml).
 
-1. Классификация новостей: 12 размеченных новостей (data/eval/classification_labels.jsonl):
+1. Классификация новостей: 36 размеченных новостей (data/eval/classification_labels.jsonl + news_eval.jsonl):
    F1 по факторам, точность направления, доля валидного JSON с первой попытки, латентность, стоимость.
    Базовая линия — классификатор на правилах (без LLM).
 2. Интерпретация: N кейсов «персона × событие» → черновик инсайта каждой моделью:
@@ -111,8 +111,11 @@ def bench_interpretation(n_cases: int, budget: Budget) -> dict:
             try:
                 data, res = llm.complete_json("interpret", msg, InsightDraftOut, max_tokens=2200, model_key=key)
                 ins = _parse_insight(data, ctx, f"llm:{res.model}")
-            except LLMUnavailable:
-                raise
+            except LLMUnavailable as e:
+                if "Лимит бенчмарка" in str(e) or "бюджет" in str(e).lower():
+                    raise
+                results[key]["errors"] += 1  # сбой одной модели не должен обнулять весь раздел
+                continue
             except Exception:
                 results[key]["errors"] += 1
                 continue
@@ -125,11 +128,12 @@ def bench_interpretation(n_cases: int, budget: Budget) -> dict:
             jmsg = [{"role": "system", "content": prompts.CRITIC_SYSTEM.format(notice=UNTRUSTED_NOTICE)},
                     {"role": "user", "content": context + "\n<draft>\n" + ins.model_dump_json() + "\n</draft>"}]
             try:
-                jd, jres = llm.complete_json("judge", jmsg, CriticOut, max_tokens=700, model_key=judge)
+                raw, jres = llm.complete_json("judge", jmsg, None, max_tokens=1600, model_key=judge)
                 budget.add(jres.cost_rub)
+                jd = CriticOut.model_validate({"issues": raw} if isinstance(raw, list) else raw).model_dump()
                 if jd["scores"]:
                     results[key]["judge"].append(statistics.mean(jd["scores"].values()))
-            except (ValueError, KeyError):
+            except (ValueError, KeyError, LLMUnavailable):
                 pass
             print("interpret", u["label"], key, results[key]["checks_passed"][-1:], results[key]["judge"][-1:])
     summary = {}
@@ -147,7 +151,7 @@ def write_report(cls: dict, interp: dict, budget: Budget) -> None:
             "spent_rub": round(budget.spent, 2), "models": {k: m["id"] for k, m in get_llm().cfg["models"].items()}}
     (OUT / "benchmark.json").write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     lines = ["# Бенчмарк разрешённых моделей на задачах сервиса", "", f"Прогон: {data['run_at']} · потрачено {data['spent_rub']} ₽", "",
-             "## Классификация новостей (12 размеченных новостей)", "",
+             f"## Классификация новостей ({next(iter(cls.values()), {}).get('scores', {}).get('n', '?')} размеченных новостей)", "",
              "| Модель | F1 факторов | Точность направления | JSON с 1-й попытки | Латентность (медиана), с | Стоимость, ₽ |",
              "|---|---|---|---|---|---|"]
     for k, r in cls.items():
@@ -177,10 +181,13 @@ def main() -> None:
     with llm_priority("background"):
         try:
             cls = bench_classification(budget)
-            if not a.skip_interpret:
-                interp = bench_interpretation(a.cases, budget)
         except LLMUnavailable as e:
-            print("Остановлено:", e)
+            print("Классификация остановлена:", e)
+        if not a.skip_interpret:
+            try:
+                interp = bench_interpretation(a.cases, budget)
+            except LLMUnavailable as e:
+                print("Интерпретация остановлена:", e)
     write_report(cls, interp, budget)
 
 

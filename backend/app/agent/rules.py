@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 from datetime import UTC, date, datetime
 
-from app.agent.schemas import Action, Claim, Consequences, Insight, ProductOffer, QualityCheck
+from app.agent.schemas import Action, Claim, Consequences, Insight, ProductOffer, QualityCheck, Scenario
 from app.agent.tools import AgentContext
 from app.config import load_yaml
 from app.knowledge.bank import get_knowledge
@@ -90,8 +90,8 @@ def draft_rules(ctx: AgentContext) -> Insight:
         what.append(Claim(text=f"Прогноз/мнение в источнике: {o}", kind="assumption", sources=news_src[:1], confidence="low"))
     due = upcoming_date(cls.effective_dates)
     if due:
-        what.append(Claim(text=f"Изменение вступает в силу {due[0]:%d.%m.%Y} — {due_text(due[1])}.", kind="fact",
-                          sources=news_src[:1], confidence="high"))
+        what.append(Claim(text=f"По данным источника изменение вступает в силу {due[0]:%d.%m.%Y} — {due_text(due[1])}.",
+                          kind="ai_inference", sources=news_src[:1], confidence="high"))
 
     # 02 Почему важно
     # Причины, опирающиеся на конкретные признаки компании; базовый макрофон — только если других нет
@@ -198,8 +198,22 @@ def draft_rules(ctx: AgentContext) -> Insight:
         text, t_src = f"Событие слабо связано с бизнесом компании ({_company_short(ctx)}).", news_src[:1]
     takeaway = Claim(text=text, kind="ai_inference", sources=t_src, confidence="medium")
 
+    # Сценарии и «что может изменить вывод» — числа считает калькулятор, база — прогноз банка
+    from app.agent.scenario import money, scenarios, triggers
+
+    factors = [r["factor"] for r in reasons] + scored.matched_factors
+    scen = [Scenario(**s) for s in scenarios(ctx.profile, factors)]
+    change = [Claim(text=t["text"], kind="ai_inference", confidence="medium",
+                    sources=news_src[:1] if t["source"] in (None, "news") else [t["source"]])
+              for t in triggers(ctx.profile, factors, cls.effective_dates)]
+    neg = next((s for s in scen if s.name == "negative"), None)
+    if neg and neg.total_rub and len(actions) < 5:
+        actions.append(Action(text=f"Проверить устойчивость бюджета к негативному сценарию — {neg.assumptions}: "
+                                   f"по оценке это {money(neg.total_rub)} в год; уточните суммы в калькуляторе «Что если»",
+                              action_type="analysis", kind="ai_inference", sources=["calc:scenario"]))
+
     return Insight(
-        event_id=ev.id, company_uid=ctx.profile.uid, role=ctx.role,
+        event_id=ev.id, company_uid=ctx.profile.uid, role=ctx.role, scenarios=scen, what_could_change=change,
         headline=f"{EFFECT_RU[effect]}: {ev.title}", takeaway=takeaway,
         what_happened=what, why_it_matters=why, consequences=cons, actions=actions, bank_view=bank_view,
         sources=[], products=products, effect=effect, generated_by="rules", trace_id="",
@@ -217,6 +231,7 @@ def all_claims(ins: Insight) -> list[tuple[str, Claim]]:
     out += [("drivers", c) for c in ins.consequences.drivers]
     out += [("actions", c) for c in ins.actions]
     out += [("bank_view", c) for c in ins.bank_view]
+    out += [("what_could_change", c) for c in ins.what_could_change]
     return out
 
 
@@ -227,7 +242,7 @@ def valid_source(sid: str, ctx: AgentContext) -> bool:
     if kind == "bank":
         kb = get_knowledge()
         return any(c.id == ref for c in kb.chunks)
-    return kind in ("profile", "graph", "peers")
+    return kind in ("profile", "graph", "peers") or sid == "calc:scenario"
 
 
 def critique_rules(ins: Insight, ctx: AgentContext) -> tuple[list[QualityCheck], list[str]]:
@@ -288,6 +303,7 @@ def repair_rules(ins: Insight, ctx: AgentContext) -> Insight:
     ins.consequences.drivers = [c for c in ins.consequences.drivers if ok(c)]
     ins.actions = [c for c in ins.actions if ok(c)]
     ins.bank_view = [c for c in ins.bank_view if ok(c) and any(s.startswith("bank:") for s in c.sources)]
+    ins.what_could_change = [c for c in ins.what_could_change if ok(c)]
     if not ins.bank_view:
         ins.bank_view = [Claim(text=NO_BANK_VIEW, kind="ai_inference", sources=[f"news:{ctx.event.news[0].id}"], confidence="low")]
     if not ok(ins.takeaway):

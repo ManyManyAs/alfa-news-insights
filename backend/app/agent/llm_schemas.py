@@ -96,6 +96,7 @@ class InsightDraftOut(BaseModel):
     actions: list[ActionOut]
     bank_view: list[ClaimOut] = Field(default_factory=list)
     products: list[ProductOut] = Field(default_factory=list)
+    what_could_change: list[ClaimOut] = Field(default_factory=list)
 
 
 class CriticOut(BaseModel):

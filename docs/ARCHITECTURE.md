@@ -52,9 +52,10 @@ sequenceDiagram
   participant T as Инструменты (allowlist)
   participant C as Критик (правила + LLM)
   O->>O: relevance (скоринг, причины)
+  O-->>O: preview: главный вывод и сценарии правилами → сразу в UI (SSE)
   O->>L: plan (Qwen) → шаги и гипотеза
-  loop шаги плана (≤10 вызовов)
-    O->>T: get_event / get_company_profile / get_bank_theses / search_bank_analytics / get_counterparties / get_playbook / search_related_news / check_consistency
+  loop шаги плана (≤14 вызовов)
+    O->>T: get_event_brief / get_company_profile / get_bank_theses / get_bank_forecast / scenario_calc / get_story_timeline / get_regulation_dates / search_bank_analytics / get_counterparties / get_peer_benchmark / get_playbook / search_related_news / check_consistency
     T-->>O: результат → ctx.memory (общий контекст)
   end
   O->>L: draft (GLM) → Insight JSON
@@ -68,7 +69,9 @@ sequenceDiagram
   O->>O: finalize: SourceRef для каждого id, трассировка
 ```
 
-Если LLM недоступна (mock-режим, исчерпан бюджет, сетевая ошибка), каждый шаг переходит на детерминированную реализацию (`app/agent/rules.py`). Шаблоны последствий и действий берутся из `config/playbook.yaml`. Тот же плейбук передаётся LLM как подсказка.
+Если LLM недоступна (mock-режим, исчерпан бюджет, сетевая ошибка), каждый шаг переходит на детерминированную реализацию (`app/agent/rules.py`). Шаблоны последствий и действий берутся из `config/playbook.yaml`. Тот же плейбук передаётся LLM как подсказка. Ограничители на один запрос: 90 секунд и 4 ₽; при превышении в трассировке появляется шаг `limit`, а оставшиеся шаги идут правилами.
+
+**Сценарии и «что если»** (`app/agent/scenario.py`). Суммы в рублях модель не придумывает: их считает калькулятор по прозрачным формулам (ставка: −долг × доля под плавающей ставкой × Δ + депозиты × Δ; курс: −импорт × Δ × (1 − перенос в цены) + экспорт × Δ; зарплаты: −ФОТ × (рост − заложенный рост)). Базовый сценарий — прогноз Альфа-Банка на 12 месяцев (средняя ставка 2027 г., курс, номинальные зарплаты), негативный и позитивный — сдвиги от него. Параметры компании по умолчанию оцениваются по профилю (долг ≈ 25% выручки при наличии кредита, импорт ≈ 30% выручки при ВЭД, ФОТ по численности) и подписаны как оценки; пользователь вводит свои суммы в блоке «Что если» (`POST /api/scenario`). «Что может изменить вывод» — триггеры с числами прогноза банка как точкой отсчёта.
 
 ## JSON-схема инсайта (`app/agent/schemas.py`)
 
