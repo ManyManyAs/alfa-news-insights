@@ -34,6 +34,22 @@ function storyLine(s, current) {
 function esc(s) { return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 function fmtDate(s) { if (!s) return ""; const d = new Date(s); return isNaN(d) ? s : d.toLocaleDateString("ru-RU", { day: "numeric", month: "short" }); }
 
+// ---- продуктовые метрики: события интерфейса копятся и отправляются пачкой (без текста, только тип и число)
+const trackQueue = [];
+function track(type, extra = {}) {
+  if (!state.user) return;
+  trackQueue.push({ type, company_id: state.company, ...extra });
+  if (trackQueue.length >= 20) flushTrack();
+}
+function flushTrack() {
+  if (!trackQueue.length || !state.user) return;
+  const events = trackQueue.splice(0, 50);
+  fetch("/api/track", { method: "POST", credentials: "same-origin", keepalive: true, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ events }) }).catch(() => {});
+}
+setInterval(flushTrack, 5000);
+addEventListener("pagehide", flushTrack);
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") flushTrack(); });
+
 // Сессия — в HttpOnly-cookie: браузер отправляет её сам, JS её не видит
 function apiError(status, text) {
   let detail = text;
@@ -142,6 +158,7 @@ async function enterApp() {
   $("#loginView").hidden = true;
   document.body.classList.remove("logged-out");
   await selectUser(me.user_id, me);
+  if ($("#view-home").classList.contains("active")) track("home_view");
   maybeOnboard();
 }
 
@@ -162,7 +179,9 @@ function show(view) {
   document.querySelectorAll(".nav-item[data-view]").forEach((n) => n.classList.toggle("active", n.dataset.view === view));
   if (view === "metrics") loadMetrics();
   if (view === "sources") loadSources();
-  if (view === "digest") loadDigest();
+  if (view === "digest") { loadDigest(); track("digest_view"); }
+  if (view === "home") track("home_view");
+  if (view === "radar") track("feed_view");
 }
 
 async function reload() {
@@ -377,7 +396,12 @@ function bindCards(root) {
   root.querySelectorAll("[data-hide]").forEach((b) => b.onclick = (e) => { e.stopPropagation(); hideEvent(b.dataset.hide); });
   root.querySelectorAll("[data-unhide]").forEach((b) => b.onclick = (e) => { e.stopPropagation(); hideEvent(b.dataset.unhide, false); });
   root.querySelectorAll("[data-ev]").forEach((el) => {
-    const open = () => { show("radar"); openInsight(el.dataset.ev); };
+    const from = root.id === "widgetList" ? "widget" : root.id === "digestBox" ? "digest" : "feed";
+    const open = () => {
+      if (from === "widget") track("widget_click", { event_id: el.dataset.ev });
+      if (from !== "feed") show("radar");
+      openInsight(el.dataset.ev, false, from);
+    };
     el.onclick = open;
     el.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } };
   });
@@ -420,8 +444,10 @@ function renderRadar() {
 }
 
 // ---------------------------------------------------------------- инсайт
-async function openInsight(eventId, refresh = false) {
+async function openInsight(eventId, refresh = false, from = "feed") {
   state.current = eventId;
+  const t0 = performance.now();
+  if (!refresh) track("card_open", { event_id: eventId, meta: { from } });
   markRead(eventId);
   document.querySelectorAll(".feed-item").forEach((el) => el.classList.toggle("active", el.dataset.ev === eventId));
   $("#insightPanel").innerHTML = `<div class="insight"><div id="previewBox"></div><div class="eyebrow">Агент анализирует событие</div>
@@ -436,6 +462,7 @@ async function openInsight(eventId, refresh = false) {
         const li = [...prog().querySelectorAll("li.run")].reverse().find((x) => x.dataset.step === e.name);
         if (li) { li.className = e.fallback ? "fallback" : "ok"; li.querySelector("span").textContent = ` · ${e.model ? e.model + " · " : ""}${e.duration_ms} мс${e.fallback ? " · без LLM" : ""}`; }
       } else if (e.type === "preview") {
+        track("preview_ready", { event_id: eventId, value: Math.round(performance.now() - t0) });
         // главный вывод сразу, полный разбор догружается
         const p = e.insight;
         $("#previewBox").innerHTML = `<span class="pill ${p.effect}">${EFFECT[p.effect]}</span> <span class="muted small">быстрый вывод по профилю · полный разбор готовится…</span>
@@ -443,6 +470,7 @@ async function openInsight(eventId, refresh = false) {
           <div class="takeaway"><span class="claim-kind small" style="color:var(--ai)">ВЫВОД СЕРВИСА · </span>${esc(p.takeaway.text)}</div>
           ${scenarioCards(p.scenarios)}`;
       } else if (e.type === "done") {
+        track("insight_ready", { event_id: eventId, value: Math.round(performance.now() - t0), meta: { cached: !!e.cached } });
         state.insight = e.insight; renderInsight("analysis");
       } else if (e.type === "error") { throw new Error(e.detail); }
     });
@@ -575,8 +603,11 @@ function renderInsight(tab) {
   document.querySelectorAll("[data-tab]").forEach((el) => el.onclick = () => renderInsight(el.dataset.tab));
   bindImpactMap($("#insightPanel"));
   const wi = document.getElementById("whatIf");
-  if (wi) wi.addEventListener("toggle", () => { if (wi.open && !wi.dataset.ready) { wi.dataset.ready = "1"; initWhatIf(); } });
-  document.querySelectorAll("[data-story-ev]").forEach((el) => el.onclick = () => { if (el.dataset.storyEv !== state.current) openInsight(el.dataset.storyEv); });
+  if (wi) wi.addEventListener("toggle", () => { if (wi.open && !wi.dataset.ready) { wi.dataset.ready = "1"; initWhatIf(); track("whatif_open", { event_id: state.current }); } });
+  document.querySelectorAll("[data-story-ev]").forEach((el) => el.onclick = () => { if (el.dataset.storyEv !== state.current) openInsight(el.dataset.storyEv, false, "story"); });
+  document.querySelectorAll("#insightPanel a[target=_blank]").forEach((a) => a.addEventListener("click", () => track("source_click", { event_id: state.current })));
+  const svgMap = document.querySelector("#insightPanel .im-svg");
+  if (svgMap) svgMap.addEventListener("mouseenter", () => track("map_hover", { event_id: state.current }), { once: true });
   document.querySelectorAll("[data-src]").forEach((el) => el.onclick = () => { renderInsight("sources"); const li = document.getElementById("src-" + CSS.escape(el.dataset.src)); if (li) { li.classList.add("hl"); li.scrollIntoView({ block: "center" }); } });
   $("#refreshBtn").onclick = () => openInsight(state.current, true);
   document.querySelectorAll("[data-fb]").forEach((el) => el.onclick = () => +el.dataset.fb > 0 ? sendFeedback(1) : ($("#fbReasons").hidden = false));
@@ -605,6 +636,7 @@ function bindChat() {
   if (!$("#chatSend")) return;
   const send = async (text) => {
     if (!text) return;
+    track("chat_question", { event_id: state.current });
     $("#chatLog").insertAdjacentHTML("beforeend", `<div class="msg user">${esc(text)}</div>`);
     $("#chatInput").value = "";
     $("#chatLog").insertAdjacentHTML("beforeend", `<div class="msg bot typing"></div>`);
@@ -649,6 +681,7 @@ async function analyzeNews(e) {
 // ---------------------------------------------------------------- действия после инсайта (менеджер, звонок, заявка)
 const ACT_TITLE = { manager: "Обсудить с менеджером", callback: "Заказать обратный звонок", application: "Оставить заявку" };
 function openAction(kind, product) {
+  track("action_open", { event_id: state.current, meta: { kind } });
   const d = $("#actionDialog");
   d.innerHTML = `<form method="dialog" class="act-form"><h3>${esc(ACT_TITLE[kind])}${product ? ": " + esc(product) : ""}</h3>
     <p class="muted small">Менеджер увидит, по какому событию вы обращаетесь${state.insight ? ": «" + esc(state.insight.headline) + "»" : ""}.</p>
@@ -713,19 +746,106 @@ function toggleTheme() {
 try { const t = localStorage.getItem("theme"); if (t) applyTheme(t); } catch (e) { /* хранилище недоступно */ }
 
 // ---------------------------------------------------------------- метрики
+const OFFLINE = [  // те же цели, что в scripts/quality_gate.py
+  ["relevance.p3", "Лента: P@3 — в топ-3 только релевантное", 0.90],
+  ["relevance.ndcg5", "Лента: nDCG@5 — порядок по важности", 0.85],
+  ["relevance.critical_recall10", "Лента: критичное попало в топ-10", 0.85],
+  ["retrieval_recall5", "Позиция банка находится (recall@5)", 0.85],
+  ["classification.f1", "Классификация новостей, F1", 0.80],
+  ["classification.direction_acc", "Направление влияния (+/−)", 0.80],
+  ["entities.industries.f1", "Отрасли в новости, F1", 0.90],
+  ["entities.regions.f1", "Регионы в новости, F1", 0.90],
+  ["entities.noise_accuracy", "Отсев шума", 0.95],
+  ["dedup.precision", "Склейка дублей: precision", 0.90],
+  ["dedup.recall", "Склейка дублей: recall", 0.85],
+  ["graph_share", "Влияние объяснено через граф связей", 0.30],
+  ["selfcheck_passed", "Разборы прошли самопроверку", 1.0],
+];
+const AXES = { personalization: "Персонализация", depth: "Глубина", grounding: "Обоснованность", bank_view: "Позиция банка", actionability: "Конкретность" };
+const FB_REASONS = { not_relevant: "не про мой бизнес", known: "уже знал", inaccurate: "неточный вывод" };
+const ACTION_NAMES = { manager: "менеджер", callback: "звонок", application: "заявка" };
+const pct = (v) => v == null ? "—" : `${Math.round(v * 100)}%`;
+const num = (v, d = 2) => v == null ? "—" : String(Math.round(v * 10 ** d) / 10 ** d).replace(".", ",");
+const getPath = (o, p) => p.split(".").reduce((x, k) => (x && typeof x === "object" ? x[k] : undefined), o);
+const secs = (ms) => ms == null ? "—" : ms < 1000 ? `${ms} мс` : `${num(ms / 1000, 1)} с`;
+state.metricsDays = 7;
+
 async function loadMetrics() {
-  const m = await api("/api/metrics");
-  const card = (t, v, s = "") => `<div class="card metric"><div class="muted small">${t}</div><div class="v">${v}</div><div class="muted small">${s}</div></div>`;
-  $("#metricsBox").innerHTML = [
-    card("Режим LLM", m.llm.mode, { live: "вызовы разрешённых моделей", replay: "ответы моделей из снапшота, без ключа", mock: "без LLM" }[m.llm.mode] || ""),
-    card("Потрачено сегодня (МСК)", `${m.llm.spent_rub} ₽`, `лимит ${m.llm.budget_rub} ₽ · резерв для пользователей после ${m.llm.background_limit_rub} ₽`),
-    card("Инсайтов построено", m.insights.total),
-    card("Прошли самопроверку", m.insights.quality_passed_share != null ? Math.round(m.insights.quality_passed_share * 100) + "%" : "—"),
-    card("Обратная связь", `👍 ${m.feedback.pos} · 👎 ${m.feedback.neg}`),
-    card("Оценка LLM-судьи (1–5)", m.insights.judge && m.insights.judge.avg != null ? String(m.insights.judge.avg).replace(".", ",") : "—",
-      m.insights.judge && m.insights.judge.n ? `${m.insights.judge.n} разборов · ` + Object.entries(m.insights.judge.by_axis).map(([k, v]) => `${({ personalization: "персонализация", depth: "глубина", grounding: "обоснованность", bank_view: "позиция банка", actionability: "конкретность" })[k] || k} ${String(v).replace(".", ",")}`).join(" · ") : "появится после разборов моделью"),
-    card("События / компании", `${m.events} / ${m.companies}`),
-  ].join("");
+  const seg = $("#metricsDays");
+  if (!seg.dataset.bound) {
+    seg.dataset.bound = "1";
+    seg.querySelectorAll("button").forEach((b) => b.onclick = () => {
+      state.metricsDays = +b.dataset.d;
+      seg.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
+      loadMetrics();
+    });
+  }
+  flushTrack();
+  const m = await api(`/api/metrics?days=${state.metricsDays}`);
+  const p = m.product, r = p.rates, f = p.funnel, sp = p.speed_ms, c = m.cost, j = m.insights.judge || {};
+  const tile = (t, v, s = "", cls = "") => `<div class="card metric ${cls}"><div class="muted small">${t}</div><div class="v">${v}</div><div class="muted small">${s}</div></div>`;
+  const vsTarget = (v, target, lowerBetter = false) => v == null ? "" : (lowerBetter ? v <= target : v >= target) ? "good" : "warn";
+  const alerts = m.alerts.length
+    ? m.alerts.map((a) => `<div class="alert ${a.level}">${a.level === "warn" ? "⚠" : "ℹ"} ${esc(a.text)}</div>`).join("")
+    : `<div class="alert ok">✓ Все показатели в норме: бюджет, скорость, источники, обратная связь, безопасность</div>`;
+  const actionsTotal = Object.values(p.actions).reduce((a, b) => a + b, 0);
+  const steps = [["Открыли главную", f.home_views], ["Перешли из виджета", f.widget_clicks], ["Открыли ленту", f.feed_views],
+    ["Открыли разбор", f.card_opens], ["Проверили первоисточник", p.counts.source_click || 0], ["Обратились в банк после разбора", actionsTotal]];
+  const maxStep = Math.max(1, ...steps.map((s) => s[1]));
+  const funnel = steps.map(([t, n]) => `<div class="fn-row"><span>${t}</span><div class="fn-bar"><i style="width:${n ? Math.max(2, n / maxStep * 100) : 0}%"></i></div><b>${n}</b></div>`).join("");
+  const reasons = Object.entries(p.feedback.neg_reasons);
+  const offline = m.offline ? OFFLINE.map(([path, title, target]) => {
+    const v = getPath(m.offline, path);
+    if (v == null) return "";
+    return `<tr><td>${title}</td><td class="num"><b>${num(v, 3)}</b></td><td class="num muted">≥ ${num(target)}</td><td>${v >= target ? '<span class="status ok">● в цели</span>' : '<span class="status mid">● ниже цели</span>'}</td></tr>`;
+  }).join("") : "";
+  const rel = (m.offline || {}).relevance || {};
+  const dd = (m.offline || {}).dedup || {};
+  $("#metricsBox").innerHTML = `
+    <div class="alerts">${alerts}</div>
+
+    <h3 class="mon-h">Продукт · ${({ 1: "сутки", 7: "7 дней", 30: "30 дней" })[state.metricsDays]}</h3>
+    <div class="metrics">
+      ${tile("Активные пользователи", p.active_users)}
+      ${tile("CTR виджета на главной", pct(r.widget_ctr), "клики по карточкам / показы главной", vsTarget(r.widget_ctr, 0.15))}
+      ${tile("Открывают разбор из ленты", pct(r.feed_open_rate), "открытия / заходы в ленту", vsTarget(r.feed_open_rate, 0.3))}
+      ${tile("Полезно 👍", pct(r.helpful_share), `👍 ${p.feedback.pos} · 👎 ${p.feedback.neg}${reasons.length ? " · " + reasons.map(([k, v]) => `${FB_REASONS[k] || esc(k)}: ${v}`).join(", ") : ""}`, vsTarget(r.helpful_share, 0.8))}
+      ${tile("Проверяют первоисточник", pct(r.source_ctr), "доля разборов с переходом к источнику")}
+      ${tile("Вопросы в чате", num(r.chat_per_insight), "на один открытый разбор")}
+      ${tile("Сценарий «что если»", pct(r.whatif_rate), "доля разборов, где открыли сценарий")}
+      ${tile("Обращаются в банк", pct(r.action_rate), Object.entries(p.actions).map(([k, v]) => `${ACTION_NAMES[k] || esc(k)}: ${v}`).join(" · ") || "менеджер, звонок, заявка")}
+      ${tile("Скрывают как нерелевантное", pct(r.hide_rate), "сигнал пересмотреть ранжирование · цель ≤ 10%", vsTarget(r.hide_rate, 0.1, true))}
+      ${tile("Тур для жюри пройден", pct(r.tour_completion), `${p.counts.tour_start || 0} запусков`)}
+    </div>
+    <div class="card funnel"><div class="muted small">Воронка: от главной до обращения в банк</div>${funnel}</div>
+
+    <h3 class="mon-h">Скорость и стоимость разбора</h3>
+    <div class="metrics">
+      ${tile("Первый вывод, p50 / p95", `${secs(sp.preview_p50)} / ${secs(sp.preview_p95)}`, "предпросмотр без модели · цель p95 ≤ 2 с", vsTarget(sp.preview_p95, 2000, true))}
+      ${tile("Полный разбор моделью, p50 / p95", `${secs(sp.full_fresh_p50)} / ${secs(sp.full_fresh_p95)}`, "план → черновик → критик → правка · лимит 90 с", vsTarget(sp.full_fresh_p95, 90000, true))}
+      ${tile("Повторное открытие, p50", secs(sp.full_cached_p50), "из кэша разборов")}
+      ${tile("Стоимость разбора", c.avg_rub != null ? `${num(c.avg_rub)} ₽` : "—", c.avg_rub != null ? `p95 ${num(c.p95_rub)} ₽ · ${num(c.avg_llm_calls, 1)} вызовов модели · ${num(c.avg_build_s, 1)} с · лимит 4 ₽` : "появится после разборов моделью", vsTarget(c.avg_rub, 4, true))}
+      ${tile("Бюджет LLM сегодня", `${num(m.llm.spent_rub)} ₽`, `из ${m.llm.budget_rub} ₽ · фоновые задачи до ${m.llm.background_limit_rub} ₽ · режим ${esc(m.llm.mode)}`, m.llm.budget_rub && m.llm.spent_rub / m.llm.budget_rub >= 0.8 ? "warn" : "good")}
+      ${tile("Разборов построено", m.insights.total, `${c.with_llm} — моделью, остальные — правилами`)}
+    </div>
+
+    <h3 class="mon-h">Качество разборов: LLM-судья (1–5)</h3>
+    <div class="metrics">
+      ${tile("Средняя оценка", j.avg != null ? num(j.avg) : "—", j.n ? `${j.n} разборов · цель ≥ 4,2` : "появится после разборов моделью", vsTarget(j.avg, 4.2))}
+      ${Object.entries(j.by_axis || {}).map(([k, v]) => tile(AXES[k] || esc(k), num(v), "", vsTarget(v, 4))).join("")}
+      ${tile("Прошли самопроверку", pct(m.insights.quality_passed_share), "факты, цифры, источники, дисклеймер", vsTarget(m.insights.quality_passed_share, 0.95))}
+    </div>
+
+    <h3 class="mon-h">Офлайн-оценка на размеченных данных</h3>
+    <div class="card"><div class="muted small" style="margin-bottom:8px">${rel.pairs ? `${rel.pairs} пар «профиль клиента — новость» по ${rel.cases} профилям${dd.pairs ? `, ${dd.pairs} пар для склейки дублей` : ""}. ` : ""}Пересчитывается в CI на каждый PR; падение метрики больше чем на 0,05 блокирует слияние.</div>
+      ${offline ? `<div class="table-wrap"><table class="sources"><thead><tr><th>Метрика</th><th>Значение</th><th>Цель</th><th></th></tr></thead><tbody>${offline}</tbody></table></div>` : '<div class="muted">Базовая линия не найдена</div>'}</div>
+
+    <h3 class="mon-h">Данные</h3>
+    <div class="metrics">
+      ${tile("События в базе", m.events, `${m.companies} компаний`)}
+      ${tile("Источники новостей", `${m.sources.total - m.sources.down} / ${m.sources.total}`, m.sources.down ? `с ошибками: ${m.sources.down}` : "все работают", m.sources.down ? "warn" : "good")}
+      ${tile("Последний сбор", m.sources.last_ingest ? ago(m.sources.last_ingest.at) : "—", m.sources.last_ingest ? `новых событий ${m.sources.last_ingest.new_events}, отсеяно шума ${m.sources.last_ingest.noise}` : "")}
+    </div>`;
 }
 
 // ---------------------------------------------------------------- источники новостей

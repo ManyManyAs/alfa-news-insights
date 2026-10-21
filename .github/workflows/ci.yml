@@ -36,17 +36,35 @@ jobs:
           cache-dependency-path: backend/requirements.lock
       - run: pip install -r requirements.lock
       - run: python -m pytest -q
-      - name: Офлайн-метрики (синтетика)
+      - name: Офлайн-метрики и проверка качества против main
         env:
           DATA_SOURCE_DIR: ../data/sample
           DB_PATH: /tmp/eval-sample.db
           LLM_MODE: mock
           USE_SNAPSHOT: "false"
         run: |
-          echo '### Метрики на синтетике + демо-новостях' >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          python scripts/evaluate.py --insights | grep -v WARNING | tee -a "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          python scripts/evaluate.py --insights --json /tmp/quality.json | grep -v WARNING
+          set +e
+          python scripts/quality_gate.py /tmp/quality.json ../docs/quality/baseline.json --md /tmp/quality.md
+          echo "GATE=$?" >> "$GITHUB_ENV"
+          set -e
+          cat /tmp/quality.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Комментарий с метриками в PR
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          { echo '<!-- quality-gate -->'; cat /tmp/quality.md; } > /tmp/comment.md
+          ID=$(gh api "repos/$REPO/issues/$PR/comments" --jq '[.[] | select(.body | startswith("<!-- quality-gate -->"))][0].id // empty')
+          if [ -n "$ID" ]; then
+            gh api -X PATCH "repos/$REPO/issues/comments/$ID" -F body=@/tmp/comment.md > /dev/null
+          else
+            gh api "repos/$REPO/issues/$PR/comments" -F body=@/tmp/comment.md > /dev/null
+          fi
+      - name: Регрессия качества блокирует PR
+        run: test "$GATE" = "0" || { echo "::error::Офлайн-метрики упали больше допуска — см. комментарий к PR"; exit 1; }
       - name: Smoke на данных кейса (85 тыс. компаний)
         env:
           DATA_SOURCE_DIR: ../data/case

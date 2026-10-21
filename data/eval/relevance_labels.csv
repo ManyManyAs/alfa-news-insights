@@ -107,3 +107,231 @@ trucker;49.41;Деятельность автомобильного грузов
 trucker;49.41;Деятельность автомобильного грузового транспорта;CL_PRODUCT_LEA_MARK|CL_PRODUCT_LOA_MARK;;ceo;seed-17;0
 trucker;49.41;Деятельность автомобильного грузового транспорта;CL_PRODUCT_LEA_MARK|CL_PRODUCT_LOA_MARK;;ceo;seed-18;0
 trucker;49.41;Деятельность автомобильного грузового транспорта;CL_PRODUCT_LEA_MARK|CL_PRODUCT_LOA_MARK;;ceo;seed-19;1
+dev_loan;41.20;Строительство жилых и нежилых зданий;CL_PRODUCT_LOA_MARK;;cfo;ev-01;2
+dev_loan;41.20;Строительство жилых и нежилых зданий;CL_PRODUCT_LOA_MARK;;cfo;ev-02;1
+dev_loan;41.20;Строительство жилых и нежилых зданий;CL_PRODUCT_LOA_MARK;;cfo;ev-03;0
+dev_loan;41.20;Строительство жилых и нежилых зданий;CL_PRODUCT_LOA_MARK;;cfo;ev-04;0
+dev_loan;41.20;Строительство жилых и нежилых зданий;CL_PRODUCT_LOA_MARK;;cfo;ev-05;0
+dev_loan;41.20;Строительство жилых и нежилых зданий;CL_PRODUCT_LOA_MARK;;cfo;ev-06;0
+dev_loan;41.20;Строительство жилых и нежилых зданий;CL_PRODUCT_LOA_MARK;;cfo;ev-07;0
+dev_loan;41.20;Строительство жилых и нежилых зданий;CL_PRODUCT_LOA_MARK;;cfo;ev-08;1
+dev_loan;41.20;Строительство жилых и нежилых зданий;CL_PRODUCT_LOA_MARK;;cfo;ev-09;1
+dev_loan;41.20;Строительство жилых и нежилых зданий;CL_PRODUCT_LOA_MARK;;cfo;ev-10;0
+dev_loan;41.20;Строительство жилых и нежилых зданий;CL_PRODUCT_LOA_MARK;;cfo;ev-11;0
+dev_loan;41.20;Строительство жилых и нежилых зданий;CL_PRODUCT_LOA_MARK;;cfo;ev-12;1
+dev_loan;41.20;Строительство жилых и нежилых зданий;CL_PRODUCT_LOA_MARK;;cfo;ev-13;0
+dev_loan;41.20;Строительство жилых и нежилых зданий;CL_PRODUCT_LOA_MARK;;cfo;ev-14;0
+dev_loan;41.20;Строительство жилых и нежилых зданий;CL_PRODUCT_LOA_MARK;;cfo;ev-15;0
+dev_loan;41.20;Строительство жилых и нежилых зданий;CL_PRODUCT_LOA_MARK;;cfo;ev-16;0
+dev_loan;41.20;Строительство жилых и нежилых зданий;CL_PRODUCT_LOA_MARK;;cfo;ev-17;1
+dev_loan;41.20;Строительство жилых и нежилых зданий;CL_PRODUCT_LOA_MARK;;cfo;ev-18;1
+dev_loan;41.20;Строительство жилых и нежилых зданий;CL_PRODUCT_LOA_MARK;;cfo;ev-19;2
+dev_loan;41.20;Строительство жилых и нежилых зданий;CL_PRODUCT_LOA_MARK;;cfo;ev-20;1
+dev_loan;41.20;Строительство жилых и нежилых зданий;CL_PRODUCT_LOA_MARK;;cfo;ev-21;0
+dev_loan;41.20;Строительство жилых и нежилых зданий;CL_PRODUCT_LOA_MARK;;cfo;ev-22;0
+dev_loan;41.20;Строительство жилых и нежилых зданий;CL_PRODUCT_LOA_MARK;;cfo;ev-23;0
+dev_loan;41.20;Строительство жилых и нежилых зданий;CL_PRODUCT_LOA_MARK;;cfo;ev-24;0
+importer_cn;46.90;Торговля оптовая неспециализированная;FTS_FLAG;КИТАЙ;treasurer;ev-01;1
+importer_cn;46.90;Торговля оптовая неспециализированная;FTS_FLAG;КИТАЙ;treasurer;ev-02;1
+importer_cn;46.90;Торговля оптовая неспециализированная;FTS_FLAG;КИТАЙ;treasurer;ev-03;2
+importer_cn;46.90;Торговля оптовая неспециализированная;FTS_FLAG;КИТАЙ;treasurer;ev-04;0
+importer_cn;46.90;Торговля оптовая неспециализированная;FTS_FLAG;КИТАЙ;treasurer;ev-05;0
+importer_cn;46.90;Торговля оптовая неспециализированная;FTS_FLAG;КИТАЙ;treasurer;ev-06;1
+importer_cn;46.90;Торговля оптовая неспециализированная;FTS_FLAG;КИТАЙ;treasurer;ev-07;1
+importer_cn;46.90;Торговля оптовая неспециализированная;FTS_FLAG;КИТАЙ;treasurer;ev-08;0
+importer_cn;46.90;Торговля оптовая неспециализированная;FTS_FLAG;КИТАЙ;treasurer;ev-09;0
+importer_cn;46.90;Торговля оптовая неспециализированная;FTS_FLAG;КИТАЙ;treasurer;ev-10;0
+importer_cn;46.90;Торговля оптовая неспециализированная;FTS_FLAG;КИТАЙ;treasurer;ev-11;0
+importer_cn;46.90;Торговля оптовая неспециализированная;FTS_FLAG;КИТАЙ;treasurer;ev-12;0
+importer_cn;46.90;Торговля оптовая неспециализированная;FTS_FLAG;КИТАЙ;treasurer;ev-13;0
+importer_cn;46.90;Торговля оптовая неспециализированная;FTS_FLAG;КИТАЙ;treasurer;ev-14;0
+importer_cn;46.90;Торговля оптовая неспециализированная;FTS_FLAG;КИТАЙ;treasurer;ev-15;2
+importer_cn;46.90;Торговля оптовая неспециализированная;FTS_FLAG;КИТАЙ;treasurer;ev-16;2
+importer_cn;46.90;Торговля оптовая неспециализированная;FTS_FLAG;КИТАЙ;treasurer;ev-17;0
+importer_cn;46.90;Торговля оптовая неспециализированная;FTS_FLAG;КИТАЙ;treasurer;ev-18;0
+importer_cn;46.90;Торговля оптовая неспециализированная;FTS_FLAG;КИТАЙ;treasurer;ev-19;0
+importer_cn;46.90;Торговля оптовая неспециализированная;FTS_FLAG;КИТАЙ;treasurer;ev-20;0
+importer_cn;46.90;Торговля оптовая неспециализированная;FTS_FLAG;КИТАЙ;treasurer;ev-21;0
+importer_cn;46.90;Торговля оптовая неспециализированная;FTS_FLAG;КИТАЙ;treasurer;ev-22;0
+importer_cn;46.90;Торговля оптовая неспециализированная;FTS_FLAG;КИТАЙ;treasurer;ev-23;1
+importer_cn;46.90;Торговля оптовая неспециализированная;FTS_FLAG;КИТАЙ;treasurer;ev-24;0
+it_zpp;62.01;Разработка компьютерного программного обеспечения;CL_PRODUCT_ZPP_MARK;;accountant;ev-01;1
+it_zpp;62.01;Разработка компьютерного программного обеспечения;CL_PRODUCT_ZPP_MARK;;accountant;ev-02;0
+it_zpp;62.01;Разработка компьютерного программного обеспечения;CL_PRODUCT_ZPP_MARK;;accountant;ev-03;0
+it_zpp;62.01;Разработка компьютерного программного обеспечения;CL_PRODUCT_ZPP_MARK;;accountant;ev-04;2
+it_zpp;62.01;Разработка компьютерного программного обеспечения;CL_PRODUCT_ZPP_MARK;;accountant;ev-05;0
+it_zpp;62.01;Разработка компьютерного программного обеспечения;CL_PRODUCT_ZPP_MARK;;accountant;ev-06;0
+it_zpp;62.01;Разработка компьютерного программного обеспечения;CL_PRODUCT_ZPP_MARK;;accountant;ev-07;0
+it_zpp;62.01;Разработка компьютерного программного обеспечения;CL_PRODUCT_ZPP_MARK;;accountant;ev-08;0
+it_zpp;62.01;Разработка компьютерного программного обеспечения;CL_PRODUCT_ZPP_MARK;;accountant;ev-09;1
+it_zpp;62.01;Разработка компьютерного программного обеспечения;CL_PRODUCT_ZPP_MARK;;accountant;ev-10;0
+it_zpp;62.01;Разработка компьютерного программного обеспечения;CL_PRODUCT_ZPP_MARK;;accountant;ev-11;0
+it_zpp;62.01;Разработка компьютерного программного обеспечения;CL_PRODUCT_ZPP_MARK;;accountant;ev-12;0
+it_zpp;62.01;Разработка компьютерного программного обеспечения;CL_PRODUCT_ZPP_MARK;;accountant;ev-13;0
+it_zpp;62.01;Разработка компьютерного программного обеспечения;CL_PRODUCT_ZPP_MARK;;accountant;ev-14;0
+it_zpp;62.01;Разработка компьютерного программного обеспечения;CL_PRODUCT_ZPP_MARK;;accountant;ev-15;0
+it_zpp;62.01;Разработка компьютерного программного обеспечения;CL_PRODUCT_ZPP_MARK;;accountant;ev-16;0
+it_zpp;62.01;Разработка компьютерного программного обеспечения;CL_PRODUCT_ZPP_MARK;;accountant;ev-17;1
+it_zpp;62.01;Разработка компьютерного программного обеспечения;CL_PRODUCT_ZPP_MARK;;accountant;ev-18;0
+it_zpp;62.01;Разработка компьютерного программного обеспечения;CL_PRODUCT_ZPP_MARK;;accountant;ev-19;0
+it_zpp;62.01;Разработка компьютерного программного обеспечения;CL_PRODUCT_ZPP_MARK;;accountant;ev-20;0
+it_zpp;62.01;Разработка компьютерного программного обеспечения;CL_PRODUCT_ZPP_MARK;;accountant;ev-21;2
+it_zpp;62.01;Разработка компьютерного программного обеспечения;CL_PRODUCT_ZPP_MARK;;accountant;ev-22;0
+it_zpp;62.01;Разработка компьютерного программного обеспечения;CL_PRODUCT_ZPP_MARK;;accountant;ev-23;0
+it_zpp;62.01;Разработка компьютерного программного обеспечения;CL_PRODUCT_ZPP_MARK;;accountant;ev-24;0
+restaurant;56.10;Деятельность ресторанов и услуги по доставке продуктов питания;CL_PRODUCT_LEA_MARK;;owner;ev-01;1
+restaurant;56.10;Деятельность ресторанов и услуги по доставке продуктов питания;CL_PRODUCT_LEA_MARK;;owner;ev-02;1
+restaurant;56.10;Деятельность ресторанов и услуги по доставке продуктов питания;CL_PRODUCT_LEA_MARK;;owner;ev-03;0
+restaurant;56.10;Деятельность ресторанов и услуги по доставке продуктов питания;CL_PRODUCT_LEA_MARK;;owner;ev-04;0
+restaurant;56.10;Деятельность ресторанов и услуги по доставке продуктов питания;CL_PRODUCT_LEA_MARK;;owner;ev-05;0
+restaurant;56.10;Деятельность ресторанов и услуги по доставке продуктов питания;CL_PRODUCT_LEA_MARK;;owner;ev-06;0
+restaurant;56.10;Деятельность ресторанов и услуги по доставке продуктов питания;CL_PRODUCT_LEA_MARK;;owner;ev-07;0
+restaurant;56.10;Деятельность ресторанов и услуги по доставке продуктов питания;CL_PRODUCT_LEA_MARK;;owner;ev-08;0
+restaurant;56.10;Деятельность ресторанов и услуги по доставке продуктов питания;CL_PRODUCT_LEA_MARK;;owner;ev-09;0
+restaurant;56.10;Деятельность ресторанов и услуги по доставке продуктов питания;CL_PRODUCT_LEA_MARK;;owner;ev-10;0
+restaurant;56.10;Деятельность ресторанов и услуги по доставке продуктов питания;CL_PRODUCT_LEA_MARK;;owner;ev-11;0
+restaurant;56.10;Деятельность ресторанов и услуги по доставке продуктов питания;CL_PRODUCT_LEA_MARK;;owner;ev-12;0
+restaurant;56.10;Деятельность ресторанов и услуги по доставке продуктов питания;CL_PRODUCT_LEA_MARK;;owner;ev-13;0
+restaurant;56.10;Деятельность ресторанов и услуги по доставке продуктов питания;CL_PRODUCT_LEA_MARK;;owner;ev-14;1
+restaurant;56.10;Деятельность ресторанов и услуги по доставке продуктов питания;CL_PRODUCT_LEA_MARK;;owner;ev-15;0
+restaurant;56.10;Деятельность ресторанов и услуги по доставке продуктов питания;CL_PRODUCT_LEA_MARK;;owner;ev-16;0
+restaurant;56.10;Деятельность ресторанов и услуги по доставке продуктов питания;CL_PRODUCT_LEA_MARK;;owner;ev-17;1
+restaurant;56.10;Деятельность ресторанов и услуги по доставке продуктов питания;CL_PRODUCT_LEA_MARK;;owner;ev-18;0
+restaurant;56.10;Деятельность ресторанов и услуги по доставке продуктов питания;CL_PRODUCT_LEA_MARK;;owner;ev-19;0
+restaurant;56.10;Деятельность ресторанов и услуги по доставке продуктов питания;CL_PRODUCT_LEA_MARK;;owner;ev-20;0
+restaurant;56.10;Деятельность ресторанов и услуги по доставке продуктов питания;CL_PRODUCT_LEA_MARK;;owner;ev-21;0
+restaurant;56.10;Деятельность ресторанов и услуги по доставке продуктов питания;CL_PRODUCT_LEA_MARK;;owner;ev-22;2
+restaurant;56.10;Деятельность ресторанов и услуги по доставке продуктов питания;CL_PRODUCT_LEA_MARK;;owner;ev-23;1
+restaurant;56.10;Деятельность ресторанов и услуги по доставке продуктов питания;CL_PRODUCT_LEA_MARK;;owner;ev-24;0
+landlord;68.20;Аренда и управление собственным или арендованным недвижимым имуществом;CL_PRODUCT_DEP_MARK;;cfo;ev-01;2
+landlord;68.20;Аренда и управление собственным или арендованным недвижимым имуществом;CL_PRODUCT_DEP_MARK;;cfo;ev-02;1
+landlord;68.20;Аренда и управление собственным или арендованным недвижимым имуществом;CL_PRODUCT_DEP_MARK;;cfo;ev-03;0
+landlord;68.20;Аренда и управление собственным или арендованным недвижимым имуществом;CL_PRODUCT_DEP_MARK;;cfo;ev-04;0
+landlord;68.20;Аренда и управление собственным или арендованным недвижимым имуществом;CL_PRODUCT_DEP_MARK;;cfo;ev-05;0
+landlord;68.20;Аренда и управление собственным или арендованным недвижимым имуществом;CL_PRODUCT_DEP_MARK;;cfo;ev-06;0
+landlord;68.20;Аренда и управление собственным или арендованным недвижимым имуществом;CL_PRODUCT_DEP_MARK;;cfo;ev-07;0
+landlord;68.20;Аренда и управление собственным или арендованным недвижимым имуществом;CL_PRODUCT_DEP_MARK;;cfo;ev-08;1
+landlord;68.20;Аренда и управление собственным или арендованным недвижимым имуществом;CL_PRODUCT_DEP_MARK;;cfo;ev-09;2
+landlord;68.20;Аренда и управление собственным или арендованным недвижимым имуществом;CL_PRODUCT_DEP_MARK;;cfo;ev-10;0
+landlord;68.20;Аренда и управление собственным или арендованным недвижимым имуществом;CL_PRODUCT_DEP_MARK;;cfo;ev-11;0
+landlord;68.20;Аренда и управление собственным или арендованным недвижимым имуществом;CL_PRODUCT_DEP_MARK;;cfo;ev-12;0
+landlord;68.20;Аренда и управление собственным или арендованным недвижимым имуществом;CL_PRODUCT_DEP_MARK;;cfo;ev-13;0
+landlord;68.20;Аренда и управление собственным или арендованным недвижимым имуществом;CL_PRODUCT_DEP_MARK;;cfo;ev-14;0
+landlord;68.20;Аренда и управление собственным или арендованным недвижимым имуществом;CL_PRODUCT_DEP_MARK;;cfo;ev-15;0
+landlord;68.20;Аренда и управление собственным или арендованным недвижимым имуществом;CL_PRODUCT_DEP_MARK;;cfo;ev-16;0
+landlord;68.20;Аренда и управление собственным или арендованным недвижимым имуществом;CL_PRODUCT_DEP_MARK;;cfo;ev-17;0
+landlord;68.20;Аренда и управление собственным или арендованным недвижимым имуществом;CL_PRODUCT_DEP_MARK;;cfo;ev-18;1
+landlord;68.20;Аренда и управление собственным или арендованным недвижимым имуществом;CL_PRODUCT_DEP_MARK;;cfo;ev-19;0
+landlord;68.20;Аренда и управление собственным или арендованным недвижимым имуществом;CL_PRODUCT_DEP_MARK;;cfo;ev-20;0
+landlord;68.20;Аренда и управление собственным или арендованным недвижимым имуществом;CL_PRODUCT_DEP_MARK;;cfo;ev-21;0
+landlord;68.20;Аренда и управление собственным или арендованным недвижимым имуществом;CL_PRODUCT_DEP_MARK;;cfo;ev-22;0
+landlord;68.20;Аренда и управление собственным или арендованным недвижимым имуществом;CL_PRODUCT_DEP_MARK;;cfo;ev-23;1
+landlord;68.20;Аренда и управление собственным или арендованным недвижимым имуществом;CL_PRODUCT_DEP_MARK;;cfo;ev-24;0
+trucker;49.41;Деятельность автомобильного грузового транспорта;CL_PRODUCT_LEA_MARK|CL_PRODUCT_LOA_MARK;;ceo;ev-01;2
+trucker;49.41;Деятельность автомобильного грузового транспорта;CL_PRODUCT_LEA_MARK|CL_PRODUCT_LOA_MARK;;ceo;ev-02;1
+trucker;49.41;Деятельность автомобильного грузового транспорта;CL_PRODUCT_LEA_MARK|CL_PRODUCT_LOA_MARK;;ceo;ev-03;1
+trucker;49.41;Деятельность автомобильного грузового транспорта;CL_PRODUCT_LEA_MARK|CL_PRODUCT_LOA_MARK;;ceo;ev-04;0
+trucker;49.41;Деятельность автомобильного грузового транспорта;CL_PRODUCT_LEA_MARK|CL_PRODUCT_LOA_MARK;;ceo;ev-05;1
+trucker;49.41;Деятельность автомобильного грузового транспорта;CL_PRODUCT_LEA_MARK|CL_PRODUCT_LOA_MARK;;ceo;ev-06;2
+trucker;49.41;Деятельность автомобильного грузового транспорта;CL_PRODUCT_LEA_MARK|CL_PRODUCT_LOA_MARK;;ceo;ev-07;2
+trucker;49.41;Деятельность автомобильного грузового транспорта;CL_PRODUCT_LEA_MARK|CL_PRODUCT_LOA_MARK;;ceo;ev-08;0
+trucker;49.41;Деятельность автомобильного грузового транспорта;CL_PRODUCT_LEA_MARK|CL_PRODUCT_LOA_MARK;;ceo;ev-09;0
+trucker;49.41;Деятельность автомобильного грузового транспорта;CL_PRODUCT_LEA_MARK|CL_PRODUCT_LOA_MARK;;ceo;ev-10;1
+trucker;49.41;Деятельность автомобильного грузового транспорта;CL_PRODUCT_LEA_MARK|CL_PRODUCT_LOA_MARK;;ceo;ev-11;1
+trucker;49.41;Деятельность автомобильного грузового транспорта;CL_PRODUCT_LEA_MARK|CL_PRODUCT_LOA_MARK;;ceo;ev-12;0
+trucker;49.41;Деятельность автомобильного грузового транспорта;CL_PRODUCT_LEA_MARK|CL_PRODUCT_LOA_MARK;;ceo;ev-13;0
+trucker;49.41;Деятельность автомобильного грузового транспорта;CL_PRODUCT_LEA_MARK|CL_PRODUCT_LOA_MARK;;ceo;ev-14;1
+trucker;49.41;Деятельность автомобильного грузового транспорта;CL_PRODUCT_LEA_MARK|CL_PRODUCT_LOA_MARK;;ceo;ev-15;0
+trucker;49.41;Деятельность автомобильного грузового транспорта;CL_PRODUCT_LEA_MARK|CL_PRODUCT_LOA_MARK;;ceo;ev-16;0
+trucker;49.41;Деятельность автомобильного грузового транспорта;CL_PRODUCT_LEA_MARK|CL_PRODUCT_LOA_MARK;;ceo;ev-17;1
+trucker;49.41;Деятельность автомобильного грузового транспорта;CL_PRODUCT_LEA_MARK|CL_PRODUCT_LOA_MARK;;ceo;ev-18;0
+trucker;49.41;Деятельность автомобильного грузового транспорта;CL_PRODUCT_LEA_MARK|CL_PRODUCT_LOA_MARK;;ceo;ev-19;2
+trucker;49.41;Деятельность автомобильного грузового транспорта;CL_PRODUCT_LEA_MARK|CL_PRODUCT_LOA_MARK;;ceo;ev-20;0
+trucker;49.41;Деятельность автомобильного грузового транспорта;CL_PRODUCT_LEA_MARK|CL_PRODUCT_LOA_MARK;;ceo;ev-21;0
+trucker;49.41;Деятельность автомобильного грузового транспорта;CL_PRODUCT_LEA_MARK|CL_PRODUCT_LOA_MARK;;ceo;ev-22;0
+trucker;49.41;Деятельность автомобильного грузового транспорта;CL_PRODUCT_LEA_MARK|CL_PRODUCT_LOA_MARK;;ceo;ev-23;0
+trucker;49.41;Деятельность автомобильного грузового транспорта;CL_PRODUCT_LEA_MARK|CL_PRODUCT_LOA_MARK;;ceo;ev-24;0
+agro;01.11;Выращивание зерновых культур;CL_PRODUCT_LOA_MARK|FTS_FLAG;ТУРЦИЯ;ceo;seed-01;2
+agro;01.11;Выращивание зерновых культур;CL_PRODUCT_LOA_MARK|FTS_FLAG;ТУРЦИЯ;ceo;seed-02;2
+agro;01.11;Выращивание зерновых культур;CL_PRODUCT_LOA_MARK|FTS_FLAG;ТУРЦИЯ;ceo;seed-03;1
+agro;01.11;Выращивание зерновых культур;CL_PRODUCT_LOA_MARK|FTS_FLAG;ТУРЦИЯ;ceo;seed-04;0
+agro;01.11;Выращивание зерновых культур;CL_PRODUCT_LOA_MARK|FTS_FLAG;ТУРЦИЯ;ceo;seed-05;0
+agro;01.11;Выращивание зерновых культур;CL_PRODUCT_LOA_MARK|FTS_FLAG;ТУРЦИЯ;ceo;seed-06;1
+agro;01.11;Выращивание зерновых культур;CL_PRODUCT_LOA_MARK|FTS_FLAG;ТУРЦИЯ;ceo;seed-07;0
+agro;01.11;Выращивание зерновых культур;CL_PRODUCT_LOA_MARK|FTS_FLAG;ТУРЦИЯ;ceo;seed-08;0
+agro;01.11;Выращивание зерновых культур;CL_PRODUCT_LOA_MARK|FTS_FLAG;ТУРЦИЯ;ceo;seed-09;0
+agro;01.11;Выращивание зерновых культур;CL_PRODUCT_LOA_MARK|FTS_FLAG;ТУРЦИЯ;ceo;seed-10;0
+agro;01.11;Выращивание зерновых культур;CL_PRODUCT_LOA_MARK|FTS_FLAG;ТУРЦИЯ;ceo;seed-11;1
+agro;01.11;Выращивание зерновых культур;CL_PRODUCT_LOA_MARK|FTS_FLAG;ТУРЦИЯ;ceo;seed-12;0
+agro;01.11;Выращивание зерновых культур;CL_PRODUCT_LOA_MARK|FTS_FLAG;ТУРЦИЯ;ceo;seed-13;0
+agro;01.11;Выращивание зерновых культур;CL_PRODUCT_LOA_MARK|FTS_FLAG;ТУРЦИЯ;ceo;seed-14;2
+agro;01.11;Выращивание зерновых культур;CL_PRODUCT_LOA_MARK|FTS_FLAG;ТУРЦИЯ;ceo;seed-15;0
+agro;01.11;Выращивание зерновых культур;CL_PRODUCT_LOA_MARK|FTS_FLAG;ТУРЦИЯ;ceo;seed-16;0
+agro;01.11;Выращивание зерновых культур;CL_PRODUCT_LOA_MARK|FTS_FLAG;ТУРЦИЯ;ceo;seed-17;0
+agro;01.11;Выращивание зерновых культур;CL_PRODUCT_LOA_MARK|FTS_FLAG;ТУРЦИЯ;ceo;seed-19;0
+agro;01.11;Выращивание зерновых культур;CL_PRODUCT_LOA_MARK|FTS_FLAG;ТУРЦИЯ;ceo;ev-01;2
+agro;01.11;Выращивание зерновых культур;CL_PRODUCT_LOA_MARK|FTS_FLAG;ТУРЦИЯ;ceo;ev-02;1
+agro;01.11;Выращивание зерновых культур;CL_PRODUCT_LOA_MARK|FTS_FLAG;ТУРЦИЯ;ceo;ev-03;2
+agro;01.11;Выращивание зерновых культур;CL_PRODUCT_LOA_MARK|FTS_FLAG;ТУРЦИЯ;ceo;ev-04;0
+agro;01.11;Выращивание зерновых культур;CL_PRODUCT_LOA_MARK|FTS_FLAG;ТУРЦИЯ;ceo;ev-05;0
+agro;01.11;Выращивание зерновых культур;CL_PRODUCT_LOA_MARK|FTS_FLAG;ТУРЦИЯ;ceo;ev-06;2
+agro;01.11;Выращивание зерновых культур;CL_PRODUCT_LOA_MARK|FTS_FLAG;ТУРЦИЯ;ceo;ev-07;1
+agro;01.11;Выращивание зерновых культур;CL_PRODUCT_LOA_MARK|FTS_FLAG;ТУРЦИЯ;ceo;ev-08;0
+agro;01.11;Выращивание зерновых культур;CL_PRODUCT_LOA_MARK|FTS_FLAG;ТУРЦИЯ;ceo;ev-09;0
+agro;01.11;Выращивание зерновых культур;CL_PRODUCT_LOA_MARK|FTS_FLAG;ТУРЦИЯ;ceo;ev-10;0
+agro;01.11;Выращивание зерновых культур;CL_PRODUCT_LOA_MARK|FTS_FLAG;ТУРЦИЯ;ceo;ev-11;0
+agro;01.11;Выращивание зерновых культур;CL_PRODUCT_LOA_MARK|FTS_FLAG;ТУРЦИЯ;ceo;ev-12;0
+agro;01.11;Выращивание зерновых культур;CL_PRODUCT_LOA_MARK|FTS_FLAG;ТУРЦИЯ;ceo;ev-13;0
+agro;01.11;Выращивание зерновых культур;CL_PRODUCT_LOA_MARK|FTS_FLAG;ТУРЦИЯ;ceo;ev-14;2
+agro;01.11;Выращивание зерновых культур;CL_PRODUCT_LOA_MARK|FTS_FLAG;ТУРЦИЯ;ceo;ev-15;0
+agro;01.11;Выращивание зерновых культур;CL_PRODUCT_LOA_MARK|FTS_FLAG;ТУРЦИЯ;ceo;ev-16;0
+agro;01.11;Выращивание зерновых культур;CL_PRODUCT_LOA_MARK|FTS_FLAG;ТУРЦИЯ;ceo;ev-17;1
+agro;01.11;Выращивание зерновых культур;CL_PRODUCT_LOA_MARK|FTS_FLAG;ТУРЦИЯ;ceo;ev-18;0
+agro;01.11;Выращивание зерновых культур;CL_PRODUCT_LOA_MARK|FTS_FLAG;ТУРЦИЯ;ceo;ev-19;1
+agro;01.11;Выращивание зерновых культур;CL_PRODUCT_LOA_MARK|FTS_FLAG;ТУРЦИЯ;ceo;ev-20;0
+agro;01.11;Выращивание зерновых культур;CL_PRODUCT_LOA_MARK|FTS_FLAG;ТУРЦИЯ;ceo;ev-21;0
+agro;01.11;Выращивание зерновых культур;CL_PRODUCT_LOA_MARK|FTS_FLAG;ТУРЦИЯ;ceo;ev-22;0
+agro;01.11;Выращивание зерновых культур;CL_PRODUCT_LOA_MARK|FTS_FLAG;ТУРЦИЯ;ceo;ev-23;0
+agro;01.11;Выращивание зерновых культур;CL_PRODUCT_LOA_MARK|FTS_FLAG;ТУРЦИЯ;ceo;ev-24;0
+autodealer;45.11;Торговля легковыми автомобилями;CL_PRODUCT_LOA_MARK;;cfo;seed-01;2
+autodealer;45.11;Торговля легковыми автомобилями;CL_PRODUCT_LOA_MARK;;cfo;seed-02;2
+autodealer;45.11;Торговля легковыми автомобилями;CL_PRODUCT_LOA_MARK;;cfo;seed-03;0
+autodealer;45.11;Торговля легковыми автомобилями;CL_PRODUCT_LOA_MARK;;cfo;seed-04;0
+autodealer;45.11;Торговля легковыми автомобилями;CL_PRODUCT_LOA_MARK;;cfo;seed-05;2
+autodealer;45.11;Торговля легковыми автомобилями;CL_PRODUCT_LOA_MARK;;cfo;seed-06;0
+autodealer;45.11;Торговля легковыми автомобилями;CL_PRODUCT_LOA_MARK;;cfo;seed-07;0
+autodealer;45.11;Торговля легковыми автомобилями;CL_PRODUCT_LOA_MARK;;cfo;seed-08;0
+autodealer;45.11;Торговля легковыми автомобилями;CL_PRODUCT_LOA_MARK;;cfo;seed-09;0
+autodealer;45.11;Торговля легковыми автомобилями;CL_PRODUCT_LOA_MARK;;cfo;seed-10;1
+autodealer;45.11;Торговля легковыми автомобилями;CL_PRODUCT_LOA_MARK;;cfo;seed-11;0
+autodealer;45.11;Торговля легковыми автомобилями;CL_PRODUCT_LOA_MARK;;cfo;seed-12;0
+autodealer;45.11;Торговля легковыми автомобилями;CL_PRODUCT_LOA_MARK;;cfo;seed-13;0
+autodealer;45.11;Торговля легковыми автомобилями;CL_PRODUCT_LOA_MARK;;cfo;seed-14;2
+autodealer;45.11;Торговля легковыми автомобилями;CL_PRODUCT_LOA_MARK;;cfo;seed-15;2
+autodealer;45.11;Торговля легковыми автомобилями;CL_PRODUCT_LOA_MARK;;cfo;seed-16;0
+autodealer;45.11;Торговля легковыми автомобилями;CL_PRODUCT_LOA_MARK;;cfo;seed-17;0
+autodealer;45.11;Торговля легковыми автомобилями;CL_PRODUCT_LOA_MARK;;cfo;seed-19;0
+autodealer;45.11;Торговля легковыми автомобилями;CL_PRODUCT_LOA_MARK;;cfo;ev-01;2
+autodealer;45.11;Торговля легковыми автомобилями;CL_PRODUCT_LOA_MARK;;cfo;ev-02;1
+autodealer;45.11;Торговля легковыми автомобилями;CL_PRODUCT_LOA_MARK;;cfo;ev-03;2
+autodealer;45.11;Торговля легковыми автомобилями;CL_PRODUCT_LOA_MARK;;cfo;ev-04;0
+autodealer;45.11;Торговля легковыми автомобилями;CL_PRODUCT_LOA_MARK;;cfo;ev-05;0
+autodealer;45.11;Торговля легковыми автомобилями;CL_PRODUCT_LOA_MARK;;cfo;ev-06;0
+autodealer;45.11;Торговля легковыми автомобилями;CL_PRODUCT_LOA_MARK;;cfo;ev-07;0
+autodealer;45.11;Торговля легковыми автомобилями;CL_PRODUCT_LOA_MARK;;cfo;ev-08;0
+autodealer;45.11;Торговля легковыми автомобилями;CL_PRODUCT_LOA_MARK;;cfo;ev-09;0
+autodealer;45.11;Торговля легковыми автомобилями;CL_PRODUCT_LOA_MARK;;cfo;ev-10;2
+autodealer;45.11;Торговля легковыми автомобилями;CL_PRODUCT_LOA_MARK;;cfo;ev-11;2
+autodealer;45.11;Торговля легковыми автомобилями;CL_PRODUCT_LOA_MARK;;cfo;ev-12;0
+autodealer;45.11;Торговля легковыми автомобилями;CL_PRODUCT_LOA_MARK;;cfo;ev-13;0
+autodealer;45.11;Торговля легковыми автомобилями;CL_PRODUCT_LOA_MARK;;cfo;ev-14;0
+autodealer;45.11;Торговля легковыми автомобилями;CL_PRODUCT_LOA_MARK;;cfo;ev-15;1
+autodealer;45.11;Торговля легковыми автомобилями;CL_PRODUCT_LOA_MARK;;cfo;ev-16;1
+autodealer;45.11;Торговля легковыми автомобилями;CL_PRODUCT_LOA_MARK;;cfo;ev-17;0
+autodealer;45.11;Торговля легковыми автомобилями;CL_PRODUCT_LOA_MARK;;cfo;ev-18;1
+autodealer;45.11;Торговля легковыми автомобилями;CL_PRODUCT_LOA_MARK;;cfo;ev-19;1
+autodealer;45.11;Торговля легковыми автомобилями;CL_PRODUCT_LOA_MARK;;cfo;ev-20;0
+autodealer;45.11;Торговля легковыми автомобилями;CL_PRODUCT_LOA_MARK;;cfo;ev-21;0
+autodealer;45.11;Торговля легковыми автомобилями;CL_PRODUCT_LOA_MARK;;cfo;ev-22;0
+autodealer;45.11;Торговля легковыми автомобилями;CL_PRODUCT_LOA_MARK;;cfo;ev-23;1
+autodealer;45.11;Торговля легковыми автомобилями;CL_PRODUCT_LOA_MARK;;cfo;ev-24;0
