@@ -24,6 +24,10 @@ on:
         description: "warmup: пересобрать уже готовые инсайты (после правки промптов)"
         type: boolean
         default: false
+      interactive:
+        description: "warmup: приоритет как у пользователя — для коротких замеров (тратит и из резерва бюджета для пользователей)"
+        type: boolean
+        default: false
 
 concurrency:
   group: llm-live
@@ -97,7 +101,8 @@ jobs:
           ROLES=""; if [ "${{ inputs.roles }}" = "true" ]; then ROLES="--roles"; fi
           REFRESH=""; if [ "${{ inputs.refresh }}" = "true" ]; then REFRESH="--refresh"; fi
           # мягкий лимит 85 мин: job ограничен 120 мин, снапшот должен успеть выгрузиться
-          python scripts/manage.py warmup --top ${{ inputs.top }} --max-rub ${{ inputs.max_rub }} --max-minutes 85 --background $ROLES $REFRESH | tee warmup.log
+          PRIO="--background"; if [ "${{ inputs.interactive }}" = "true" ]; then PRIO=""; fi
+          python scripts/manage.py warmup --top ${{ inputs.top }} --max-rub ${{ inputs.max_rub }} --max-minutes 85 $PRIO $ROLES $REFRESH | tee warmup.log
           grep -E "LLM-судья|Потрачено" warmup.log >> "$GITHUB_STEP_SUMMARY" || true
       - name: Экспорт снапшота
         run: python scripts/manage.py snapshot-export
