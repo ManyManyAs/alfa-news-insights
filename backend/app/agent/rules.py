@@ -16,6 +16,12 @@ from app.knowledge.bank import get_knowledge
 DIR_TEXT = {"up": "рост", "down": "снижение", "stable": "без изменений", "unknown": "изменение"}
 EFFECT_RU = {"risk": "Риск", "opportunity": "Возможность", "mixed": "Риски и возможности", "watch": "Важно отслеживать"}
 NUM_RE = re.compile(r"\d+(?:[.,]\d+)?")
+
+
+def _num(x: str) -> str:
+    """«14,0» и «14» — одно число: нормализуем запятую и хвостовые нули."""
+    x = x.replace(",", ".")
+    return x.rstrip("0").rstrip(".") if "." in x else x
 NO_BANK_VIEW = ("В представленных аналитических материалах Альфа-Банка нет прямой оценки этого события — "
                 "выводы ниже сформированы сервисом и требуют проверки экспертом банка.")
 
@@ -269,11 +275,11 @@ def critique_rules(ins: Insight, ctx: AgentContext) -> tuple[list[QualityCheck],
           any(any(s.startswith(("profile:", "graph:", "peers:")) for s in c.sources) for c in ins.why_it_matters),
           "раздел «почему важно» не опирается на признаки компании")
     corpus = " ".join(n.title + " " + n.text for n in ctx.event.news)
-    corpus_nums = {x.replace(",", ".") for x in NUM_RE.findall(corpus)}
+    corpus_nums = {_num(x) for x in NUM_RE.findall(corpus)}
     halluc = []
     for _, c in all_claims(ins):
         if c.kind == "fact":
-            nums = {x.replace(",", ".") for x in NUM_RE.findall(c.text)}
+            nums = {_num(x) for x in NUM_RE.findall(c.text)}
             if nums - corpus_nums:
                 halluc.append(c.text[:60])
     check("Числа в фактах есть в источниках", not halluc, f"не подтверждено: {'; '.join(halluc[:3])}")
@@ -285,14 +291,14 @@ def critique_rules(ins: Insight, ctx: AgentContext) -> tuple[list[QualityCheck],
 def repair_rules(ins: Insight, ctx: AgentContext) -> Insight:
     """Детерминированная правка: убираем неподтверждённое, а не дописываем."""
     corpus = " ".join(n.title + " " + n.text for n in ctx.event.news)
-    corpus_nums = {x.replace(",", ".") for x in NUM_RE.findall(corpus)}
+    corpus_nums = {_num(x) for x in NUM_RE.findall(corpus)}
 
     def ok(c: Claim) -> bool:
         if not c.sources or not all(valid_source(s, ctx) for s in c.sources):
             c.sources = [s for s in c.sources if valid_source(s, ctx)]
             if not c.sources:
                 return False
-        if c.kind == "fact" and ({x.replace(",", ".") for x in NUM_RE.findall(c.text)} - corpus_nums):
+        if c.kind == "fact" and ({_num(x) for x in NUM_RE.findall(c.text)} - corpus_nums):
             c.kind, c.confidence = "assumption", "low"
         return not re.search(r"ignore (all )?previous|system prompt", c.text, re.I)
 

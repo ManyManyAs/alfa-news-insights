@@ -162,6 +162,13 @@ def allowed_sources(ctx: AgentContext) -> list[str]:
             ids.append("calc:scenario")
     for r in ctx.scored.reasons:
         ids += [b for b in r.get("basis", []) if b.startswith(("profile:", "graph:", "peers:"))]
+    # прогнозы банка, которые подставляют правила и калькулятор сценариев, тоже допустимые ссылки
+    kb = get_knowledge()
+    ids += [f["ref"] for f in kb.forecasts_for(ctx.scored.matched_factors) if f.get("ref")]
+    from app.agent.scenario import bank_baseline
+
+    ids += [r for r in bank_baseline()["refs"].values() if r]
+    ids += [f"profile:{p}" for p in ctx.profile.products] + [f"profile:OKVED={ctx.profile.okved[:2]}"]
     return list(dict.fromkeys(ids))
 
 
@@ -206,8 +213,11 @@ def critique(ins: Insight, ctx: AgentContext, tracer: Tracer, iteration: int) ->
     llm = get_llm()
     if llm.enabled and ins.generated_by.startswith("llm") and llm_allowed(ctx, tracer):
         with tracer.step(f"critique:llm#{iteration}", "llm") as rec:
+            # сценарии и триггеры считает калькулятор — критик оценивает только текст модели
+            draft_json = ins.model_dump_json(exclude={"scenarios", "what_could_change", "quality", "scores", "relevance",
+                                                      "sources", "trace_id"})
             msg = [{"role": "system", "content": prompts.CRITIC_SYSTEM.format(notice=UNTRUSTED_NOTICE)},
-                   {"role": "user", "content": _context_for_llm(ctx) + "\n<draft>\n" + ins.model_dump_json() + "\n</draft>"}]
+                   {"role": "user", "content": _context_for_llm(ctx) + "\n<draft>\n" + draft_json + "\n</draft>"}]
             try:
                 raw, res = llm.complete_json("critique", msg, None, max_tokens=1600)
                 _record_llm(rec, res)
