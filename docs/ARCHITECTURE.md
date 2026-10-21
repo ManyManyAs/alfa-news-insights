@@ -31,7 +31,7 @@
 1. **Уровень события** (`app/agent/event_brief.py`, DeepSeek-V4.1-Flash): один раз на событие — ключевые факты с источниками,
    прогнозы, даты вступления в силу, каналы влияния (фактор → механизм → кто выигрывает/проигрывает → горизонт),
    сверка с тезисами банка (`agrees | contradicts | context`). Кэш — таблица `event_briefs`.
-2. **Уровень клиента** (GLM-5.3-Flash): персональный инсайт получает разбор события вместо полных текстов новостей
+2. **Уровень клиента** (DeepSeek-V4.1-Flash): персональный инсайт получает разбор события вместо полных текстов новостей
    (тексты обрезаются до 600 символов) — промпт в несколько раз короче.
 
 Все ответы моделей валидируются pydantic-схемами (`app/agent/llm_schemas.py`); невалидный ответ модель
@@ -58,12 +58,12 @@ sequenceDiagram
     O->>T: get_event_brief / get_company_profile / get_bank_theses / get_bank_forecast / scenario_calc / get_story_timeline / get_regulation_dates / search_bank_analytics / get_counterparties / get_peer_benchmark / get_playbook / search_related_news / check_consistency
     T-->>O: результат → ctx.memory (общий контекст)
   end
-  O->>L: draft (GLM) → Insight JSON
+  O->>L: draft (DeepSeek) → Insight JSON
   O->>C: правила: 6 вопросов, источники, валидность id, позиция банка, персонализация, числа, injection
-  O->>L: критик (DeepSeek — другая модель, чем автор)
+  O->>L: критик (GLM — другая модель, чем автор)
   alt есть замечания
     O->>T: повторный поиск по аналитике (если нет позиции банка)
-    O->>L: revise (GLM)
+    O->>L: revise (DeepSeek)
     O->>O: repair: удалить неподтверждённое, понизить «факт» до «предположения»
   end
   O->>O: finalize: SourceRef для каждого id, трассировка

@@ -64,8 +64,10 @@ tasks:
   ocr_page:           {model: qwen_vl,  fallback: qwen_vl}
   event_brief:        {model: deepseek, fallback: qwen}
   plan:               {model: qwen,     fallback: gemma}
-  interpret:          {model: glm,      fallback: qwen}
-  critique:           {model: deepseek, fallback: gemma}
-  revise:             {model: glm,      fallback: qwen}
+  # Автор разбора — DeepSeek: в бенчмарке 21.10 лучшая оценка судьи (4,4 против 3,6 у GLM), быстрее и дешевле.
+  # Критик — всегда другая модель, чем автор, чтобы модель не оценивала собственный черновик.
+  interpret:          {model: deepseek, fallback: glm}
+  critique:           {model: glm,      fallback: gemma}
+  revise:             {model: deepseek, fallback: glm}
   chat:               {model: qwen,     fallback: gemma}
   judge:              {model: deepseek, fallback: glm}
