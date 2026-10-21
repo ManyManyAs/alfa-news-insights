@@ -140,7 +140,27 @@ def _context_for_llm(ctx: AgentContext) -> str:
                 r["ref"] = f"bank:{r['id']}"
     mem["relevance_reasons"] = ctx.scored.reasons
     mem["role"] = ctx.role
+    mem["allowed_sources"] = allowed_sources(ctx)
     return "<context>\n" + json.dumps(mem, ensure_ascii=False, default=str)[:24000] + "\n</context>"
+
+
+def allowed_sources(ctx: AgentContext) -> list[str]:
+    """Полный список id, на которые можно ссылаться: модели не нужно угадывать, какие тезисы «существуют»."""
+    ids = [f"news:{n.id}" for n in ctx.event.news]
+    for k, v in ctx.memory.items():
+        if k.startswith("get_bank_theses"):
+            ids += [f"bank:{t['id']}" for t in v.get("theses", [])]
+        elif k.startswith("search_bank_analytics"):
+            ids += [f"bank:{r['id']}" for r in v.get("results", [])]
+        elif k.startswith("get_bank_forecast"):
+            ids += [f["ref"] for f in v.get("forecasts", []) if f.get("ref")]
+        elif k.startswith("get_counterparties"):
+            ids += [m["basis"] for m in v.get("industry_mix", [])]
+        elif k.startswith("scenario_calc"):
+            ids.append("calc:scenario")
+    for r in ctx.scored.reasons:
+        ids += [b for b in r.get("basis", []) if b.startswith(("profile:", "graph:", "peers:"))]
+    return list(dict.fromkeys(ids))
 
 
 def _parse_insight(data: dict, ctx: AgentContext, generated_by: str) -> Insight:
@@ -187,8 +207,11 @@ def critique(ins: Insight, ctx: AgentContext, tracer: Tracer, iteration: int) ->
             msg = [{"role": "system", "content": prompts.CRITIC_SYSTEM.format(notice=UNTRUSTED_NOTICE)},
                    {"role": "user", "content": _context_for_llm(ctx) + "\n<draft>\n" + ins.model_dump_json() + "\n</draft>"}]
             try:
-                data, res = llm.complete_json("critique", msg, CriticOut, max_tokens=700)
+                raw, res = llm.complete_json("critique", msg, None, max_tokens=1600)
                 _record_llm(rec, res)
+                if isinstance(raw, list):  # модель иногда возвращает только список замечаний
+                    raw = {"verdict": "revise", "issues": [str(x) for x in raw]}
+                data = CriticOut.model_validate(raw).model_dump()
                 if data["scores"]:
                     ins.scores = {k: int(v) for k, v in data["scores"].items()}
                 low = [k for k, v in ins.scores.items() if v < 4]
@@ -197,7 +220,7 @@ def critique(ins: Insight, ctx: AgentContext, tracer: Tracer, iteration: int) ->
                     if low and not data["issues"]:
                         issues.append(f"LLM-критик: низкие оценки по осям {', '.join(low)}")
                 rec["output"] = data
-            except (LLMUnavailable, ValueError) as e:
+            except (LLMUnavailable, ValueError) as e:  # pydantic ValidationError — подкласс ValueError
                 rec["output"] = {"skipped": str(e)}
     return issues
 

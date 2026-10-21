@@ -134,14 +134,23 @@ def t_check_consistency(ctx: AgentContext) -> dict:
         all_sets = list(nums_by_src.values())
         if all(all_sets) and not set.intersection(*all_sets):
             issues.append("Источники события приводят разные числовые значения — требуется сверка")
-    kb = get_knowledge()
+    # Сверяем только с тезисами, которые агент уже видит в контексте (иначе модель ссылается на «чужие» id)
+    seen = ctx.memory.get("get_bank_theses") or t_get_bank_theses(ctx)
+    theses = seen.get("theses", [])
+    dir_ru = {"up": "рост", "down": "снижение"}
+    divergences = []
     for hit in ctx.event.classification.factors:
-        for t in kb.theses_for([hit.factor]):
-            if hit.direction in ("up", "down") and t["direction"] in ("up", "down") and hit.direction != t["direction"]:
-                issues.append(f"Событие ({hit.factor}: {hit.direction}) расходится с тезисом банка {t['id']} "
-                              f"({t['direction']}) — показать оба взгляда")
+        for t in theses:
+            if t["factor"] == hit.factor and hit.direction in dir_ru and t["direction"] in dir_ru \
+                    and hit.direction != t["direction"]:
+                divergences.append({"thesis_ref": f"bank:{t['id']}", "factor": hit.factor,
+                                    "event_direction": hit.direction, "bank_direction": t["direction"],
+                                    "bank_horizon": t.get("horizon"), "bank_thesis": t["thesis"]})
+                issues.append(f"Новость говорит о «{dir_ru[hit.direction]}» по фактору {hit.factor}, а тезис банка "
+                              f"bank:{t['id']} ({t.get('horizon') or 'горизонт не указан'}) — о «{dir_ru[t['direction']]}». "
+                              f"Возможно, это разные горизонты; покажите оба взгляда с этой оговоркой")
                 break
-    return {"issues": issues}
+    return {"issues": issues, "divergences": divergences}
 
 
 def t_get_story_timeline(ctx: AgentContext) -> dict:
