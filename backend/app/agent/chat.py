@@ -9,7 +9,7 @@ from app.agent.schemas import Insight
 from app.data.models import CompanyProfile
 from app.knowledge.bank import get_knowledge
 from app.llm.client import LLMUnavailable, get_llm
-from app.security.guard import UNTRUSTED_NOTICE, sanitize_untrusted
+from app.security.guard import UNTRUSTED_NOTICE, guard_output, sanitize_untrusted
 
 
 def _fmt(claims, label: str) -> str:
@@ -87,9 +87,10 @@ def answer_stream(q: str, ins: Insight, profile: CompanyProfile) -> Iterator[dic
             gen = llm.stream("chat", _messages(q_clean, ins, profile), **CHAT_PARAMS)
             first = next(gen)  # если ответа нет (replay-промах) — исключение до отправки meta
             yield {"type": "meta", "mode": f"llm:{llm.mode}", "security_flags": flags}
-            yield {"type": "delta", "text": first}
+            allowed = {profile.uid}
+            yield {"type": "delta", "text": guard_output(first, allowed)}
             for chunk in gen:
-                yield {"type": "delta", "text": chunk}
+                yield {"type": "delta", "text": guard_output(chunk, allowed)}
             yield {"type": "done"}
             return
         except (LLMUnavailable, StopIteration):

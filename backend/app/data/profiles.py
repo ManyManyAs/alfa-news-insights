@@ -209,4 +209,7 @@ def get_profile(uid: str) -> CompanyProfile | None:
 
 
 def companies_of_user(fid: str) -> list[str]:
-    return [r["uid"] for r in db.query("SELECT uid FROM user_links WHERE fid=?", (fid,))]
+    """Компании, доступные физлицу в интернет-банке (только действующие клиенты)."""
+    from app.security.auth import client_companies
+
+    return client_companies(fid)

@@ -163,6 +163,26 @@ CREATE TABLE IF NOT EXISTS feedback (
     ts TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Действия после инсайта: связаться с менеджером, обратный звонок, заявка (в банке — через CRM-интеграцию)
+CREATE TABLE IF NOT EXISTS action_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT,
+    company_uid TEXT,
+    event_id TEXT,
+    kind TEXT,
+    comment TEXT,
+    ts TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Скрытые пользователем карточки ленты
+CREATE TABLE IF NOT EXISTS hidden_events (
+    user_id TEXT,
+    company_uid TEXT,
+    event_id TEXT,
+    ts TEXT DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, company_uid, event_id)
+);
+
 CREATE TABLE IF NOT EXISTS audit_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id TEXT,

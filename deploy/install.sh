@@ -71,6 +71,10 @@ for i in $(seq 1 100); do
 done
 curl -sf http://127.0.0.1:8000/api/health && echo || { docker compose -f docker-compose.yml -f deploy/docker-compose.prod.yml logs --tail 80 app; exit 1; }
 
+# Ежедневная резервная копия БД в 04:30 (хранится 7 последних)
+echo "30 4 * * * root bash $APP_DIR/deploy/backup.sh >> /var/log/alfa-news-backup.log 2>&1" > /etc/cron.d/alfa-news-insights-backup
+chmod 644 /etc/cron.d/alfa-news-insights-backup
+
 log "5/6 Nginx"
 SERVER_NAME="${DOMAIN:-_}"
 sed "s/__SERVER_NAME__/${SERVER_NAME}/" "$APP_DIR/deploy/nginx.conf" > /etc/nginx/sites-available/alfa-news-insights
