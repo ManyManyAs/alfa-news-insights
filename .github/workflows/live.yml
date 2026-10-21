@@ -6,9 +6,9 @@ on:
   workflow_dispatch:
     inputs:
       task:
-        description: "check — проверка моделей; benchmark — сравнение моделей; warmup — предрасчёт + снапшот; all — всё"
+        description: "check — проверка моделей; benchmark — сравнение моделей; warmup — предрасчёт + снапшот; judges — два судьи (GLM и Kimi) на готовых разборах; all — всё"
         type: choice
-        options: [check, benchmark, warmup, all]
+        options: [check, benchmark, warmup, judges, all]
         default: check
       max_rub:
         description: "Лимит расходов на прогон, ₽ (дневной лимит команды — 500 ₽)"
@@ -104,6 +104,11 @@ jobs:
           PRIO="--background"; if [ "${{ inputs.interactive }}" = "true" ]; then PRIO=""; fi
           python scripts/manage.py warmup --top ${{ inputs.top }} --max-rub ${{ inputs.max_rub }} --max-minutes 85 $PRIO $ROLES $REFRESH | tee warmup.log
           grep -E "LLM-судья|Потрачено" warmup.log >> "$GITHUB_STEP_SUMMARY" || true
+      - name: Два судьи на готовых разборах
+        if: inputs.task == 'judges' || inputs.task == 'all'
+        run: |
+          python scripts/judges.py --limit 20 --max-rub ${{ inputs.max_rub }}
+          cat ../docs/llm/judges.md >> "$GITHUB_STEP_SUMMARY"
       - name: Экспорт снапшота
         run: python scripts/manage.py snapshot-export
       - name: Итоги в summary
