@@ -55,8 +55,8 @@ class CompanyProfile(BaseModel):
     data_gaps: list[str] = Field(default_factory=list)
 
     def display_name(self) -> str:
-        """Данные обезличены — показываем отрасль + город + id."""
-        return f"{self.okved_name[:60]} · {self.city or self.region or ''} · {self.uid}"
+        """Данные обезличены — показываем отрасль и город (служебный id клиенту не нужен)."""
+        return f"{self.okved_name[:60]} · {self.city or self.region or ''}"
 
     def llm_view(self) -> dict:
         """Минимизированное представление для LLM: без идентификаторов контрагентов и группы."""

@@ -651,3 +651,9 @@ body.logged-out .layout, body.logged-out .topbar { display: none; }
 }
 @media (max-width: 900px) { .digest-grid { grid-template-columns: 1fr; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
+
+/* очищенный клиентский вид */
+.w-dots { color: var(--red); letter-spacing: 1px; font-size: 9px; margin-left: 4px; vertical-align: 1px; }
+.trace-raw { margin-top: 14px; background: var(--soft); border-radius: 14px; padding: 12px 14px; }
+.trace-raw summary { cursor: pointer; font-weight: 650; font-size: 14px; }
+.trace-raw .trace-step { margin-top: 8px; }
