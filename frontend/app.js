@@ -81,6 +81,10 @@ function stepTitle(name) {
 function q(params) { return new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== "")).toString(); }
 
 // ---------------------------------------------------------------- init / сессия
+// высота шапки (она переносится на узких экранах) — для независимой прокрутки панелей ленты и разбора
+function syncTopHeight() { const t = document.querySelector(".topbar"); if (t) document.documentElement.style.setProperty("--top-h", t.offsetHeight + "px"); }
+try { new ResizeObserver(syncTopHeight).observe(document.querySelector(".topbar")); } catch (e) { addEventListener("resize", syncTopHeight); }
+
 async function init() {
   const { users, roles, demo_password: demoPass } = await api("/api/demo-users");
   state.users = users; state.roles = roles; state.demoPass = demoPass;
@@ -293,10 +297,10 @@ async function loadFeed() {
 }
 
 function renderWidget() {
-  const items = state.feed, quiet = state.quiet;
+  const items = state.feed, quiet = state.quiet, read = readSet();
   $("#widgetList").innerHTML = items.slice(0, 4).map((it) => `
-    <div class="w-item" data-ev="${it.event_id}" tabindex="0" role="button">
-      <span class="pill ${it.effect}">${EFFECT[it.effect]}</span><span class="muted small">${fmtDate(it.published_at)}</span>
+    <div class="w-item ${read.has(it.event_id) ? "read" : ""}" data-ev="${it.event_id}" tabindex="0" role="button">
+      ${read.has(it.event_id) ? "" : `<span class="new-dot" title="Не прочитано"></span>`}<span class="pill ${it.effect}">${EFFECT[it.effect]}</span><span class="muted small">${fmtDate(it.published_at)}</span>${read.has(it.event_id) ? `<span class="read-mark">✓ прочитано</span>` : ""}
       <div class="title"><b>${esc(it.title)}</b></div>
       <div class="why">Почему вам: ${esc(it.reasons[0]?.why || "")}</div>
       ${it.effective ? `<div>${effectiveTag(it.effective)}</div>` : ""}
@@ -313,7 +317,7 @@ function readSet() { try { return new Set(JSON.parse(localStorage.getItem("read:
 function markRead(id) {
   const s = readSet(); s.add(id);
   try { localStorage.setItem("read:" + state.company, JSON.stringify([...s].slice(-500))); } catch (e) { /* хранилище недоступно */ }
-  document.querySelectorAll(`.feed-item[data-ev="${CSS.escape(id)}"]`).forEach((el) => el.classList.add("read"));
+  if (document.getElementById("feedList")) { renderFeedList(); renderWidget(); }
 }
 function fillFactorFilter() {
   const seen = new Map();
@@ -345,7 +349,7 @@ function renderFeedList(animate = false) {
     return `<div class="feed-item ${read.has(it.event_id) ? "read" : ""} ${it.event_id === state.current ? "active" : ""}" data-ev="${it.event_id}" tabindex="0" role="button">
       ${it.hidden ? `<button class="link-btn unhide" data-unhide="${it.event_id}">Вернуть в ленту</button>` : `<button class="hide-btn" data-hide="${it.event_id}" title="Скрыть из ленты" aria-label="Скрыть из ленты">×</button>`}
       <div><span class="pill ${it.effect}">${EFFECT[it.effect]}</span>${it.has_bank_view ? `<span class="pill bank">есть позиция банка</span>` : ""}${effectiveTag(it.effective)}</div>
-      <div class="title">${esc(it.title)}</div>
+      <div class="title">${read.has(it.event_id) ? "" : `<span class="new-dot" title="Не прочитано"></span>`}${esc(it.title)}${read.has(it.event_id) ? `<span class="read-mark">✓ прочитано</span>` : ""}</div>
       <div class="meta">${fmtDate(it.published_at)} · ${esc([...new Set(it.sources.map((x) => x.source))].join(", "))}${it.sources.length > 1 ? ` · ${it.sources.length} ${plural(it.sources.length, "публикация", "публикации", "публикаций")}` : ""} · релевантность ${it.score}</div>
       <div class="chips">${entityChips(it)}</div>
       <div class="reasons">${esc(reasonText(it))}</div>
@@ -687,13 +691,15 @@ async function loadDigest() {
         <div class="em-head"><div><b>Альфа-Бизнес · Бизнес-радар</b></div><div class="muted small">Тема: ${esc(d.quiet ? `Спокойная ${d.period === "day" ? "день" : "неделя"} для вашего бизнеса` : `${d.top.length} ${plural(d.top.length, "событие", "события", "событий")} ${per}: ${d.top[0] ? d.top[0].title.slice(0, 60) : ""}`)}</div></div>
         <div class="em-body"><p>Здравствуйте! Подборка ${per} для роли «${esc(d.role_title)}».</p>
           <ol>${d.top.slice(0, 3).map((t) => `<li><b>${esc(t.title)}</b><br><span class="muted">${esc(t.why)}</span></li>`).join("")}</ol>
-          <p><span class="em-btn">Открыть Бизнес-радар</span></p>
+          <p><button type="button" class="em-btn btn" id="digestOpen">Открыть Бизнес-радар</button></p>
           <p class="muted small">Это демонстрация: письмо не отправляется.</p></div>
       </div>
       <div class="card push"><div class="muted small">Предпросмотр push</div>
         <div class="push-n"><b>Альфа-Бизнес</b><div>${esc(d.top[0] ? `${EFFECT[d.top[0].effect][0].toUpperCase() + EFFECT[d.top[0].effect].slice(1)}: ${d.top[0].title}` : "Важных событий нет")}</div></div></div>
     </div>`;
   bindCards(box);
+  const open = document.getElementById("digestOpen");
+  if (open) open.onclick = () => show("radar");
 }
 
 // ---------------------------------------------------------------- тема

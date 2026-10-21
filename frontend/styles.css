@@ -320,7 +320,14 @@ dialog { background: var(--surface); color: var(--ink); }
 .tool-row input[type=search] { flex: 1 1 160px; min-width: 120px; }
 .tool-row select { font-size: 13px; padding: 5px 8px; }
 .chk { font-size: 13px; display: inline-flex; gap: 4px; align-items: center; color: var(--muted); }
+/* прочитанное — заметно: карточка приглушена, есть отметка; непрочитанное — красная точка и полоса слева */
+.feed-item.read { opacity: .62; box-shadow: none; background: var(--soft); }
+.feed-item.read:hover, .feed-item.read.active { opacity: 1; }
 .feed-item.read .title { color: var(--muted); font-weight: 500; }
+.feed-item:not(.read) { border-left: 4px solid var(--accent); }
+.new-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); margin-right: 6px; vertical-align: 2px; }
+.read-mark { font-size: 11px; color: var(--opp); font-weight: 600; margin-left: 6px; white-space: nowrap; }
+.w-item.read { opacity: .62; }
 .feed-item:focus-visible, .w-item:focus-visible { outline: 2px solid var(--accent); }
 .tab { border: 0; background: transparent; font: inherit; color: inherit; }
 
@@ -377,8 +384,9 @@ dialog { background: var(--surface); color: var(--ink); }
 /* тур и онбординг */
 #tour { display: none; position: fixed; inset: 0; z-index: 50; pointer-events: none; }
 #tour.on { display: block; }
-.tour-spot { position: fixed; border-radius: 14px; box-shadow: 0 0 0 9999px rgba(8, 12, 18, .55); transition: all .3s ease; pointer-events: none; border: 2px solid var(--accent); }
-.tour-pop { position: fixed; background: var(--surface); color: var(--ink); border-radius: 14px; padding: 14px 16px; box-shadow: 0 20px 60px rgba(0,0,0,.35); pointer-events: auto; transition: all .3s ease; }
+.tour-spot { position: fixed; border-radius: 14px; box-shadow: 0 0 0 9999px rgba(8, 12, 18, .55); pointer-events: none; border: 2px solid var(--accent); }
+.tour-pop { position: fixed; background: var(--surface); color: var(--ink); border-radius: 14px; padding: 14px 16px; box-shadow: 0 20px 60px rgba(0,0,0,.35); pointer-events: auto; z-index: 2; }
+.tour-pop.corner { box-shadow: 0 0 0 2px var(--accent), 0 20px 60px rgba(0,0,0,.45); }
 .tour-pop h3 { margin: 4px 0 6px; }
 .tour-pop p { margin: 0 0 12px; font-size: 14px; line-height: 1.5; }
 .tour-pop .row { display: flex; justify-content: space-between; gap: 8px; }
@@ -434,3 +442,11 @@ body.logged-out .layout, body.logged-out .topbar { display: none; }
 .disclaimer { margin-top: 16px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 10px; }
 .scale { margin-top: 8px; }
 .app-foot { margin-top: 32px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 12px; }
+
+/* --- этап 9: независимая прокрутка ленты и разбора (без «перетекания» прокрутки) --- */
+@media (min-width: 981px) {
+  #view-radar .radar-grid { height: calc(100vh - var(--top-h, 120px) - 48px); }
+  #view-radar .feed-col, #view-radar .insight-col { height: 100%; max-height: none; overflow-y: auto; overscroll-behavior: contain; position: static; padding-right: 4px; }
+  #view-radar .feed-head { position: sticky; top: 0; z-index: 2; background: var(--bg); padding-bottom: 4px; }
+}
+.em-btn { border: 0; cursor: pointer; font: inherit; }
