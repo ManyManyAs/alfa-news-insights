@@ -20,6 +20,9 @@ DIR = {"up": 1, "down": -1, "stable": 0, "unknown": 0}
 HALF_LIFE_DAYS = 14
 MIN_SCORE = 0.35
 OTHER_INDUSTRY_DISCOUNT = 0.5
+# Региональная новость (субсидия, аренда, тариф в другом регионе) для компании и её контрагентов из других регионов —
+# сигнал второго порядка. Москва не считается «чужим регионом»: в федеральных новостях она упоминается постоянно.
+FOREIGN_REGION_DISCOUNT = 0.5
 MACRO_FACTORS = {"key_rate", "inflation", "fx_rub", "credit_conditions", "labor_market", "budget_policy",
                  "tax_regulation", "geopolitics", "bond_market"}
 
@@ -72,6 +75,8 @@ def score_event(event: Event, profile: CompanyProfile, exposures: dict[str, Expo
     # («спрос», «стройка») описывают ту отрасль — их вклад ослабляем
     related = {(profile.okved or "")[:2]} | {m["okved2"] for m in profile.industry_mix if m["share"] >= 0.15}
     other_industry = bool(cls.industries) and not (set(cls.industries) & related)
+    my_regions = {profile.region} | {r["region"] for r in profile.cp_regions if r["share"] >= 0.2}
+    foreign_region = bool(cls.regions) and "Москва" not in cls.regions and not (set(cls.regions) & my_regions)
     seen: set[str] = set()
     for hit in cls.factors:
         if hit.factor in seen:  # старые разборы модели могли содержать повтор фактора
@@ -81,6 +86,8 @@ def score_event(event: Event, profile: CompanyProfile, exposures: dict[str, Expo
         if not exp or exp.weight <= 0:  # тема скрыта пользователем
             continue
         discount = OTHER_INDUSTRY_DISCOUNT if other_industry and hit.factor not in MACRO_FACTORS else 1.0
+        if foreign_region:
+            discount *= FOREIGN_REGION_DISCOUNT
         contrib = exp.weight * hit.confidence * discount
         total += contrib
         matched.append(hit.factor)

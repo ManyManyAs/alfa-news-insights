@@ -109,3 +109,29 @@ def test_rerank_without_llm_is_noop(client, demo):
 
 def test_quiet_flag_present(client, demo):
     assert "quiet" in _feed(client, demo)
+
+
+def test_foreign_region_news_is_discounted():
+    """Региональная новость (субсидия в другом регионе) для компании не из этого региона весит меньше,
+    а для компании из этого региона — полностью; федеральная (с упоминанием Москвы) не штрафуется."""
+    from app.bootstrap import load_demo_users
+    from app.data.profiles import get_profile
+    from app.data.sensitivity import compute_exposures
+    from app.news.ingest import list_events
+    from app.ranking.scorer import score_event
+
+    prof = get_profile(load_demo_users()[0]["primary_company"])
+    ev = next(e for e in list_events(300) if e.classification.factors and not e.classification.regions)
+    exp = compute_exposures(prof, None)
+    mine = {prof.region} | {r["region"] for r in prof.cp_regions}
+    other = next(r for r in ("Омская область", "Курганская область", "Амурская область", "Тыва (Республика)") if r not in mine)
+
+    def score(regions):
+        cls = ev.classification.model_copy(update={"regions": regions})
+        return score_event(ev.model_copy(update={"classification": cls}), prof, exp).score
+
+    base = score([])
+    assert score([other]) < base * 0.8
+    assert score([other, "Москва"]) >= base * 0.95
+    if prof.region:
+        assert score([prof.region]) > base
