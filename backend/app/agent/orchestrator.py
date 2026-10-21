@@ -35,6 +35,8 @@ MANDATORY = ["get_event_brief", "get_company_profile", "get_bank_theses", "scena
 # Ограничители на один запрос: по исчерпании оставшиеся шаги идут без LLM (правила), отказ виден в трассировке
 AGENT_TIMEOUT_S = 90
 AGENT_MAX_COST_RUB = 4.0
+# Полный разбор с триггерами и сценариями длиннее 2200 токенов — обрезанный JSON уводил черновик на правила
+DRAFT_MAX_TOKENS = 4000
 
 
 def llm_allowed(ctx: AgentContext, tracer: Tracer) -> bool:
@@ -182,7 +184,7 @@ def draft(ctx: AgentContext, tracer: Tracer) -> Insight:
             msg = [{"role": "system", "content": prompts.INTERPRET_SYSTEM.format(notice=UNTRUSTED_NOTICE)},
                    {"role": "user", "content": _context_for_llm(ctx)}]
             try:
-                data, res = llm.complete_json("interpret", msg, InsightDraftOut, max_tokens=2200)
+                data, res = llm.complete_json("interpret", msg, InsightDraftOut, max_tokens=DRAFT_MAX_TOKENS)
                 _record_llm(rec, res)
                 ins = _parse_insight(data, ctx, f"llm:{res.model}")
                 rec["output"] = ins.model_dump()
@@ -242,7 +244,7 @@ def adapt(ins: Insight, ctx: AgentContext, issues: list[str], tracer: Tracer) ->
                    {"role": "user", "content": _context_for_llm(ctx) + "\n<draft>\n" + ins.model_dump_json()
                     + "\n</draft>\n<issues>\n" + "\n".join(issues) + "\n</issues>"}]
             try:
-                data, res = llm.complete_json("revise", msg, InsightDraftOut, max_tokens=2200)
+                data, res = llm.complete_json("revise", msg, InsightDraftOut, max_tokens=DRAFT_MAX_TOKENS)
                 _record_llm(rec, res)
                 scores = ins.scores
                 ins = _parse_insight(data, ctx, f"llm:{res.model}")
