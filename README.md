@@ -7,9 +7,9 @@
 > Пример. Компания: девелопер с кредитом. Событие: ЦБ сохранил ставку 14%.
 > Сервис не пересказывает новость. Он отвечает: «Для компании (строительство, с кредитом) это риск: ожидавшееся удешевление кредитов откладывается, бюджет на обслуживание долга стоит пересчитать по консервативному сценарию». Ниже показана позиция банка: «ожидаем сохранения паузы 23 октября, прогноз ставки на конец 2026 г. повышен до 14,0%» [bank:t01]. Затем идут действия: пересчитать график процентных платежей, оценить долю долга с плавающей ставкой.
 
-[![CI](https://github.com/ManyManyAs/alfa-news-insights/actions/workflows/ci.yml/badge.svg)](https://github.com/ManyManyAs/alfa-news-insights/actions/workflows/ci.yml)
+[![Uptime](https://github.com/ManyManyAs/alfa-news-insights/actions/workflows/uptime.yml/badge.svg)](https://github.com/ManyManyAs/alfa-news-insights/actions/workflows/uptime.yml) [![CI](https://github.com/ManyManyAs/alfa-news-insights/actions/workflows/ci.yml/badge.svg)](https://github.com/ManyManyAs/alfa-news-insights/actions/workflows/ci.yml)
 
-**Демо-стенд:** http://77.221.139.69. Это живые модели и живой сбор новостей. Войти можно любой демо-учёткой на экране входа, пароль `alfa2026`. Если стенд недоступен, всё работает локально через `docker compose up` (см. ниже).
+**Демо-стенд:** https://77-221-139-69.sslip.io (HTTPS; старый адрес http://77.221.139.69 перенаправляет туда). Это живые модели и живой сбор новостей. Войти можно любой демо-учёткой на экране входа, пароль `alfa2026`. Если стенд недоступен, всё работает локально через `docker compose up` (см. ниже).
 
 ![Сценарий: вход → виджет на главной → персональный разбор → «что если» → чат → трассировка → дайджест → качество](docs/img/scenario.gif)
 
