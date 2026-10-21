@@ -5,7 +5,9 @@ name: Deploy
 #   DEPLOY_USER            — пользователь (по умолчанию root)
 #   DEPLOY_SSH_KEY         — приватный SSH-ключ (рекомендуется) ИЛИ DEPLOY_PASSWORD — пароль
 #   LLM_API_KEY, LLM_BASE_URL — ключ и эндпоинт моделей (пишутся в .env на сервере с правами 600)
-# Необязательно (variables): DEPLOY_DOMAIN + DEPLOY_EMAIL — HTTPS через Let's Encrypt; LLM_MODEL_* — id моделей.
+# HTTPS включается сам: без своего домена сайт получает имя <ip-через-дефисы>.sslip.io и сертификат Let's Encrypt.
+# Необязательно (variables): DEPLOY_DOMAIN — свой домен вместо sslip.io; DEPLOY_EMAIL — почта для Let's Encrypt;
+# LLM_MODEL_* — id моделей.
 on:
   push:
     branches: [main]
@@ -89,15 +91,24 @@ jobs:
         env:
           DOMAIN: ${{ vars.DEPLOY_DOMAIN }}
           EMAIL: ${{ vars.DEPLOY_EMAIL }}
-        run: $SSH_CMD "$USER_NAME@$HOST" "cd $APP_DIR && DOMAIN='$DOMAIN' EMAIL='$EMAIL' bash deploy/install.sh < /dev/null"
+        run: $SSH_CMD "$USER_NAME@$HOST" "cd $APP_DIR && DOMAIN='$DOMAIN' EMAIL='$EMAIL' AUTO_DOMAIN=1 bash deploy/install.sh < /dev/null"
       - name: Проверка снаружи
         if: steps.cfg.outputs.skip != 'true'
+        env:
+          DOMAIN: ${{ vars.DEPLOY_DOMAIN }}
         run: |
-          for _ in $(seq 1 20); do curl -sf "http://$HOST/api/health" && echo && exit 0; sleep 5; done
-          echo "::error::http://$HOST/api/health не отвечает"; exit 1
+          if [ -z "$DOMAIN" ] && [[ "$HOST" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then DOMAIN="${HOST//./-}.sslip.io"; fi
+          for _ in $(seq 1 20); do
+            if [ -n "$DOMAIN" ] && curl -sf --max-time 10 "https://$DOMAIN/api/health" | grep -q '"ok"'; then
+              echo "SITE=https://$DOMAIN/" >> "$GITHUB_ENV"; exit 0
+            fi
+            if curl -sfL --max-time 10 "http://$HOST/api/health" | grep -q '"ok"'; then
+              echo "::warning::HTTPS недоступен — сайт работает по HTTP"; echo "SITE=http://$HOST/" >> "$GITHUB_ENV"; exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::сайт не отвечает ни по https://$DOMAIN, ни по http://$HOST"; exit 1
       - name: Ссылка
         if: steps.cfg.outputs.skip != 'true'
-        env:
-          SITE: ${{ vars.DEPLOY_DOMAIN || secrets.DEPLOY_HOST }}
         run: |
-          echo "### Развёрнуто: http://$SITE/" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Развёрнуто: $SITE" >> "$GITHUB_STEP_SUMMARY"

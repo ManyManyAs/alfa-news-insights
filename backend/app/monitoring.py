@@ -16,6 +16,7 @@ from app.storage import db
 ALLOWED = {
     "home_view", "widget_click", "feed_view", "card_open", "preview_ready", "insight_ready", "source_click",
     "action_open", "chat_question", "whatif_open", "digest_view", "tour_start", "tour_finish", "map_hover",
+    "js_error",  # ошибка в браузере: только текст ошибки и файл:строка, без данных пользователя
 }
 
 SCHEMA = """
@@ -137,6 +138,9 @@ def alerts(budget: dict, product: dict, judge: dict, sources_down: int, injectio
     p95 = product["speed_ms"]["preview_p95"]
     if p95 is not None and p95 > 2000:
         add("warn", f"Первый вывод p95 = {p95} мс — дольше цели 2 с")
+    js = product.get("counts", {}).get("js_error", 0)
+    if js >= 5:
+        add("warn", f"Ошибок в браузере за период: {js} — смотреть журнал ui_events (type=js_error)")
     if sources_down:
         add("warn", f"Источников новостей с ошибками: {sources_down}")
     if injections_24h > 5:

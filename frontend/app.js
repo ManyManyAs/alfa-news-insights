@@ -50,6 +50,16 @@ function flushTrack() {
   fetch("/api/track", { method: "POST", credentials: "same-origin", keepalive: true, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ events }) }).catch(() => {});
 }
 setInterval(flushTrack, 5000);
+// Ошибки в браузере — в мониторинг (текст и место ошибки, без данных пользователя; не больше 10 разных за сеанс)
+const jsErrSeen = new Set();
+function reportJsError(msg, src) {
+  const key = String(msg).slice(0, 160) + "|" + (src || "");
+  if (jsErrSeen.has(key) || jsErrSeen.size >= 10) return;
+  jsErrSeen.add(key);
+  track("js_error", { meta: { msg: String(msg).slice(0, 160), src: String(src || "").replace(location.origin, "").slice(0, 80) } });
+}
+addEventListener("error", (e) => { if (e.message) reportJsError(e.message, `${e.filename || ""}:${e.lineno || 0}`); });
+addEventListener("unhandledrejection", (e) => { const r = e.reason || {}; if (!(r.status && r.status < 500)) reportJsError(r.message || r, "promise"); });
 addEventListener("pagehide", flushTrack);
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") flushTrack(); });
 
@@ -982,6 +992,7 @@ async function loadMetrics() {
       ${tile("События в базе", m.events, `${m.companies} компаний`)}
       ${tile("Источники новостей", `${m.sources.total - m.sources.down} / ${m.sources.total}`, m.sources.down ? `с ошибками: ${m.sources.down}` : "все работают", m.sources.down ? "warn" : "good")}
       ${tile("Последний сбор", m.sources.last_ingest ? ago(m.sources.last_ingest.at) : "—", m.sources.last_ingest ? `новых событий ${m.sources.last_ingest.new_events}, отсеяно шума ${m.sources.last_ingest.noise}` : "")}
+      ${tile("Ошибки в браузере", p.counts.js_error || 0, "за период · пишутся автоматически, без данных пользователя", (p.counts.js_error || 0) >= 5 ? "warn" : "good")}
     </div>`;
 }
 

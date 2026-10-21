@@ -75,24 +75,48 @@ curl -sf http://127.0.0.1:8000/api/health && echo || { docker compose -f docker-
 echo "30 4 * * * root bash $APP_DIR/deploy/backup.sh >> /var/log/alfa-news-backup.log 2>&1" > /etc/cron.d/alfa-news-insights-backup
 chmod 644 /etc/cron.d/alfa-news-insights-backup
 
-log "5/6 Nginx"
-SERVER_NAME="${DOMAIN:-_}"
-sed "s/__SERVER_NAME__/${SERVER_NAME}/" "$APP_DIR/deploy/nginx.conf" > /etc/nginx/sites-available/alfa-news-insights
-ln -sf /etc/nginx/sites-available/alfa-news-insights /etc/nginx/sites-enabled/alfa-news-insights
-rm -f /etc/nginx/sites-enabled/default
-nginx -t
-systemctl reload nginx
-
-log "6/6 Firewall и HTTPS"
+log "5/6 Nginx и HTTPS"
 ufw allow OpenSSH >/dev/null
 ufw allow 'Nginx Full' >/dev/null
 ufw --force enable >/dev/null
-if [ -n "$DOMAIN" ] && [ -n "$EMAIL" ]; then
-  apt-get install -y -q certbot python3-certbot-nginx
-  certbot --nginx -d "$DOMAIN" -m "$EMAIL" --agree-tos --non-interactive --redirect
+IP="$(curl -s https://api.ipify.org || hostname -I | awk '{print $1}')"
+# AUTO_DOMAIN=1 без своего домена: бесплатное имя вида 77-221-139-69.sslip.io (указывает на IP сервера) —
+# для него Let's Encrypt выдаёт сертификат, и сайт открывается по https с замком
+if [ -z "$DOMAIN" ] && [ "${AUTO_DOMAIN:-0}" = "1" ] && [[ "$IP" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  DOMAIN="${IP//./-}.sslip.io"
+fi
+mkdir -p /var/www/certbot /etc/nginx/snippets
+cp "$APP_DIR/deploy/nginx-app.conf" /etc/nginx/snippets/alfa-radar-app.conf
+
+write_nginx() {  # $1 = 1 — есть сертификат: HTTP перенаправляет на HTTPS (сборка конфига — deploy/render_nginx.py)
+  if [ "$1" = "1" ]; then
+    python3 "$APP_DIR/deploy/render_nginx.py" "$DOMAIN" > /etc/nginx/sites-available/alfa-news-insights
+  else
+    python3 "$APP_DIR/deploy/render_nginx.py" > /etc/nginx/sites-available/alfa-news-insights
+  fi
+  ln -sf /etc/nginx/sites-available/alfa-news-insights /etc/nginx/sites-enabled/alfa-news-insights
+  rm -f /etc/nginx/sites-enabled/default
+  nginx -t && systemctl reload nginx
+}
+
+CERT="/etc/letsencrypt/live/${DOMAIN}/fullchain.pem"
+if [ -n "$DOMAIN" ]; then
+  if [ -f "$CERT" ]; then write_nginx 1; else write_nginx 0; fi   # без сертификата — сначала HTTP: нужен для проверки домена
+  apt-get install -y -q certbot >/dev/null
+  if [ -n "$EMAIL" ]; then ACC=(-m "$EMAIL"); else ACC=(--register-unsafely-without-email); fi
+  # выпуск (или продление, если до истечения меньше 30 дней); при сбое сайт продолжает работать по HTTP
+  if certbot certonly --webroot -w /var/www/certbot -d "$DOMAIN" "${ACC[@]}" --agree-tos --non-interactive \
+       --keep-until-expiring --deploy-hook "systemctl reload nginx"; then
+    write_nginx 1   # cookie сессии становится Secure автоматически: приложение видит X-Forwarded-Proto: https
+  else
+    echo "Сертификат не получен — сайт доступен по HTTP: http://${IP}/"
+    write_nginx 0
+  fi
+else
+  write_nginx 0
 fi
 
-IP="$(curl -s https://api.ipify.org || hostname -I | awk '{print $1}')"
-log "Готово: http://${DOMAIN:-$IP}/   (Swagger: /docs)"
+if [ -n "$DOMAIN" ] && [ -f "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" ]; then SITE="https://${DOMAIN}/"; else SITE="http://${IP}/"; fi
+log "6/6 Готово: ${SITE}   (Swagger: /docs)"
 echo "Логи:      docker compose -f docker-compose.yml -f deploy/docker-compose.prod.yml logs -f app"
 echo "Обновление: bash deploy/update.sh"

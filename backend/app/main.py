@@ -113,6 +113,17 @@ def throttle(user: str, bucket: str, per_min: int) -> None:
         raise HTTPException(429, "Слишком много запросов — попробуйте через минуту")
 
 
+def client_ip(request: Request) -> str:
+    """IP клиента: за Nginx — из X-Real-IP (его выставляет только наш прокси), иначе — адрес соединения."""
+    return request.headers.get("x-real-ip") or (request.client.host if request.client else "?")
+
+
+def throttle_ip(request: Request, bucket: str, per_min: int) -> None:
+    """Лимит по IP поверх лимита по пользователю: у демо-учёток общий пароль, перебор учёток не обходит лимит."""
+    if auth.rate_limited(f"ip:{bucket}:{client_ip(request)}", per_min):
+        raise HTTPException(429, "Слишком много запросов с вашего адреса — попробуйте через минуту")
+
+
 # ------------------------------------------------------------------ вход
 class LoginRequest(BaseModel):
     login: str = Field(..., max_length=64)
@@ -121,7 +132,7 @@ class LoginRequest(BaseModel):
 
 @app.post("/api/auth/login")
 def login(req: LoginRequest, request: Request, response: Response):
-    ip = request.headers.get("x-real-ip") or (request.client.host if request.client else "?")
+    ip = client_ip(request)
     if auth.rate_limited(f"login:{ip}", 10):
         raise HTTPException(429, "Слишком много попыток входа — подождите минуту")
     user = req.login.strip()
@@ -434,7 +445,7 @@ SSE_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
 
 
 @app.get("/api/insights/{event_id}/stream")
-def insight_stream(event_id: str, company_id: str, role: str | None = None, refresh: bool = False,
+def insight_stream(event_id: str, company_id: str, request: Request, role: str | None = None, refresh: bool = False,
                    user: str = Depends(current_user)):
     """Прогресс агента в реальном времени (SSE): step_start/step_end по каждому шагу, затем done с инсайтом."""
     p = authorized_profile(company_id, user)
@@ -443,6 +454,7 @@ def insight_stream(event_id: str, company_id: str, role: str | None = None, refr
         raise HTTPException(404, "Событие не найдено")
     if refresh or not cached_insight(ev.id, p.uid, role):
         throttle(user, "insight", 12)
+        throttle_ip(request, "insight", 30)
 
     def gen() -> Iterator[str]:
         if not refresh and (hit := cached_insight(ev.id, p.uid, role)):
@@ -490,10 +502,11 @@ class AnalyzeRequest(BaseModel):
 
 
 @app.post("/api/news/analyze")
-def analyze(req: AnalyzeRequest, user: str = Depends(current_user)):
+def analyze(req: AnalyzeRequest, request: Request, user: str = Depends(current_user)):
     """Проверка на «невиданной» новости: текст или ссылка -> событие -> (опционально) инсайт для компании."""
     p = authorized_profile(req.company_id, user) if req.company_id else None  # права — до любой записи в БД
     throttle(user, "analyze", 6)
+    throttle_ip(request, "analyze", 12)
     if req.url:
         if not get_settings().allow_url_fetch:
             raise HTTPException(400, "Загрузка по ссылке отключена")
@@ -538,9 +551,10 @@ class ChatRequest(BaseModel):
 
 
 @app.post("/api/chat")
-def chat(req: ChatRequest, user: str = Depends(current_user)):
+def chat(req: ChatRequest, request: Request, user: str = Depends(current_user)):
     p = authorized_profile(req.company_id, user)
     throttle(user, "chat", 20)
+    throttle_ip(request, "chat", 40)
     ev = get_event(req.event_id)
     if not ev:
         raise HTTPException(404, "Событие не найдено")
@@ -549,10 +563,11 @@ def chat(req: ChatRequest, user: str = Depends(current_user)):
 
 
 @app.post("/api/chat/stream")
-def chat_stream(req: ChatRequest, user: str = Depends(current_user)):
+def chat_stream(req: ChatRequest, request: Request, user: str = Depends(current_user)):
     """Потоковый ответ ассистента (SSE): meta, delta..., done."""
     p = authorized_profile(req.company_id, user)
     throttle(user, "chat", 20)
+    throttle_ip(request, "chat", 40)
     ev = get_event(req.event_id)
     if not ev:
         raise HTTPException(404, "Событие не найдено")

@@ -94,3 +94,30 @@ def test_quality_gate_blocks_regression(tmp_path):
 def test_baseline_meets_gate_against_itself(tmp_path):
     base = json.loads((ROOT.parent / "docs" / "quality" / "baseline.json").read_text(encoding="utf-8"))
     assert _gate(tmp_path, base, base).returncode == 0
+
+
+def test_js_errors_tracked_and_alerted(client, demo):
+    from app import monitoring
+
+    u, h = demo
+    r = client.post("/api/track", headers=h, json={"events": [
+        {"type": "js_error", "company_id": u["primary_company"], "meta": {"msg": "TypeError: x is undefined", "src": "/static/app.js:10"}}]})
+    assert r.json()["stored"] == 1
+    product = {"feedback": {"pos": 0, "neg": 0}, "speed_ms": {"preview_p95": None}, "counts": {"js_error": 7}}
+    assert any("браузере" in a["text"] for a in monitoring.alerts({}, product, {}, 0, 0))
+
+
+def test_ip_limit_on_top_of_user_limit(client):
+    """Перебор демо-учёток с одного IP не обходит лимит: у разбора новости — 12 запросов в минуту на IP."""
+    from app.bootstrap import load_demo_users
+    from app.security import auth
+
+    auth._hits.clear()
+    users = load_demo_users()
+    codes = []
+    for i in range(14):
+        u = users[i % len(users)]
+        codes.append(client.post("/api/news/analyze", headers={"X-User-Id": u["user_id"], "X-Real-IP": "203.0.113.7"},
+                                 json={"url": "http://127.0.0.1/"}).status_code)  # отказ SSRF — без записи в БД
+    auth._hits.clear()
+    assert codes[:12] == [400] * 12 and codes[12:] == [429, 429]
