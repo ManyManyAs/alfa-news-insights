@@ -1,0 +1,71 @@
+name: Uptime
+
+# Проверка демо-стенда каждые 10 минут: health, главная страница, список демо-учёток, вход и /api/me.
+# Упал (три попытки подряд) — открывается issue «Стенд недоступен» (GitHub пришлёт письмо участникам репозитория);
+# поднялся — issue закрывается с комментарием. Адрес — свой домен (vars.DEPLOY_DOMAIN) или <ip>.sslip.io.
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: read
+
+concurrency:
+  group: uptime
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      HOST: ${{ secrets.DEPLOY_HOST }}
+      DOMAIN: ${{ vars.DEPLOY_DOMAIN }}
+      GH_TOKEN: ${{ github.token }}
+      TITLE: "Стенд недоступен"
+    steps:
+      - name: Проверка стенда
+        id: probe
+        run: |
+          if [ -z "$HOST" ] && [ -z "$DOMAIN" ]; then echo "Стенд не настроен (нет DEPLOY_HOST)"; echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          if [ -z "$DOMAIN" ] && [[ "$HOST" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then DOMAIN="${HOST//./-}.sslip.io"; fi
+          check() {  # $1 — базовый адрес
+            local base="$1" jar; jar="$(mktemp)"
+            curl -sf --max-time 15 "$base/api/health" | grep -q '"ok"' || { echo "health: нет ответа"; return 1; }
+            curl -sf --max-time 15 "$base/" | grep -q "Бизнес-радар" || { echo "главная: нет страницы"; return 1; }
+            local login; login="$(curl -sf --max-time 15 "$base/api/demo-users" | python3 -c 'import json,sys; print(json.load(sys.stdin)["users"][0]["user_id"])')" \
+              || { echo "демо-учётки: нет ответа"; return 1; }
+            curl -sf --max-time 15 -c "$jar" -H 'Content-Type: application/json' \
+              -d "{\"login\": \"$login\", \"password\": \"alfa2026\"}" "$base/api/auth/login" >/dev/null || { echo "вход: ошибка"; return 1; }
+            curl -sf --max-time 15 -b "$jar" "$base/api/me" | grep -q "$login" || { echo "сессия: ошибка"; return 1; }
+          }
+          for attempt in 1 2 3; do
+            for base in ${DOMAIN:+"https://$DOMAIN"} ${HOST:+"http://$HOST"}; do
+              if out="$(check "$base" 2>&1)"; then
+                echo "OK: $base (попытка $attempt)"; echo "status=up" >> "$GITHUB_OUTPUT"; echo "site=$base" >> "$GITHUB_OUTPUT"; exit 0
+              fi
+              echo "$base — $out"; LAST="$base — $out"
+            done
+            sleep 20
+          done
+          echo "status=down" >> "$GITHUB_OUTPUT"
+          { echo "reason<<EOF"; echo "$LAST"; echo "EOF"; } >> "$GITHUB_OUTPUT"
+      - name: Issue о недоступности
+        if: steps.probe.outputs.skip != 'true'
+        env:
+          STATUS: ${{ steps.probe.outputs.status }}
+          REASON: ${{ steps.probe.outputs.reason }}
+          SITE: ${{ steps.probe.outputs.site }}
+          REPO: ${{ github.repository }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          OPEN="$(gh issue list -R "$REPO" --state open --search "\"$TITLE\" in:title" --json number -q '.[0].number')"
+          if [ "$STATUS" = "down" ] && [ -z "$OPEN" ]; then
+            gh issue create -R "$REPO" --title "$TITLE" \
+              --body "$(printf 'Проверка доступности не прошла три раза подряд.\n\nПоследняя ошибка: %s\n\nЗапуск: %s\n\nIssue закроется сама, когда стенд снова ответит.' "$REASON" "$RUN")"
+          elif [ "$STATUS" = "up" ] && [ -n "$OPEN" ]; then
+            gh issue close -R "$REPO" "$OPEN" --comment "Стенд снова доступен: $SITE ($RUN)"
+          fi
+          if [ "$STATUS" = "down" ]; then echo "::error::Стенд недоступен: $REASON"; exit 1; fi

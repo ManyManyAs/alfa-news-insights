@@ -90,6 +90,28 @@ jobs:
             git push
           fi
 
+  nginx:
+    # Конфиг Nginx стенда (HTTP и HTTPS) проверяется «nginx -t» на версиях из Ubuntu 22.04 / 24.04 и свежей
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        image: ["nginx:1.18", "nginx:1.24", "nginx:1.27"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: nginx -t для HTTP и HTTPS
+        run: |
+          D=test.sslip.io
+          mkdir -p /tmp/ng/le/live/$D
+          openssl req -x509 -nodes -newkey rsa:2048 -days 1 -subj "/CN=$D" \
+            -keyout /tmp/ng/le/live/$D/privkey.pem -out /tmp/ng/le/live/$D/fullchain.pem 2>/dev/null
+          python3 deploy/render_nginx.py > /tmp/ng/http.conf
+          python3 deploy/render_nginx.py "$D" > /tmp/ng/https.conf
+          for conf in http https; do
+            docker run --rm -v /tmp/ng/$conf.conf:/etc/nginx/conf.d/default.conf:ro \
+              -v "$PWD/deploy/nginx-app.conf:/etc/nginx/snippets/alfa-radar-app.conf:ro" \
+              -v /tmp/ng/le:/etc/letsencrypt:ro ${{ matrix.image }} nginx -t
+          done
+
   docker:
     runs-on: ubuntu-latest
     steps:
