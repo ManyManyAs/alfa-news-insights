@@ -56,7 +56,8 @@ function tourUi() {
       if (e.key === "ArrowRight") goStep(tourStep + 1);
       if (e.key === "ArrowLeft") goStep(tourStep - 1);
     });
-    window.addEventListener("resize", () => tourStep >= 0 && place());
+    window.addEventListener("resize", schedulePlace);
+    document.addEventListener("scroll", schedulePlace, true);  // capture: ловим прокрутку и внутренних панелей
   }
   return o;
 }
@@ -80,23 +81,53 @@ async function goStep(i) {
   const el = await waitFor(s.sel);
   if (tourStep !== i) return;
   o.querySelector("p").textContent = el ? s.text : s.text + " (элемент ещё загружается — откройте событие в ленте)";
-  if (el) el.scrollIntoView({ block: "center", behavior: "smooth" });
-  setTimeout(place, 350);
+  if (el) {
+    // крупный блок — к началу, чтобы снизу осталось место для подсказки; небольшой — в центр
+    const tall = el.getBoundingClientRect().height > innerHeight * 0.55;
+    el.scrollIntoView({ block: tall ? "start" : "center", behavior: "smooth" });
+  }
+  place();
+  setTimeout(place, 400);
+  setTimeout(place, 900);
 }
 
+// Подсветка следует за элементом при любой прокрутке (страницы или внутренней панели) и не выходит за экран;
+// подсказка ставится туда, где она не закрывает подсвеченный блок: справа, слева, снизу, сверху — или в угол.
+let placeQueued = false;
+function schedulePlace() {
+  if (tourStep < 0 || placeQueued) return;
+  placeQueued = true;
+  requestAnimationFrame(() => { placeQueued = false; place(); });
+}
 function place() {
   const s = TOUR[tourStep], o = document.getElementById("tour");
-  const el = s && document.querySelector(s.sel);
+  if (!s || !o) return;
+  const el = document.querySelector(s.sel);
   const spot = o.querySelector(".tour-spot"), pop = o.querySelector(".tour-pop");
-  if (!el) { spot.style.display = "none"; pop.style.cssText = "left:50%;top:40%;transform:translate(-50%,-50%)"; return; }
-  const r = el.getBoundingClientRect(), pad = 8;
-  spot.style.display = "block";
-  Object.assign(spot.style, { left: r.left - pad + "px", top: r.top - pad + "px", width: r.width + 2 * pad + "px", height: Math.min(r.height, innerHeight - 40) + 2 * pad + "px" });
-  const pw = Math.min(360, innerWidth - 32);
-  let left = r.right + 16, top = r.top;
-  if (left + pw > innerWidth - 16) left = Math.max(16, Math.min(r.left, innerWidth - pw - 16));
-  if (left < r.right && left + pw > r.left) top = r.bottom + 16 > innerHeight - 220 ? Math.max(16, r.top - 230) : r.bottom + 16;
-  pop.style.cssText = `left:${left}px;top:${Math.max(16, Math.min(top, innerHeight - 240))}px;width:${pw}px`;
+  const M = 12, pad = 6, W = innerWidth, H = innerHeight;
+  const pw = Math.min(340, W - 2 * M), ph = pop.offsetHeight || 200;
+  if (!el) {
+    spot.style.display = "none";
+    pop.style.cssText = `left:${(W - pw) / 2}px;top:${H * 0.3}px;width:${pw}px`;
+    return;
+  }
+  const r = el.getBoundingClientRect();
+  // видимая часть элемента
+  const v = { left: Math.max(r.left - pad, M / 2), top: Math.max(r.top - pad, M / 2),
+    right: Math.min(r.right + pad, W - M / 2), bottom: Math.min(r.bottom + pad, H - M / 2) };
+  const visible = v.right > v.left && v.bottom > v.top;
+  spot.style.display = visible ? "block" : "none";
+  if (visible) Object.assign(spot.style, { left: v.left + "px", top: v.top + "px", width: v.right - v.left + "px", height: v.bottom - v.top + "px" });
+  const fitsY = (t) => Math.min(Math.max(t, M), H - ph - M);
+  const cands = [
+    { left: v.right + M, top: fitsY(v.top), ok: v.right + M + pw <= W - M },
+    { left: v.left - M - pw, top: fitsY(v.top), ok: v.left - M - pw >= M },
+    { left: Math.min(Math.max(v.left, M), W - pw - M), top: v.bottom + M, ok: v.bottom + M + ph <= H - M },
+    { left: Math.min(Math.max(v.left, M), W - pw - M), top: v.top - M - ph, ok: v.top - M - ph >= M },
+  ];
+  const c = cands.find((x) => x.ok) || { left: W - pw - M, top: H - ph - M };  // крупный блок — подсказка в угол
+  pop.style.cssText = `left:${c.left}px;top:${c.top}px;width:${pw}px`;
+  pop.classList.toggle("corner", !cands.some((x) => x.ok));
 }
 
 function startTour() { closeOnboarding(); goStep(0); }
