@@ -191,7 +191,9 @@ class LLMClient:
         prov = self.provider_budget()
         if prov and prov.get("max_budget"):
             budget = float(prov["max_budget"])
-        spent = max(local, prov["spent"]) if prov else local
+        # Провайдер видит настоящий расход по ключу команды (все прогоны и серверы). Локальный учёт — оценка по прайсу,
+        # к тому же снапшот переносит его между прогонами, поэтому при наличии данных провайдера верим им.
+        spent = prov["spent"] if prov else local
         return {"day": budget_day(), "spent_rub": round(spent, 2), "budget_rub": budget,
                 "soft_limit_rub": budget * float(self.cfg.get("soft_limit_share", 0.8)),
                 "background_limit_rub": budget * float(self.cfg.get("background_share", 0.6)),

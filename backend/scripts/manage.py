@@ -36,6 +36,12 @@ def warmup(top: int = 5, max_rub: float | None = None, background: bool = False,
     from app.ranking.scorer import rank_feed
 
     llm = get_llm()
+    if llm.live:
+        try:
+            llm.model_for("interpret", "background" if background else "interactive")
+        except LLMUnavailable as e:
+            print("Модель недоступна, предрасчёт пропущен (снапшот не меняется):", e)
+            return
     start = llm.budget_status()["spent_rub"]
 
     def over() -> bool:
