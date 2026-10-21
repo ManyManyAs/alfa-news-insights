@@ -20,11 +20,13 @@ from app.bootstrap import bootstrap, load_demo_users
 from app.news.ingest import list_events, run_ingest
 
 
-def warmup(top: int = 5, max_rub: float | None = None, background: bool = False, roles: bool = False) -> None:
+def warmup(top: int = 5, max_rub: float | None = None, background: bool = False, roles: bool = False,
+           refresh: bool = False) -> None:
     """Предрасчёт: разборы всех событий (уровень 1) + инсайты демо-персон по топ-событиям ленты (уровень 2).
 
     --background: приоритет «фон» — не трогает резерв бюджета под пользователей.
     --roles: дополнительно строить инсайты для всех ролей (персонализация по роли в снапшоте).
+    --refresh: пересобрать инсайты, даже если они уже есть (после правки промптов); ответы моделей не из кэша.
     """
     from app.agent.event_brief import get_event_brief
     from app.agent.orchestrator import get_or_create_insight
@@ -40,6 +42,7 @@ def warmup(top: int = 5, max_rub: float | None = None, background: bool = False,
         return max_rub is not None and llm.budget_status()["spent_rub"] - start >= max_rub
 
     events = list_events(300)
+    judged: list[float] = []
     with llm_priority("background" if background else "interactive"):
         try:
             for e in events:
@@ -53,11 +56,15 @@ def warmup(top: int = 5, max_rub: float | None = None, background: bool = False,
                     for s in rank_feed(events, p, role, limit=top):
                         if over():
                             raise LLMUnavailable(f"лимит прогона {max_rub} ₽")
-                        ins = get_or_create_insight(s.event, p, role)
+                        ins = get_or_create_insight(s.event, p, role, force=refresh)
+                        if ins.scores:
+                            judged.append(sum(ins.scores.values()) / len(ins.scores))
                         print(f"insight| {u['label'][:28]:28s} | {role:10s} | {s.event.title[:44]:44s} | {ins.generated_by} | "
                               f"quality={all(c.passed for c in ins.quality)} | scores={ins.scores}")
         except LLMUnavailable as e:
             print("Остановлено:", e)
+    if judged:
+        print(f"LLM-судья: средняя оценка {sum(judged) / len(judged):.2f} по {len(judged)} разборам")
     print("Потрачено за прогон:", round(llm.budget_status()["spent_rub"] - start, 2), "₽")
 
 
@@ -70,13 +77,14 @@ def main() -> None:
     ap.add_argument("--max-rub", type=float)
     ap.add_argument("--background", action="store_true")
     ap.add_argument("--roles", action="store_true")
+    ap.add_argument("--refresh", action="store_true", help="warmup: пересобрать уже готовые инсайты")
     a = ap.parse_args()
     if a.cmd == "bootstrap":
         print(json.dumps(bootstrap(force=a.force), ensure_ascii=False, indent=2))
     elif a.cmd == "ingest":
         print(json.dumps(run_ingest(a.source), ensure_ascii=False, indent=2))
     elif a.cmd == "warmup":
-        warmup(a.top, a.max_rub, a.background, a.roles)
+        warmup(a.top, a.max_rub, a.background, a.roles, a.refresh)
     elif a.cmd == "snapshot-export":
         from app.storage.snapshot import export_snapshot
 
