@@ -145,7 +145,7 @@ function traceTimeline(steps) {
     t += s.duration_ms || 0;
     return `<div class="tl-row"><span class="tl-name">${esc(typeof stepTitle === "function" ? stepTitle(s.name) : s.name)}</span>
       <span class="tl-track"><i class="tl-bar ${esc(s.kind)}" style="left:${left}%;width:${w}%"></i></span>
-      <span class="tl-meta muted small">${s.duration_ms} мс${s.model ? " · " + esc(s.model.split("/").pop()) : ""}${s.cost_rub ? " · " + s.cost_rub.toFixed(3).replace(".", ",") + " ₽" : ""}</span></div>`;
+      <span class="tl-meta muted small">${s.duration_ms >= 1000 ? (s.duration_ms / 1000).toFixed(1).replace(".", ",") + " с" : s.duration_ms + " мс"}${s.model ? " · " + esc(s.model.split("/").pop()) : ""}${s.cost_rub ? " · " + s.cost_rub.toFixed(3).replace(".", ",") + " ₽" : ""}</span></div>`;
   }).join("");
   return `<div class="tl"><div class="tl-sum">${steps.length} шагов · ${(total / 1000).toFixed(1).replace(".", ",")} с · ${cost.toFixed(2).replace(".", ",")} ₽
     <span class="tl-legend"><i class="llm"></i>модель <i class="tool"></i>инструмент <i class="rules"></i>правила</span></div>${rows}</div>`;

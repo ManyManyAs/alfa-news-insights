@@ -10,6 +10,9 @@ const CONF_DEF = {
   medium: "Средняя: вывод сервиса по связи фактора с профилем компании; источники указаны, но связь — расчётная",
   low: "Низкая: гипотеза без прямого подтверждения — проверьте её, прежде чем действовать",
 };
+const PRODUCT_RU = { CL_PRODUCT_RKO_MARK: "Расчётно-кассовое обслуживание", CL_PRODUCT_LOA_MARK: "Кредит", CL_PRODUCT_LEA_MARK: "Лизинг",
+  CL_PRODUCT_DEP_MARK: "Депозит", CL_PRODUCT_ZPP_MARK: "Зарплатный проект", CL_PRODUCT_GAR_MARK: "Банковские гарантии",
+  FACTORING_MARK: "Факторинг", FTS_FLAG: "ВЭД и валютный контроль" };
 const DISCLAIMER = "Материал носит информационно-аналитический характер, не является индивидуальной инвестиционной рекомендацией и предложением заключить сделку. Выводы с пометкой «Вывод сервиса (AI)» сформированы моделью и не являются официальной позицией Альфа-Банка.";
 const TRUST = { official: ["официально", "Регулятор или орган власти"], agency: ["агентство", "Информационное агентство"],
   media: ["СМИ", "Деловое СМИ: мнения и прогнозы помечаются как предположения"], user: ["ваша новость", "Добавлено пользователем"],
@@ -170,7 +173,11 @@ async function selectUser(uid, me) {
   const u = state.users.find((x) => x.user_id === uid);
   $("#userName").textContent = u ? u.label : uid;
   $("#userName").title = "Логин " + uid;
-  $("#companySelect").innerHTML = me.companies.map((c) => `<option value="${c.uid}">${esc(c.name)}</option>`).join("");
+  const seenNames = {};
+  $("#companySelect").innerHTML = me.companies.map((c) => {
+    const n = (seenNames[c.name] = (seenNames[c.name] || 0) + 1);
+    return `<option value="${c.uid}">${esc(c.name)}${n > 1 ? ` (${n})` : ""}</option>`;
+  }).join("");
   state.company = u?.primary_company || me.companies[0]?.uid;
   $("#companySelect").value = state.company;
   state.role = u?.role || null;
@@ -348,7 +355,8 @@ function levelOf(o) { return !o ? "normal" : o.source !== "manual" ? "normal" : 
 function interestChip(factor, title, weight, o, reasons) {
   const lvl = levelOf(o);
   const tip = `${(reasons || []).filter((r) => r.why).map((r) => r.why).join("; ")}\nКлик: ${{ normal: "сделать важнее", more: "скрыть тему", mute: "вернуть как было" }[lvl]}`;
-  return `<button class="chip interest ${lvl}" data-factor="${esc(factor)}" data-level="${lvl}" title="${esc(tip)}">${LEVEL_ICON[lvl]}${esc(title)} · ${weight}</button>`;
+  const dots = weight >= 1 ? "●●●" : weight >= 0.5 ? "●●○" : "●○○";
+  return `<button class="chip interest ${lvl}" data-factor="${esc(factor)}" data-level="${lvl}" title="${esc(tip)}">${LEVEL_ICON[lvl]}${esc(title)} <span class="w-dots">${dots}</span></button>`;
 }
 function bindInterests() {
   document.querySelectorAll(".chip.interest").forEach((el) => el.onclick = async () => {
@@ -456,7 +464,7 @@ function renderFeedList(animate = false) {
       ${it.hidden ? `<button class="link-btn unhide" data-unhide="${it.event_id}">Вернуть в ленту</button>` : `<button class="hide-btn" data-hide="${it.event_id}" title="Скрыть из ленты" aria-label="Скрыть из ленты">×</button>`}
       <div><span class="pill ${it.effect}">${EFFECT[it.effect]}</span>${it.has_bank_view ? `<span class="pill bank">есть позиция банка</span>` : ""}${effectiveTag(it.effective)}</div>
       <div class="title">${read.has(it.event_id) ? "" : `<span class="new-dot" title="Не прочитано"></span>`}${esc(it.title)}${read.has(it.event_id) ? `<span class="read-mark">✓ прочитано</span>` : ""}</div>
-      <div class="meta">${fmtDate(it.published_at)} · ${esc([...new Set(it.sources.map((x) => x.source))].join(", "))}${it.sources.length > 1 ? ` · ${it.sources.length} ${plural(it.sources.length, "публикация", "публикации", "публикаций")}` : ""} · релевантность ${it.score}</div>
+      <div class="meta">${fmtDate(it.published_at)} · ${esc([...new Set(it.sources.map((x) => x.source))].join(", "))}${it.sources.length > 1 ? ` · ${it.sources.length} ${plural(it.sources.length, "публикация", "публикации", "публикаций")}` : ""}</div>
       <div class="chips">${entityChips(it)}</div>
       <div class="reasons">${esc(reasonText(it))}</div>
       ${it.reasons.find((r) => r.personal) ? `<div class="personal">⚙ ${esc(it.reasons.find((r) => r.personal).personal.why)}</div>` : ""}
@@ -520,7 +528,7 @@ async function applyRerank(key) {
   state.feed.sort((a, b) => (pos.get(a.event_id) ?? 1e9) - (pos.get(b.event_id) ?? 1e9));
   renderFeedList(true);
   renderWidget();
-  $("#rerankNote").innerHTML = `✨ Порядок уточнён ИИ <span class="muted">(${esc(r.model || "")}${r.cached ? ", из кэша" : ""})</span>`;
+  $("#rerankNote").textContent = "✨ Порядок уточнён ИИ под ваш профиль";
 }
 
 // Радар на главной: чувствительность компании и сигналы ленты
@@ -547,7 +555,7 @@ async function openInsight(eventId, refresh = false, from = "feed") {
         prog().insertAdjacentHTML("beforeend", `<li class="run" data-step="${esc(e.name)}">${esc(stepTitle(e.name))}<span class="muted small"></span></li>`);
       } else if (e.type === "step_end") {
         const li = [...prog().querySelectorAll("li.run")].reverse().find((x) => x.dataset.step === e.name);
-        if (li) { li.className = e.fallback ? "fallback" : "ok"; li.querySelector("span").textContent = ` · ${e.model ? e.model + " · " : ""}${e.duration_ms} мс${e.fallback ? " · без LLM" : ""}`; }
+        if (li) { li.className = e.fallback ? "fallback" : "ok"; li.querySelector("span").textContent = e.fallback ? " · упрощённо" : ""; }
       } else if (e.type === "preview") {
         track("preview_ready", { event_id: eventId, value: Math.round(performance.now() - t0) });
         // главный вывод сразу, полный разбор догружается
@@ -657,8 +665,8 @@ function renderInsight(tab) {
         ${(i.what_could_change || []).length ? `<div class="sub-h">Что может изменить вывод</div>${claims(i.what_could_change)}` : ""}
         ${whatIfBlock()}</div>
       <div class="q"><h4><span class="n">4</span>Что можно сделать</h4>${claims(i.actions)}
-        ${i.products.map((p) => `<div class="product"><span class="lbl">${esc(p.label)}</span><br><b>${esc(p.product)}</b> — ${esc(p.why)}
-          <div><button class="btn small" data-act="application" data-product="${esc(p.product)}">Оставить заявку</button></div></div>`).join("")}
+        ${i.products.map((p) => `<div class="product"><span class="lbl">${esc(p.label)}</span><br><b>${esc(PRODUCT_RU[p.product] || p.product)}</b> — ${esc(p.why)}
+          <div><button class="btn small" data-act="application" data-product="${esc(PRODUCT_RU[p.product] || p.product)}">Оставить заявку</button></div></div>`).join("")}
         <div class="cta"><button class="btn small" data-act="manager">Обсудить с менеджером</button><button class="btn ghost small" data-act="callback">Заказать обратный звонок</button></div></div>
       <div class="q"><h4><span class="n">5</span>Как это оценивает Альфа-Банк</h4>${claims(i.bank_view)}</div>
       <div class="q"><h4><span class="n">6</span>На чём основан вывод</h4>
@@ -680,14 +688,14 @@ function renderInsight(tab) {
       ${s.date ? `<span class="muted"> · ${fmtDate(s.date)}</span>` : ""}${s.page ? `<span class="muted"> · стр. ${s.page}</span>` : ""}
       ${s.stale ? `<span class="pill mixed">материал устарел</span>` : ""}
       ${s.url ? ` <a href="${esc(s.url)}" target="_blank" rel="noopener">первоисточник ↗</a>` : ""}
-      ${s.quote ? `<div class="muted small">«${esc(s.quote)}»</div>` : ""}<div class="muted small">${esc(s.id)}</div></li>`).join("")}</ol>`;
+      ${s.quote ? `<div class="muted small">«${esc(s.quote)}»</div>` : ""}</li>`).join("")}</ol>`;
   } else {
     body = `<div id="traceBox" class="loading">Загрузка трассировки…</div>`;
     loadTrace(i.trace_id);
   }
   $("#insightPanel").innerHTML = `<div class="insight">
     <div><span class="pill ${i.effect}">${EFFECT[i.effect]}</span>
-      <span class="muted small">генерация: ${esc(i.generated_by)} · trace ${esc(i.trace_id)} · ${allOk ? "<span class='ok'>самопроверка пройдена</span>" : "<span class='bad'>есть замечания</span>"}</span>
+      <span class="muted small">${i.generated_by.startsWith("llm") ? "Разбор подготовлен ИИ и проверен критиком" : "Быстрый разбор по профилю компании"} · ${allOk ? "<span class='ok'>✓ самопроверка пройдена</span>" : "<span title='Подробности — в блоке «На чём основан вывод»'>самопроверка: есть замечания</span>"}</span>
       <button class="btn ghost small" id="refreshBtn" style="float:right">Пересчитать</button></div>
     <h2 style="margin-top:8px">${esc(i.headline)}</h2>
     <div class="takeaway"><span class="claim-kind small" style="color:var(--ai)">ВЫВОД СЕРВИСА · </span>${esc(i.takeaway.text)}<div>${srcTags(i.takeaway.sources)}</div></div>
@@ -714,10 +722,11 @@ function renderInsight(tab) {
 async function loadTrace(traceId) {
   const { steps } = await api(`/api/trace/${traceId}`);
   $("#traceBox").classList.remove("loading");
-  $("#traceBox").innerHTML = traceTimeline(steps) + `<div class="sub-h">Шаги подробно</div>` + steps.map((s) => `<div class="trace-step">
+  $("#traceBox").innerHTML = `<p class="muted small">Как агент пришёл к выводу: какие данные он взял, какие модели и проверки участвовали, сколько это заняло и стоило.</p>`
+    + traceTimeline(steps) + `<details class="trace-raw"><summary>Технические детали: вход и выход каждого шага</summary>` + steps.map((s) => `<div class="trace-step">
     <div><span class="k">${esc(s.kind)}</span> <b>${s.step_no}. ${esc(s.name)}</b>
     <span class="muted small">${s.model ? "· " + esc(s.model) : ""} · ${s.duration_ms} мс${s.tokens_in ? ` · ${s.tokens_in}/${s.tokens_out} ток. · ${(+s.cost_rub).toFixed(3)} ₽` : ""}</span></div>
-    <details><summary class="small muted">вход/выход</summary><pre>${esc(JSON.stringify({ input: s.input, output: s.output }, null, 2))}</pre></details></div>`).join("");
+    <details><summary class="small muted">вход/выход</summary><pre>${esc(JSON.stringify({ input: s.input, output: s.output }, null, 2))}</pre></details></div>`).join("") + `</details>`;
 }
 
 // ---------------------------------------------------------------- чат
@@ -999,19 +1008,10 @@ async function loadSources() {
     <div class="muted small" style="margin-top:8px">Последний проход: получено / новых событий / склеено с известными / отсеяно как шум.</div>`;
 }
 
-// ---------------------------------------------------------------- бюджет ИИ (временный индикатор)
+// ---------------------------------------------------------------- режим ИИ (для фонового реранка ленты; бюджет — на экране «Качество и бюджет»)
 async function loadBudget() {
-  try {
-    const b = await api("/api/llm/budget");
-    state.llmMode = b.mode;
-    const el = $("#budgetBadge");
-    if (b.mode !== "live") { el.textContent = `ИИ: ${b.mode === "replay" ? "сохранённые ответы, без ключа" : "выключен"}`; el.className = "budget-badge off"; return; }
-    const share = b.budget_rub ? b.left_rub / b.budget_rub : 0;
-    el.className = "budget-badge " + (share < 0.2 ? "low" : share < 0.5 ? "mid" : "ok");
-    el.innerHTML = `ИИ: осталось <b>${b.left_rub.toFixed(0)} ₽</b> из ${b.budget_rub.toFixed(0)}`;
-    el.title = `Потрачено ${b.spent_rub} ₽ (${b.source === "provider" ? "по данным провайдера — общий расход команды" : "по учёту этого сервера"}); этот сервер: ${b.spent_this_server_rub} ₽. Сброс в 03:00 МСК.`;
-  } catch (e) { /* индикатор необязателен */ }
+  try { state.llmMode = (await api("/api/llm/budget")).mode; } catch (e) { /* необязательно */ }
 }
-loadBudget(); setInterval(loadBudget, 60000);
+loadBudget();
 
 init().catch((e) => { document.body.insertAdjacentHTML("afterbegin", `<div class="notice">Ошибка запуска: ${esc(e.message)}</div>`); });
