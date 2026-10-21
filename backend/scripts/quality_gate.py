@@ -17,6 +17,8 @@ METRICS = [
     ("relevance.p3", "Лента: P@3", 0.90, 0.05),
     ("relevance.ndcg5", "Лента: nDCG@5", 0.85, 0.05),
     ("relevance.critical_recall10", "Лента: важное в топ-10", 0.85, 0.05),
+    ("golden.in_top10", "Эталонные пары: в топ-10", 0.90, 0.05),
+    ("golden.effect_acc", "Эталонные пары: верный эффект", 0.80, 0.05),
     ("retrieval_recall5", "Позиция банка: recall@5", 0.85, 0.05),
     ("classification.f1", "Классификация (правила): F1", 0.80, 0.05),
     ("classification.direction_acc", "Классификация: направление", 0.80, 0.05),

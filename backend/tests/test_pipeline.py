@@ -32,6 +32,24 @@ def test_classifier_word_boundaries():
     assert "it_tech" not in {h.factor for h in c.factors}
 
 
+def test_classifier_fx_convention_ruble_weakens_is_up():
+    """fx_rub — цена валюты в рублях: «рубль ослаб» = up (риск для импортёра), «рубль укрепился» = down."""
+    f = {h.factor: h for h in classify_rules("Рубль ослаб до 98 за доллар", "Курс рубля снизился на фоне оттока валюты.").factors}
+    assert f["fx_rub"].direction == "up"
+    f = {h.factor: h for h in classify_rules("Рубль укрепился", "Рубль вырос к доллару и юаню.").factors}
+    assert f["fx_rub"].direction == "down"
+    f = {h.factor: h for h in classify_rules("Курс доллара вырос до 98 рублей", "Валюта подорожала.").factors}
+    assert f["fx_rub"].direction == "up"
+
+
+def test_classifier_benefit_extension_and_export_not_sanctions():
+    c = classify_rules("Правительство продлило льготы для IT-компаний", "IT-компании получат продление налоговых льгот до 2030 года.")
+    f = {h.factor: h for h in c.factors}
+    assert f["tax_regulation"].direction == "down"
+    c = classify_rules("Россия нарастила экспорт пшеницы на 15%", "Отгрузки зерна за рубеж выросли благодаря урожаю.")
+    assert "sanctions_trade" not in {h.factor for h in c.factors}
+
+
 def test_dedup_merges_rephrased_news():
     assert same_event("Банк России сохранил ключевую ставку на уровне 14% годовых", "Совет директоров Банка России принял решение сохранить ключевую ставку на уровне 14,00% годовых.", "2026-09-11T13:30:00+03:00",
                       "ЦБ оставил ключевую ставку 14%, риторика стала жёстче", "Банк России оставил ключевую ставку без изменений на уровне 14%.", "2026-09-11T14:05:00+03:00")

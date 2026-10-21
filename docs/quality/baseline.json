@@ -1,18 +1,26 @@
 {
   "relevance": {
     "p3": 0.958,
-    "ndcg5": 0.82,
-    "critical_recall10": 0.842,
+    "ndcg5": 0.852,
+    "critical_recall10": 0.939,
     "cases": 8,
-    "pairs": 336
+    "pairs": 336,
+    "stale_critical": 6,
+    "as_of": "2026-10-21"
+  },
+  "golden": {
+    "pairs": 10,
+    "in_top10": 1.0,
+    "effect_acc": 1.0,
+    "fails": []
   },
   "graph_share": 0.733,
   "retrieval_recall5": 0.975,
   "classification": {
-    "precision": 0.8,
-    "recall": 0.882,
-    "f1": 0.839,
-    "direction_acc": 0.812,
+    "precision": 0.817,
+    "recall": 0.853,
+    "f1": 0.835,
+    "direction_acc": 0.833,
     "n": 36
   },
   "entities": {
@@ -40,5 +48,5 @@
     "borderline_to_arbiter": 8
   },
   "selfcheck_passed": 1.0,
-  "generated_at": "2026-10-21T18:07:49Z"
+  "generated_at": "2026-10-21T22:03:23Z"
 }

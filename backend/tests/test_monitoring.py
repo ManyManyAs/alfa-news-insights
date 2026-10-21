@@ -121,3 +121,21 @@ def test_ip_limit_on_top_of_user_limit(client):
                                  json={"url": "http://127.0.0.1/"}).status_code)  # отказ SSRF — без записи в БД
     auth._hits.clear()
     assert codes[:12] == [400] * 12 and codes[12:] == [429, 429]
+
+
+def test_judges_agreement_stats():
+    import importlib.util
+    from pathlib import Path
+    spec = importlib.util.spec_from_file_location("judges", Path(__file__).resolve().parents[1] / "scripts" / "judges.py")
+    j = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(j)
+    ax = j.AXES
+    rows = [{"key": "a", "title": "A", "glm": dict.fromkeys(ax, 4), "kimi": dict.fromkeys(ax, 5)},
+            {"key": "b", "title": "B", "glm": dict.fromkeys(ax, 3), "kimi": dict.fromkeys(ax, 3)},
+            {"key": "c", "title": "C", "glm": dict.fromkeys(ax, 5), "kimi": dict.fromkeys(ax, 2)},
+            {"key": "d", "title": "D", "glm": dict.fromkeys(ax, 4)}]  # второй судья не ответил — не учитываем
+    a = j.agreement(rows)
+    assert a["n"] == 3
+    assert a["axes"]["depth"]["within_1"] == round(2 / 3, 2)
+    assert a["overall"]["mean_abs_diff"] == round((1 + 0 + 3) / 3, 2)
+    assert [d["key"] for d in a["disagreements"]] == ["a", "c"]

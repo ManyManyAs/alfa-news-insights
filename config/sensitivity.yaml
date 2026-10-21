@@ -52,7 +52,7 @@ countries:
 
 # Отрасль по префиксу ОКВЭД (сопоставление по самому длинному префиксу)
 okved:
-  "01": [{factor: agriculture, weight: 1.0, sign: 0, why: "Сельское хозяйство"}, {factor: inflation, weight: 0.4, sign: 0, why: "Цены на продовольствие"}]
+  "01": [{factor: agriculture, weight: 1.0, sign: 1, why: "Сельское хозяйство: рост урожая, экспорта и поддержки отрасли — выручка хозяйства"}, {factor: inflation, weight: 0.4, sign: 0, why: "Цены на продовольствие"}]
   "10": [{factor: agriculture, weight: 0.8, sign: 0, why: "Пищевое производство зависит от сырья"}, {factor: consumer_demand, weight: 0.6, sign: 1, why: "Продукция для конечного потребителя"}]
   "06": [{factor: commodity_oil, weight: 1.0, sign: 1, why: "Нефтегазодобыча"}]
   "19": [{factor: commodity_oil, weight: 0.8, sign: 0, why: "Нефтепереработка"}, {factor: fuel, weight: 0.8, sign: 1, why: "Производство топлива"}]
@@ -71,7 +71,7 @@ okved:
   "52": [{factor: logistics, weight: 1.0, sign: 1, why: "Складирование и вспомогательная транспортная деятельность"}, {factor: real_estate, weight: 0.3, sign: 0, why: "Складская недвижимость"}]
   "55": [{factor: consumer_demand, weight: 0.8, sign: 1, why: "Гостиничный бизнес"}, {factor: labor_market, weight: 0.5, sign: -1, why: "Высокая доля ФОТ"}]
   "56": [{factor: consumer_demand, weight: 1.0, sign: 1, why: "Общепит зависит от расходов населения"}, {factor: labor_market, weight: 0.6, sign: -1, why: "Высокая доля ФОТ и дефицит персонала"}, {factor: inflation, weight: 0.5, sign: -1, why: "Цены на продукты — себестоимость"}]
-  "62": [{factor: it_tech, weight: 1.0, sign: 0, why: "Разработка ПО"}, {factor: labor_market, weight: 0.7, sign: -1, why: "Зарплаты разработчиков — главная статья затрат"}, {factor: tax_regulation, weight: 0.6, sign: 0, why: "IT-льготы и налоговые режимы"}]
+  "62": [{factor: it_tech, weight: 1.0, sign: 0, why: "Разработка ПО"}, {factor: labor_market, weight: 0.7, sign: -1, why: "Зарплаты разработчиков — главная статья затрат"}, {factor: tax_regulation, weight: 0.6, sign: -1, why: "IT-льготы и налоговые режимы: рост нагрузки — риск, продление льгот — возможность"}]
   "63": [{factor: it_tech, weight: 0.8, sign: 0, why: "Информационные услуги"}]
   "64": [{factor: key_rate, weight: 1.0, sign: 0, why: "Финансовые услуги"}, {factor: bond_market, weight: 0.7, sign: 0, why: "Финансовые организации держат облигации"}]
   "66": [{factor: bond_market, weight: 0.8, sign: 0, why: "Вспомогательная финансовая деятельность"}]

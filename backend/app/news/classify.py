@@ -16,13 +16,16 @@ from app.security.guard import UNTRUSTED_NOTICE, sanitize_untrusted
 
 log = logging.getLogger(__name__)
 
-UP = re.compile(r"вырос|выросл|повыс|повыш|увелич|ускор|подорож|рост[а-я]*|раст[уеё]|расти|подня|укрепл|расширя|ужесточ|"
+UP = re.compile(r"вырос|выросл|повыс|повыш|увелич|ускор|подорож|рост[а-я]*|раст[уеё]|расти|подня|укрепл|укрепил|расширя|ужесточ|"
                 r"превыс|обновил[аио]? (?:исторический |новый )?(?:максимум|рекорд)", re.I)
 DOWN = re.compile(r"сниз|упал|упад|замедл|подешев|дефляц|сократ|ослаб|охлажд|падени|опусти|обвал", re.I)
 STABLE = re.compile(r"сохранил|сохранен|сохранив|без изменени|оставил|осталс|осталась|неизменн|пауз", re.I)
 FORECAST = re.compile(r"ожида|прогноз|может|могут|вероятно|полага|считают|по мнению|рассматрива|обсужда|планиру", re.I)
 NUMBER = re.compile(r"\d+(?:[.,]\d+)?\s?(?:%|п\.п\.|б\.п\.|млрд|млн|трлн|руб|\$)", re.I)
 COUNTRIES = ["Китай", "Турция", "ОАЭ", "Индия", "США", "Казахстан", "Узбекистан", "Беларусь", "Гонконг", "Иран"]
+# «Льготы продлены / сохранены / расширены» — поддержка: налоговая нагрузка ниже, отрасль получает импульс
+BENEFIT = re.compile(r"(?:продл|сохран|расшир|получат|запуст|запуска)[а-яё]*[^.]{0,60}льгот|"
+                     r"льгот[а-яё]*[^.]{0,60}(?:продл|сохран|расшир)", re.I)
 OFFICIAL_HINTS = re.compile(r"банк росси|цб|минфин|росстат|правительств|минэконом|фнс", re.I)
 
 
@@ -72,9 +75,16 @@ def classify_rules(item_title: str, text: str, published_at: str | None = None) 
             continue
         ev = next((s for s in sents if rx.search(s)), None)
         direction = _direction(ev, rx) if ev else "unknown"
+        # курс: направление — цена валюты в рублях (up — рубль слабеет); «рубль ослаб» в тексте значит up
+        if fid == "fx_rub" and ev and "рубл" in ev.lower() and not re.search(r"курс\w* (?:доллар|юан|евро|валют)", ev.lower()):
+            direction = {"up": "down", "down": "up"}.get(direction, direction)
         in_title = bool(rx.search(item_title))
         conf = min(0.9, 0.35 + 0.15 * len(matched) + (0.25 if in_title else 0))
         hits.append(FactorHit(factor=fid, direction=direction, confidence=round(conf, 2), evidence=ev))
+    if BENEFIT.search(low):
+        for h in hits:
+            if h.direction in ("unknown", "stable"):
+                h.direction = "down" if h.factor == "tax_regulation" else "up"
     hits.sort(key=lambda h: h.confidence, reverse=True)
     facts = [s for s in sents if not FORECAST.search(s)][:4]
     opinions = [s for s in sents if FORECAST.search(s)][:4]
@@ -124,7 +134,10 @@ SYSTEM_PROMPT = """Ты — аналитик новостей корпорати
  "numbers": ["ключевые числа с единицами"], "importance": 1..5,
  "regions": ["регионы РФ, если новость региональная"], "industries": ["коды классов ОКВЭД (2 цифры) отраслей, о которых новость"],
  "effective_dates": ["YYYY-MM-DD — даты вступления в силу / начала действия, если есть"]}}
-direction — направление изменения самого фактора (например, ставка выросла = up). Используй только id факторов:
+direction — направление изменения самого фактора (например, ставка выросла = up). Соглашения: fx_rub — цена валюты
+в рублях (рубль ослаб = up, укрепился = down); tax_regulation — налоговая и регуляторная нагрузка (налог повышают = up,
+льготы продлили или расширили = down); sanctions_trade — ограничения и пошлины (ужесточили = up).
+Используй только id факторов:
 {factors}"""
 
 
