@@ -117,3 +117,44 @@ def test_unseen_news_with_injection():
     ins = get_or_create_insight(ev, p, "cfo")
     assert {c.name: c.passed for c in ins.quality}["Нет следов prompt injection"]
     assert "auto_market" in {h.factor for h in ev.classification.factors}
+
+
+def test_live_news_first_and_watchlist():
+    from datetime import UTC, datetime
+
+    from app.ranking.personal import add_watch, get_watchlist, remove_watch
+    from app.ranking.scorer import DEMO_PENALTY, DEMO_SHADOW, rank_feed
+
+    events = list_events()
+    p = _profile(uid="U_WATCH", products=["CL_PRODUCT_LOA_MARK"])
+    base = rank_feed(events, p, limit=50)
+    top = base[0]
+    # живая новость по той же теме за 14 дней опускает демо-событие
+    live = top.event.model_copy(deep=True)
+    live.id = "live-test"
+    live.story_id = None
+    live.classification.trust = "agency"
+    live.published_at = datetime.now(UTC).isoformat()
+    ranked = {s.event.id: s for s in rank_feed([*events, live], p, limit=50)}
+    assert ranked[top.event.id].shadowed
+    assert abs(ranked[top.event.id].score - top.score / DEMO_PENALTY * DEMO_SHADOW) < 0.002
+    assert ranked["live-test"].score > ranked[top.event.id].score
+    # «Слежу за» поднимает событие по теме из списка и объясняет почему
+    region = next(e for e in events if e.classification.regions)
+    before = {s.event.id: s.score for s in rank_feed(events, p, limit=50)}
+    add_watch("U_WATCH", "region", region.classification.regions[0], region.classification.regions[0])
+    after = {s.event.id: s for s in rank_feed(events, p, limit=50)}
+    assert after[region.id].score > before.get(region.id, 0)
+    assert any(r["factor"] == "watch" for r in after[region.id].reasons)
+    assert get_watchlist("U_WATCH") and not remove_watch("U_WATCH", "region", region.classification.regions[0])
+
+
+def test_hide_teaches_feed():
+    from app.ranking.personal import apply_hide, get_overrides
+
+    ev = list_events()[0]
+    f = ev.classification.factors[0].factor
+    apply_hide("U_HIDE", ev, [f], True)
+    assert get_overrides("U_HIDE")[f]["multiplier"] == 0.8 and get_overrides("U_HIDE")[f]["source"] == "hide"
+    apply_hide("U_HIDE", ev, [f], False)
+    assert f not in get_overrides("U_HIDE")

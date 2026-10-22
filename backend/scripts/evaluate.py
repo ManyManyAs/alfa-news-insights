@@ -34,6 +34,8 @@ from app.news.models import Event
 from app.ranking.scorer import rank_feed
 
 # Дата, на которую размечена релевантность (переопределяется переменной EVAL_NOW)
+# «Живые новости вперёд» — политика происхождения данных (демо уступает живым), а не релевантность:
+# в размеченном наборе стартовые новости помечены как демо, поэтому в офлайн-оценке правило отключено (prefer_live=False)
 EVAL_NOW = datetime.fromisoformat(os.environ.get("EVAL_NOW", "2026-10-21T12:00:00+03:00"))
 DEFAULT_HORIZON_DAYS = 60
 
@@ -86,7 +88,7 @@ def golden_effects(events: list[Event]) -> dict:
                 continue
             rows += 1
             r = cases[g["case_id"]]
-            feed = rank_feed(events, profile_of(r), r["role"] or None, limit=10, now=EVAL_NOW, diversify=False)
+            feed = rank_feed(events, profile_of(r), r["role"] or None, limit=10, now=EVAL_NOW, diversify=False, prefer_live=False)
             hit = next((s for s in feed if s.event.id == ev.id or (ev.story_id and s.event.story_id == ev.story_id)), None)
             ok_top += hit is not None
             eff = hit.effect if hit else None
@@ -132,7 +134,7 @@ def relevance(events: list[Event], rerank_too: bool = False) -> dict:
                 k = news_to_card[n]
                 card_label[k] = max(card_label.get(k, 0), lab)
         prof = profile_of(r)
-        feed = rank_feed(events, prof, r["role"] or None, limit=20, now=EVAL_NOW)
+        feed = rank_feed(events, prof, r["role"] or None, limit=20, now=EVAL_NOW, prefer_live=False)
         ranked = [s.event.story_id or s.event.id for s in feed]
         rels = [card_label.get(e, 0) for e in ranked]
         p3 = sum(1 for x in rels[:3] if x > 0) / 3
@@ -219,7 +221,7 @@ def main() -> None:
     tot = graph_hits = 0
     for u in load_demo_users():
         prof = get_profile(u["primary_company"])
-        for s in rank_feed(list_events(500), prof, u["role"], limit=5):
+        for s in rank_feed(list_events(500), prof, u["role"], limit=5, prefer_live=False):
             tot += 1
             graph_hits += any(b.startswith(("graph:", "peers:")) for r in s.reasons for b in r.get("basis", []))
     m["graph_share"] = round(graph_hits / tot, 3) if tot else None
@@ -278,7 +280,7 @@ def main() -> None:
                 continue
             seen.add(r["case_id"])
             prof = profile_of(r)
-            for s in rank_feed(events, prof, r["role"] or None, limit=3):
+            for s in rank_feed(events, prof, r["role"] or None, limit=3, prefer_live=False):
                 ins = run_agent(s.event, prof, r["role"] or None)
                 total += 1
                 ok += all(c.passed for c in ins.quality)

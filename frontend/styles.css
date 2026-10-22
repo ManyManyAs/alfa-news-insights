@@ -710,3 +710,15 @@ body.logged-out .layout, body.logged-out .topbar { display: none; }
 .lever-table .lt-total td { font-weight: 800; border-bottom: 0; }
 .scen-note { margin-bottom: 8px; }
 @media (max-width: 640px) { .lever-table .lt-f { display: none; } .ec-end { font-size: 10px; } }
+
+/* «Слежу за», выученные интересы, уведомления */
+.learned { list-style: none; padding: 0; margin: 6px 0 8px; display: grid; gap: 6px; }
+.learned li { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; border-radius: 10px; padding: 7px 10px; font-size: 13px; }
+.learned li.more { background: var(--opp-bg); } .learned li.less { background: var(--soft2); } .learned li.mute { background: var(--risk-bg); }
+.chip.watch { display: inline-flex; align-items: center; gap: 4px; background: var(--watch-bg); color: var(--watch); font-weight: 600; }
+.chip.watch .x { border: 0; background: none; color: inherit; font-size: 15px; line-height: 1; cursor: pointer; padding: 0 2px; }
+.watch-add { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0 4px; }
+.watch-add select { flex: 0 0 auto; } .watch-add input { flex: 1 1 180px; min-width: 0; }
+.personal.down { color: var(--muted); }
+.card.notif { display: grid; gap: 8px; }
+.notif-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }

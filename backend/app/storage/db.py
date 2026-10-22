@@ -144,6 +144,34 @@ CREATE TABLE IF NOT EXISTS llm_usage (
 );
 
 -- Персональные поправки к весам факторов: из 👍/👎 (feedback) или заданные пользователем (manual)
+CREATE TABLE IF NOT EXISTS watchlist (
+    company_uid TEXT,
+    kind TEXT,
+    value TEXT,
+    title TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (company_uid, kind, value)
+);
+
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+    endpoint TEXT PRIMARY KEY,
+    user_id TEXT,
+    company_uid TEXT,
+    role TEXT,
+    keys TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    last_ok TEXT,
+    fails INTEGER DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS push_sent (
+    endpoint TEXT,
+    event_id TEXT,
+    kind TEXT,
+    sent_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (endpoint, event_id, kind)
+);
+
 CREATE TABLE IF NOT EXISTS profile_overrides (
     company_uid TEXT,
     factor TEXT,

@@ -54,3 +54,51 @@ def test_analyze_unseen_text(client, demo):
 def test_metrics(client):
     m = client.get("/api/metrics").json()
     assert m["llm"]["mode"] == "mock" and m["insights"]["total"] >= 1
+
+
+def test_push_subscribe_and_encrypt(client, demo):
+    """Подписка на push: ключ VAPID, сохранение подписки, шифрование по RFC 8291 расшифровывается «браузером»."""
+    import os
+    import struct
+
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+    from app.notify import push
+
+    key = client.get("/api/push/key").json()["public_key"]
+    assert len(push.ub64u(key)) == 65 and key == push.public_key()  # ключ стабилен между вызовами
+    ua = ec.generate_private_key(ec.SECP256R1())
+    auth = os.urandom(16)
+    ua_raw = push._raw_public(ua)
+    sub = {"endpoint": "https://push.example.test/abc", "keys": {"p256dh": push.b64u(ua_raw), "auth": push.b64u(auth)}}
+    headers = {"X-User-Id": demo["user_id"]}
+    company = demo["primary_company"]
+    assert client.post("/api/push/subscribe", headers=headers, json={"company_id": company, "subscription": sub}).status_code == 200
+    assert client.post("/api/push/subscribe", headers=headers,
+                       json={"company_id": company, "subscription": {"endpoint": "http://x", "keys": {}}}).status_code == 400
+    body = push.encrypt(b'{"title":"t"}', sub["keys"]["p256dh"], sub["keys"]["auth"])
+    salt, idlen = body[:16], body[20]
+    assert struct.unpack(">I", body[16:20])[0] == 4096
+    as_raw, ct = body[21:21 + idlen], body[21 + idlen:]
+    shared = ua.exchange(ec.ECDH(), ec.EllipticCurvePublicKey.from_encoded_point(ec.SECP256R1(), as_raw))
+    ikm = push._hkdf(auth, shared, b"WebPush: info\x00" + ua_raw + as_raw, 32)
+    cek = push._hkdf(salt, ikm, b"Content-Encoding: aes128gcm\x00", 16)
+    nonce = push._hkdf(salt, ikm, b"Content-Encoding: nonce\x00", 12)
+    assert AESGCM(cek).decrypt(nonce, ct, None) == b'{"title":"t"}\x02'
+    assert push.vapid_header(sub["endpoint"]).startswith("vapid t=")
+    assert client.post("/api/push/unsubscribe", headers=headers, json={"endpoint": sub["endpoint"]}).status_code == 200
+
+
+def test_watch_api_and_metrics_live_share(client, demo):
+    h = {"X-User-Id": demo["user_id"]}
+    c = demo["primary_company"]
+    opts = client.get(f"/api/watch/options?company_id={c}", headers=h).json()
+    assert opts["topic"] and "region" in opts
+    assert client.post(f"/api/companies/{c}/watch", headers=h, json={"kind": "topic", "value": "nope"}).status_code == 400
+    r = client.post(f"/api/companies/{c}/watch", headers=h, json={"kind": "topic", "value": "fx_rub"}).json()
+    assert r["watch"][0]["title"] == "Курс рубля"
+    assert client.get(f"/api/companies/{c}", headers=h).json()["watch"]
+    assert client.delete(f"/api/companies/{c}/watch?kind=topic&value=fx_rub", headers=h).json()["watch"] == []
+    ls = client.get("/api/metrics").json()["live_share"]
+    assert ls["target"] == 0.7 and "by_persona" in ls

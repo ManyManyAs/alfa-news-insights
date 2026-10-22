@@ -36,10 +36,20 @@ from app.news.ingest import add_news, get_event, list_events, run_ingest, source
 from app.news.models import NewsItem
 from app.news.sources import UnsafeURL, fetch_url
 from app.news.stories import get_story
-from app.ranking.personal import apply_feedback, apply_overrides, get_overrides, set_manual
+from app.notify import push
+from app.ranking.personal import (
+    add_watch,
+    apply_feedback,
+    apply_hide,
+    apply_overrides,
+    get_overrides,
+    get_watchlist,
+    remove_watch,
+    set_manual,
+)
 from app.ranking.personal import reset as reset_overrides
 from app.ranking.rerank import rerank
-from app.ranking.scorer import rank_feed, score_event
+from app.ranking.scorer import LIVE_TRUST, rank_feed, score_event
 from app.security import auth
 from app.security.guard import AccessDenied, MaskIdsFilter, audit, check_company_access
 from app.storage import db
@@ -50,6 +60,16 @@ log = logging.getLogger("app")
 for _h in logging.getLogger().handlers:
     _h.addFilter(MaskIdsFilter())
 logging.getLogger("uvicorn.access").addFilter(MaskIdsFilter())  # в адресах запросов тоже есть company_id
+
+
+def ingest_and_notify(**kw) -> dict:
+    """Сбор новостей по расписанию, затем push о новых рисках подписанным компаниям."""
+    stats = run_ingest(**kw)
+    try:
+        stats["push_sent"] = push.notify_new_risks()
+    except Exception:  # уведомления не должны ломать сбор
+        log.exception("Ошибка отправки push")
+    return stats
 
 
 @asynccontextmanager
@@ -63,9 +83,12 @@ async def lifespan(app: FastAPI):
         cfg = load_yaml("sources.yaml")
         scheduler = BackgroundScheduler()
         # первый проход сразу после старта (в фоне), дальше — по расписанию
-        scheduler.add_job(run_ingest, "interval", minutes=cfg.get("schedule_minutes", 30),
+        scheduler.add_job(ingest_and_notify, "interval", minutes=cfg.get("schedule_minutes", 30),
                           kwargs={"max_per_source": cfg.get("max_per_source", 40)},
                           next_run_time=datetime.now(UTC) + timedelta(seconds=20), max_instances=1, coalesce=True)
+        # дайджест недели в браузер: понедельник, 9:00 МСК
+        scheduler.add_job(push.notify_weekly_digest, "cron", day_of_week="mon", hour=6, minute=0, timezone="UTC",
+                          max_instances=1, coalesce=True)
         scheduler.start()
     yield
     if scheduler:
@@ -203,6 +226,7 @@ def company(company_id: str, role: str | None = None, user: str = Depends(curren
         {"factor": e.factor, "title": titles.get(e.factor, e.factor), "weight": round(e.weight, 2), "sign": e.sign,
          "reasons": e.reasons, "override": overrides.get(e.factor)} for e in exp if e.weight > 0 or e.factor in overrides][:12],
         "overrides": [{**o, "title": titles.get(f, f)} for f, o in overrides.items()],
+        "watch": get_watchlist(p.uid),
         "factors": [{"factor": k, "title": v} for k, v in titles.items()]}
 
 
@@ -220,6 +244,58 @@ def set_preference(company_id: str, req: PreferenceRequest, user: str = Depends(
     set_manual(p.uid, req.factor, req.level)
     audit(user, "preference", f"{p.uid}:{req.factor}={req.level}", True)
     return {"ok": True, "overrides": get_overrides(p.uid)}
+
+
+class WatchRequest(BaseModel):
+    kind: str = Field(..., pattern="^(region|country|industry|topic)$")
+    value: str = Field(..., min_length=1, max_length=100)
+
+
+@app.get("/api/watch/options")
+def watch_options(company_id: str, user: str = Depends(current_user)):
+    """Что можно добавить в «Слежу за»: регионы, страны и отрасли из потока новостей и профиля, темы — факторы."""
+    p = authorized_profile(company_id, user)
+    regions, countries, industries = set(), set(), set()
+    for e in list_events(300):
+        c = e.classification
+        regions.update(c.regions)
+        countries.update(c.countries)
+        industries.update(c.industries)
+    regions.update(x for x in [p.region] if x)
+    countries.update(p.fts_countries)
+    titles = {k: v["title"] for k, v in load_yaml("factors.yaml")["factors"].items()}
+    return {"region": sorted(regions), "country": sorted({x.title() for x in countries}),
+            "industry": sorted(({"value": c, "title": okved_class_name(c) or c} for c in industries if c),
+                               key=lambda x: x["title"]),
+            "topic": [{"value": k, "title": v} for k, v in titles.items()]}
+
+
+def _watch_title(kind: str, value: str) -> str:
+    if kind == "topic":
+        return load_yaml("factors.yaml")["factors"].get(value, {}).get("title", value)
+    if kind == "industry":
+        return okved_class_name(value) or value
+    return value
+
+
+@app.post("/api/companies/{company_id}/watch")
+def watch_add(company_id: str, req: WatchRequest, user: str = Depends(current_user)):
+    """«Слежу за»: личный усилитель ленты — события по теме из списка поднимаются с объяснением."""
+    p = authorized_profile(company_id, user)
+    if req.kind == "topic" and req.value not in load_yaml("factors.yaml")["factors"]:
+        raise HTTPException(400, "Неизвестная тема")
+    try:
+        items = add_watch(p.uid, req.kind, req.value.strip(), _watch_title(req.kind, req.value.strip()))
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    audit(user, "watch_add", f"{p.uid}:{req.kind}={req.value[:60]}", True)
+    return {"watch": items}
+
+
+@app.delete("/api/companies/{company_id}/watch")
+def watch_remove(company_id: str, kind: str, value: str, user: str = Depends(current_user)):
+    p = authorized_profile(company_id, user)
+    return {"watch": remove_watch(p.uid, kind, value)}
 
 
 @app.delete("/api/companies/{company_id}/preferences")
@@ -240,7 +316,8 @@ def cached_rank(p, role: str | None, limit: int) -> list:
     events = list_events(300)
     from app.news.ingest import _events_cache
 
-    overrides = tuple(sorted((f, o["multiplier"]) for f, o in get_overrides(p.uid).items()))
+    overrides = tuple(sorted((f, o["multiplier"]) for f, o in get_overrides(p.uid).items())) + tuple(
+        (w["kind"], w["value"]) for w in get_watchlist(p.uid))
     hour = datetime.now(UTC).strftime("%Y%m%d%H")  # свежесть событий зависит от времени — кэш живёт не дольше часа
     key = (p.uid, role, limit, _events_cache["sig"], overrides, hour)
     hit = _rank_cache.get(key)
@@ -283,6 +360,7 @@ def feed(company_id: str, role: str | None = None, limit: int = Query(20, le=50)
                        "timeline": [{k: e[k] for k in ("event_id", "title", "published_at", "direction")}
                                     for e in st["events"]]} if st and len(st["events"]) > 1 else None),
             "has_bank_view": bool(kb.theses_for([f.factor for f in cls.factors])),
+            "demo": cls.trust == "demo", "shadowed": s.shadowed,
             "ai_relevance": ({"level": mat[s.event.id][0], "why": mat[s.event.id][1]} if s.event.id in mat else None)}
 
     # «Тишина — тоже ответ»: за неделю ничего значимого — говорим прямо и показываем последнее важное
@@ -324,7 +402,14 @@ def hide_event(req: HideRequest, user: str = Depends(current_user)):
                          (user, p.uid, req.event_id))
         else:
             conn.execute("DELETE FROM hidden_events WHERE user_id=? AND company_uid=? AND event_id=?", (user, p.uid, req.event_id))
-    return {"ok": True}
+    changed = []
+    if ev := get_event(req.event_id):
+        sc = score_event(ev, p, compute_exposures(p, None))
+        changed = apply_hide(p.uid, ev, [r["factor"] for r in sc.reasons if r["factor"] not in NON_FACTOR_REASONS], req.hidden)
+    return {"ok": True, "changed": changed}
+
+
+NON_FACTOR_REASONS = {"country", "industry", "region", "watch"}
 
 
 ACTION_KINDS = {"manager": "Связаться с менеджером", "callback": "Обратный звонок", "application": "Заявка на продукт"}
@@ -626,7 +711,7 @@ def feedback(req: FeedbackRequest, user: str = Depends(current_user)):
     changed = []
     if ev:
         sc = score_event(ev, p, compute_exposures(p, req.role))
-        matched = [r["factor"] for r in sc.reasons if r["factor"] not in ("country", "industry", "region")]
+        matched = [r["factor"] for r in sc.reasons if r["factor"] not in NON_FACTOR_REASONS]
         changed = apply_feedback(p.uid, ev, matched, req.rating, req.reason)
     return {"ok": True, "changed": changed}
 
@@ -661,7 +746,66 @@ def metrics(days: int = Query(7, ge=1, le=90)):
         "product": product, "cost": cost, "offline": monitoring.offline_metrics(),
         "sources": {"total": len(health["sources"]), "down": down, "last_ingest": health["last_ingest"]},
         "alerts": monitoring.alerts(budget, product, judge, down, inj, cost),
+        "live_share": live_share_top10(),
     }
+
+
+def live_share_top10() -> dict:
+    """Доля живых новостей (не демо) в топ-10 ленты демо-персон — цель ≥ 70%."""
+    per = {}
+    for u in load_demo_users():
+        p = get_profile(u["primary_company"])
+        if not p:
+            continue
+        top = cached_rank(p, u["role"], 10)
+        per[u["label"]] = round(sum(s.event.classification.trust in LIVE_TRUST for s in top) / len(top), 2) if top else None
+    vals = [v for v in per.values() if v is not None]
+    return {"avg": round(sum(vals) / len(vals), 2) if vals else None, "by_persona": per, "target": 0.7}
+
+
+# ------------------------------------------------------------------ push в браузере
+class PushSubscribeRequest(BaseModel):
+    company_id: str
+    role: str | None = None
+    subscription: dict
+
+
+@app.get("/api/push/key")
+def push_key():
+    return {"public_key": push.public_key()}
+
+
+@app.post("/api/push/subscribe")
+def push_subscribe(req: PushSubscribeRequest, user: str = Depends(current_user)):
+    p = authorized_profile(req.company_id, user)
+    try:
+        push.subscribe(user, p.uid, req.role, req.subscription)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    audit(user, "push_subscribe", p.uid, True)
+    return {"ok": True}
+
+
+@app.post("/api/push/unsubscribe")
+def push_unsubscribe(body: dict, user: str = Depends(current_user)):
+    push.unsubscribe(user, str(body.get("endpoint", ""))[:1000])
+    return {"ok": True}
+
+
+@app.post("/api/push/test")
+def push_test(user: str = Depends(current_user)):
+    """Тестовое уведомление на все подписки пользователя."""
+    throttle(user, "push_test", 3)
+    subs = push.subscriptions(user)
+    if not subs:
+        raise HTTPException(400, "Уведомления не включены в этом браузере")
+    codes = [push.send(s, {"title": "Бизнес-радар: уведомления работают",
+                           "body": "Сюда придут новые риски высокой важности и дайджест недели.", "url": "/", "tag": "test"})
+             for s in subs]
+    ok = sum(200 <= c < 300 for c in codes)
+    if not ok:
+        raise HTTPException(502, "Сервис уведомлений браузера не принял сообщение — попробуйте включить заново")
+    return {"sent": ok}
 
 
 class TrackRequest(BaseModel):
@@ -712,6 +856,12 @@ def llm_status():
 FRONTEND = REPO_ROOT / "frontend"
 if FRONTEND.exists():
     app.mount("/static", StaticFiles(directory=FRONTEND), name="static")
+
+    @app.get("/sw.js", include_in_schema=False)
+    def service_worker():
+        from fastapi.responses import FileResponse
+
+        return FileResponse(FRONTEND / "sw.js", media_type="application/javascript", headers={"Cache-Control": "no-cache"})
 
     @app.get("/", include_in_schema=False)
     def index():

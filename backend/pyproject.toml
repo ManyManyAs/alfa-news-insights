@@ -12,6 +12,7 @@ dependencies = [
     "pandas==2.2.3",
     "pyyaml==6.0.2",
     "apscheduler==3.11.0",
+    "cryptography==44.0.0",  # Web Push: шифрование RFC 8291 и подпись VAPID
 ]
 
 [dependency-groups]
