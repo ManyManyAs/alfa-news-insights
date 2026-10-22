@@ -201,7 +201,8 @@ def _industry_region(cls, profile: CompanyProfile, reasons: list[dict], has_fact
 
 
 def rank_feed(events: list[Event], profile: CompanyProfile, role: str | None = None, limit: int = 20,
-              now: datetime | None = None, diversify: bool = True, personal: bool = True) -> list[Scored]:
+              now: datetime | None = None, diversify: bool = True, personal: bool = True,
+              prefer_live: bool = True) -> list[Scored]:
     exposures = compute_exposures(profile, role)
     watch: list[dict] = []
     if personal:
@@ -211,7 +212,8 @@ def rank_feed(events: list[Event], profile: CompanyProfile, role: str | None = N
         watch = get_watchlist(profile.uid)
     scored = [score_event(e, profile, exposures, now, watch) for e in events]
     scored = [s for s in scored if s.score >= MIN_SCORE * freshness(s.event.published_at, now) and s.reasons]
-    live_first(scored, now)
+    if prefer_live:  # политика происхождения данных, а не релевантность: в офлайн-оценке отключается
+        live_first(scored, now)
     scored.sort(key=lambda s: s.score, reverse=True)
     if not diversify:
         return collapse_stories(scored, limit)
