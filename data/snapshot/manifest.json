@@ -1,5 +1,5 @@
 {
-  "created_at": "2026-10-21T21:18:57.967372+00:00",
+  "created_at": "2026-10-22T23:47:16.160453+00:00",
   "data_fingerprint": "85514:dacb103f46f28049",
   "counts": {
     "events": 17,
@@ -8,10 +8,10 @@
     "source_status": 1,
     "event_briefs": 17,
     "insights": 155,
-    "trace_steps": 5607,
-    "llm_cache": 1085,
-    "llm_usage": 11
+    "trace_steps": 5842,
+    "llm_cache": 1125,
+    "llm_usage": 13
   },
-  "llm_calls": 1085,
-  "llm_cost_rub": 507.34
+  "llm_calls": 1125,
+  "llm_cost_rub": 532.94
 }
