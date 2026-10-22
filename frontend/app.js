@@ -193,6 +193,14 @@ async function selectUser(uid, me) {
   state.role = u?.role || null;
   $("#roleSelect").value = state.role || "";
   await reload();
+  openFromUrl();
+}
+function openFromUrl() {
+  const u = new URLSearchParams(location.search);
+  const ev = u.get("event"), view = u.get("view");
+  if (!ev && !view) return;
+  history.replaceState(null, "", location.pathname);
+  if (ev) { show("radar"); openInsight(ev, false, "push"); } else if (["digest", "radar", "home"].includes(view)) show(view);
 }
 
 function show(view) {
@@ -323,7 +331,8 @@ function renderHero() {
 
 // ---------------------------------------------------------------- профиль
 async function loadProfile() {
-  const { profile: p, exposures, peers, overrides, factors } = await api(`/api/companies/${state.company}?${q({ role: state.role })}`);
+  const { profile: p, exposures, peers, overrides, factors, watch } = await api(`/api/companies/${state.company}?${q({ role: state.role })}`);
+  state.watch = watch || [];
   state.factors = factors; state.exposures = exposures; state.profile = p;
   renderRadar();
   renderHero();
@@ -345,13 +354,69 @@ async function loadProfile() {
     <div class="chips">${p.products.map((x) => `<span class="chip">${products[x] || x}</span>`).join("")}</div>
     <div class="sub-h">Чувствительность к факторам <span class="muted small">— нажмите, чтобы сделать тему важнее или скрыть</span></div>
     <div class="chips">${exposures.slice(0, 8).map((e) => interestChip(e.factor, e.title, e.weight, e.override, e.reasons)).join("")}</div>
-    ${overrides.length ? `<div class="overrides">${overrides.map((o) => `<span class="ov ${o.multiplier === 0 ? "mute" : o.multiplier > 1 ? "more" : "less"}">${esc(o.title)}: ${o.multiplier === 0 ? "скрыто" : o.source === "manual" ? "важнее" : "×" + o.multiplier}<span class="muted"> · ${o.source === "manual" ? "вы настроили" : "по вашим оценкам"}</span></span>`).join("")}
-      <button class="btn ghost small" id="resetPrefs">Сбросить настройки</button></div>` : ""}
+    ${watchBlock()}
+    ${overrides.length ? `<div class="sub-h">Что сервис понял о ваших интересах <span class="muted small">— по вашим оценкам, скрытым карточкам и настройкам</span></div>
+      <ul class="learned">${overrides.map((o) => `<li class="ov ${o.multiplier === 0 ? "mute" : o.multiplier > 1 ? "more" : "less"}"><span><b>${esc(o.title)}</b> — ${o.multiplier === 0 ? "не показываем" : o.multiplier > 1 ? "показываем выше" : "показываем ниже"}<span class="muted small"> · ${esc(learnedWhy(o))}</span></span><button class="link-btn" data-unlearn="${esc(o.factor)}">Отменить</button></li>`).join("")}</ul>
+      <button class="btn ghost small" id="resetPrefs">Сбросить всё</button>` : ""}
     ${supplyChain(p)}
     ${peersBlock(peers)}
     ${p.data_gaps.length ? `<div class="notice">Неполные данные: ${esc(p.data_gaps.join("; "))}</div>` : ""}
     <div class="muted small">* оценка по выборке клиентов с тем же ОКВЭД</div>`;
   bindInterests();
+  bindWatch();
+}
+
+function learnedWhy(o) {
+  if (o.source === "manual") return o.multiplier === 0 ? "вы скрыли тему" : "вы попросили показывать чаще";
+  if (o.source === "hide") return "вы скрывали похожие карточки";
+  return o.multiplier > 1 ? "вы отмечали похожие новости как полезные" : "вы отмечали похожие новости «не про мой бизнес»";
+}
+const WATCH_KIND = { region: "Регион", country: "Страна", industry: "Отрасль", topic: "Тема" };
+function watchBlock() {
+  const w = state.watch || [];
+  return `<div class="sub-h">Слежу за <span class="muted small">— события по этим темам поднимаются в ленте с пометкой «вы следите»</span></div>
+    <div class="chips watch-list">${w.map((x) => `<span class="chip watch">${WATCH_KIND[x.kind]}: ${esc(x.title || x.value)}<button class="x" data-unwatch="${esc(x.kind)}|${esc(x.value)}" aria-label="Убрать из списка">×</button></span>`).join("") || `<span class="muted small">Пока пусто: добавьте регион, страну, отрасль или тему, за которой хотите следить.</span>`}</div>
+    <form class="watch-add" id="watchForm"><select id="watchKind" aria-label="Что добавить">${Object.entries(WATCH_KIND).map(([k, t]) => `<option value="${k}">${t}</option>`).join("")}</select>
+      <input id="watchValue" list="watchOptions" placeholder="Например: Китай" aria-label="Значение" autocomplete="off"><datalist id="watchOptions"></datalist>
+      <button class="btn small" type="submit">Добавить</button></form>`;
+}
+async function bindWatch() {
+  const form = document.getElementById("watchForm");
+  if (!form) return;
+  if (!state.watchOpts || state.watchOpts.company !== state.company) {
+    try { state.watchOpts = { company: state.company, ...(await api(`/api/watch/options?${q({ company_id: state.company })}`)) }; } catch (e) { state.watchOpts = null; }
+  }
+  const fill = () => {
+    const kind = $("#watchKind").value, opts = (state.watchOpts || {})[kind] || [];
+    $("#watchOptions").innerHTML = opts.map((o) => `<option value="${esc(typeof o === "string" ? o : o.title)}"></option>`).join("");
+    $("#watchValue").placeholder = { region: "Например: Новосибирская область", country: "Например: Китай", industry: "Например: Строительство зданий", topic: "Например: Курс рубля" }[kind];
+  };
+  $("#watchKind").onchange = fill; fill();
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const kind = $("#watchKind").value, text = $("#watchValue").value.trim();
+    if (!text) return;
+    const opts = (state.watchOpts || {})[kind] || [];
+    const hit = opts.find((o) => (typeof o === "string" ? o : o.title).toLowerCase() === text.toLowerCase());
+    if ((kind === "topic" || kind === "industry") && !hit) { toast("Выберите вариант из списка"); return; }
+    const value = hit ? (typeof hit === "string" ? hit : hit.value) : text;
+    try {
+      await api(`/api/companies/${state.company}/watch`, { method: "POST", body: JSON.stringify({ kind, value }) });
+      toast(`Следим за: ${hit && hit.title ? hit.title : value}. Такие события будут выше в ленте`);
+      track("watch_add", { meta: { kind } });
+      await Promise.all([loadProfile(), loadFeed()]);
+    } catch (err) { toast(err.message); }
+  };
+  document.querySelectorAll("[data-unwatch]").forEach((b) => b.onclick = async () => {
+    const [kind, value] = b.dataset.unwatch.split("|");
+    await api(`/api/companies/${state.company}/watch?${q({ kind, value })}`, { method: "DELETE" });
+    await Promise.all([loadProfile(), loadFeed()]);
+  });
+  document.querySelectorAll("[data-unlearn]").forEach((b) => b.onclick = async () => {
+    await api(`/api/companies/${state.company}/preferences`, { method: "PUT", body: JSON.stringify({ factor: b.dataset.unlearn, level: "normal" }) });
+    toast("Отменено — тема снова как обычно");
+    await Promise.all([loadProfile(), loadFeed()]);
+  });
 }
 
 function mixBars(rows, unknown) {
@@ -478,7 +543,7 @@ function renderFeedList(animate = false) {
       <div class="meta">${fmtDate(it.published_at)} · ${esc([...new Set(it.sources.map((x) => x.source))].join(", "))}${it.sources.length > 1 ? ` · ${it.sources.length} ${plural(it.sources.length, "публикация", "публикации", "публикаций")}` : ""}</div>
       <div class="chips">${entityChips(it)}</div>
       <div class="reasons">${esc(reasonText(it))}</div>
-      ${it.reasons.find((r) => r.personal) ? `<div class="personal">⚙ ${esc(it.reasons.find((r) => r.personal).personal.why)}</div>` : ""}
+      ${personalNote(it)}
       ${n ? `<div class="ai-note"><b>ИИ:</b> ${esc(n.why)} <span class="rel r${n.relevance}">${"●".repeat(n.relevance)}${"○".repeat(3 - n.relevance)}</span></div>` : ""}
       ${it.ai_relevance && it.ai_relevance.level <= 1 ? `<div class="ai-weak" title="${esc(it.ai_relevance.why)}">ИИ после разбора: ${it.ai_relevance.level === 0 ? "не касается компании" : "слабо связано с бизнесом"} — карточка ниже в ленте</div>` : ""}
       ${it.ai_relevance && it.ai_relevance.level === 3 ? `<div class="ai-strong" title="${esc(it.ai_relevance.why)}">ИИ после разбора: существенно для компании</div>` : ""}
@@ -492,12 +557,20 @@ function renderFeedList(animate = false) {
   }
   bindCards(list);
 }
+function personalNote(it) {
+  const r = it.reasons.find((x) => x.personal);
+  if (!r) return "";
+  const m = r.personal.multiplier, why = r.personal.why;
+  const lead = r.factor === "watch" ? "👁" : m === 0 ? "🔇" : m > 1 ? "▲ Выше в ленте:" : "▼ Ниже в ленте:";
+  return `<div class="personal${m < 1 ? " down" : ""}">${lead} ${esc(why.replace(/^Вы /, "вы "))}</div>`;
+}
 async function hideEvent(id, hidden = true) {
   await api("/api/feed/hide", { method: "POST", body: JSON.stringify({ company_id: state.company, event_id: id, hidden }) });
   if (hidden) {
     state.feed = state.feed.filter((x) => x.event_id !== id);
     renderFeedList(); renderWidget();
-    toast("Карточка скрыта. Вернуть все скрытые — кнопкой «Показать скрытые» над лентой");
+    toast("Карточка скрыта, похожие будут ниже. Вернуть — кнопкой «Показать скрытые» над лентой");
+    loadProfile();
   } else { await loadFeed(); }
 }
 function bindCards(root) {
@@ -969,12 +1042,58 @@ async function loadDigest() {
           <p><button type="button" class="em-btn btn" id="digestOpen">Открыть Бизнес-радар</button></p>
           <p class="muted small">Это демонстрация: письмо не отправляется.</p></div>
       </div>
+      ${pushCard()}
       <div class="card push"><div class="muted small">Предпросмотр push</div>
         <div class="push-n"><b>Альфа-Бизнес</b><div>${esc(d.top[0] ? `${EFFECT[d.top[0].effect][0].toUpperCase() + EFFECT[d.top[0].effect].slice(1)}: ${d.top[0].title}` : "Важных событий нет")}</div></div></div>
     </div>`;
   bindCards(box);
   const open = document.getElementById("digestOpen");
   if (open) open.onclick = () => show("radar");
+  bindPush();
+}
+
+// ---------------------------------------------------------------- push в браузере
+const pushSupported = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+function pushCard() {
+  if (!pushSupported()) return `<div class="card notif"><b>Уведомления в браузере</b><div class="muted small">Этот браузер не поддерживает push. Откройте радар в Chrome, Edge или Firefox.</div></div>`;
+  return `<div class="card notif"><b>Уведомления в браузере</b>
+    <div class="muted small">Новый риск высокой важности — сразу, дайджест — по понедельникам. Только для выбранной компании и роли.</div>
+    <div class="notif-row" id="pushRow"><span class="muted small">Проверяем…</span></div></div>`;
+}
+function urlB64ToUint8(s) { const b = atob((s + "=".repeat((4 - s.length % 4) % 4)).replace(/-/g, "+").replace(/_/g, "/")); return Uint8Array.from(b, (c) => c.charCodeAt(0)); }
+async function pushSubscription() {
+  const reg = await navigator.serviceWorker.register("/sw.js");
+  await navigator.serviceWorker.ready;
+  return { reg, sub: await reg.pushManager.getSubscription() };
+}
+async function bindPush() {
+  const row = document.getElementById("pushRow");
+  if (!row) return;
+  const render = async () => {
+    let sub = null;
+    try { sub = (await pushSubscription()).sub; } catch (e) { row.innerHTML = `<span class="muted small">Не удалось запустить уведомления: ${esc(e.message)}</span>`; return; }
+    if (Notification.permission === "denied") { row.innerHTML = `<span class="muted small">Уведомления запрещены в настройках браузера для этого сайта — разрешите их и обновите страницу.</span>`; return; }
+    row.innerHTML = sub ? `<span class="ok small">✓ Включены</span><button class="btn small" id="pushTest">Отправить тестовое</button><button class="btn ghost small" id="pushOff">Отключить</button>`
+      : `<button class="btn small" id="pushOn">Включить уведомления</button>`;
+    const on = document.getElementById("pushOn"), test = document.getElementById("pushTest"), off = document.getElementById("pushOff");
+    if (on) on.onclick = async () => {
+      try {
+        if ((await Notification.requestPermission()) !== "granted") { toast("Без разрешения браузера уведомления не придут"); return render(); }
+        const { reg } = await pushSubscription();
+        const { public_key } = await api("/api/push/key");
+        const s = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64ToUint8(public_key) });
+        await api("/api/push/subscribe", { method: "POST", body: JSON.stringify({ company_id: state.company, role: state.role, subscription: s.toJSON() }) });
+        track("push_subscribe"); toast("Уведомления включены"); render();
+      } catch (e) { toast("Не удалось включить: " + e.message); }
+    };
+    if (test) test.onclick = async () => { try { await api("/api/push/test", { method: "POST" }); toast("Отправили — уведомление появится через пару секунд"); } catch (e) { toast(e.message); } };
+    if (off) off.onclick = async () => {
+      const { sub: s } = await pushSubscription();
+      if (s) { await api("/api/push/unsubscribe", { method: "POST", body: JSON.stringify({ endpoint: s.endpoint }) }); await s.unsubscribe(); }
+      toast("Уведомления отключены"); render();
+    };
+  };
+  render();
 }
 
 // ---------------------------------------------------------------- тема

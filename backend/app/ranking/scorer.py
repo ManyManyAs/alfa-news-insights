@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from app.config import load_yaml
 from app.data.models import CompanyProfile
@@ -34,6 +34,7 @@ class Scored:
     effect: str  # risk | opportunity | mixed | watch
     reasons: list[dict] = field(default_factory=list)
     matched_factors: list[str] = field(default_factory=list)
+    shadowed: bool = False  # демо-событие уступило живой новости по той же теме
 
 
 # Факторы, где «без изменений» — тоже сигнал: рынок ждал снижения ставки, пауза = деньги дорогие дольше
@@ -67,7 +68,7 @@ def freshness(published_at: str | None, now: datetime | None = None) -> float:
 
 
 def score_event(event: Event, profile: CompanyProfile, exposures: dict[str, Exposure],
-                now: datetime | None = None) -> Scored:
+                now: datetime | None = None, watch: list[dict] | None = None) -> Scored:
     titles = {k: v["title"] for k, v in load_yaml("factors.yaml")["factors"].items()}
     cls = event.classification
     total, reasons, matched, effects = 0.0, [], [], []
@@ -114,6 +115,7 @@ def score_event(event: Event, profile: CompanyProfile, exposures: dict[str, Expo
         reasons.append({"factor": "country", "factor_title": "Страны ВЭД", "effect": "watch", "contribution": 0.5,
                         "basis": ["profile:FTS_COUNTRY_NAME"], "why": f"Компания ведёт ВЭД с: {', '.join(common)}"})
     total += _industry_region(cls, profile, reasons, has_factors=total > 0)
+    total += _watched(cls, watch or [], reasons)
     if total > 0:
         total += 0.08 * cls.importance
     total *= freshness(event.published_at, now)
@@ -132,6 +134,27 @@ def score_event(event: Event, profile: CompanyProfile, exposures: dict[str, Expo
 
 
 REGION_BONUS = 0.35
+WATCH_BONUS = 0.45  # «Слежу за»: событие по теме из списка пользователя проходит порог ленты даже без связи с профилем
+WATCH_KINDS = {"region": "regions", "country": "countries", "industry": "industries"}
+
+
+def _watched(cls, watch: list[dict], reasons: list[dict]) -> float:
+    """Совпадения с личным списком «Слежу за»: регион, страна, отрасль (ОКВЭД2) или тема (фактор)."""
+    for w in watch:
+        kind, value = w.get("kind"), w.get("value")
+        if kind == "topic":
+            hit = any(h.factor == value for h in cls.factors)
+        elif kind in WATCH_KINDS:
+            vals = getattr(cls, WATCH_KINDS[kind]) or []
+            hit = value in vals or (kind == "country" and value.upper() in {v.upper() for v in vals})
+        else:
+            hit = False
+        if hit:
+            reasons.append({"factor": "watch", "factor_title": "Слежу за", "effect": "watch", "specific": True,
+                            "contribution": WATCH_BONUS, "basis": ["user:watch"], "why": f"Вы следите за: {w.get('title') or value}",
+                            "personal": {"why": f"Вы следите за: {w.get('title') or value}", "multiplier": 1.0}})
+            return WATCH_BONUS  # одно совпадение — один бонус, чтобы список не перекрывал профиль
+    return 0.0
 INDUSTRY_BONUS = 0.45
 
 
@@ -180,16 +203,39 @@ def _industry_region(cls, profile: CompanyProfile, reasons: list[dict], has_fact
 def rank_feed(events: list[Event], profile: CompanyProfile, role: str | None = None, limit: int = 20,
               now: datetime | None = None, diversify: bool = True, personal: bool = True) -> list[Scored]:
     exposures = compute_exposures(profile, role)
+    watch: list[dict] = []
     if personal:
-        from app.ranking.personal import apply_overrides
+        from app.ranking.personal import apply_overrides, get_watchlist
 
         exposures = apply_overrides(profile.uid, exposures)
-    scored = [score_event(e, profile, exposures, now) for e in events]
+        watch = get_watchlist(profile.uid)
+    scored = [score_event(e, profile, exposures, now, watch) for e in events]
     scored = [s for s in scored if s.score >= MIN_SCORE * freshness(s.event.published_at, now) and s.reasons]
+    live_first(scored, now)
     scored.sort(key=lambda s: s.score, reverse=True)
     if not diversify:
         return collapse_stories(scored, limit)
     return mmr(collapse_stories(scored, limit * 3), limit)
+
+
+LIVE_WINDOW_DAYS = 14
+DEMO_SHADOW = 0.45  # демо-событие по теме, где есть живая новость за 14 дней, опускается
+DEMO_PENALTY = 0.9  # при равной релевантности живая новость всегда выше демо
+LIVE_TRUST = {"official", "agency", "media"}  # живые источники; текст пользователя и демо — нет
+
+
+def live_first(scored: list[Scored], now: datetime | None = None) -> None:
+    """Живые новости вперёд: демо-события (стартовый набор) уступают живым по той же теме за последние 14 дней."""
+    t = now or datetime.now(UTC)
+    cutoff = (t - timedelta(days=LIVE_WINDOW_DAYS)).isoformat()[:10]
+    live_topics: set[str] = set()
+    for s in scored:
+        if s.event.classification.trust in LIVE_TRUST and (s.event.published_at or "")[:10] >= cutoff:
+            live_topics.update(s.matched_factors[:2])
+    for s in scored:
+        if s.event.classification.trust == "demo":
+            s.shadowed = bool(set(s.matched_factors[:2]) & live_topics)
+            s.score = round(s.score * (DEMO_SHADOW if s.shadowed else DEMO_PENALTY), 3)
 
 
 MMR_LAMBDA = 0.3
