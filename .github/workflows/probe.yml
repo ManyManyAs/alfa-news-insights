@@ -1,0 +1,41 @@
+name: Stand probe
+
+# Быстрый снимок состояния стенда для команды и агентов (из их песочницы стенд недоступен):
+# скорость разборов, стоимость, бюджет моделей, источники. Итоги — аннотациями запуска и в summary.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      HOST: ${{ secrets.DEPLOY_HOST }}
+      DOMAIN: ${{ vars.DEPLOY_DOMAIN }}
+    steps:
+      - name: Метрики стенда
+        run: |
+          if [ -z "$DOMAIN" ] && [[ "$HOST" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then DOMAIN="${HOST//./-}.sslip.io"; fi
+          BASE="https://${DOMAIN:-77-221-139-69.sslip.io}"
+          JAR="$(mktemp)"
+          LOGIN="$(curl -sf "$BASE/api/demo-users" | python3 -c 'import json,sys; print(json.load(sys.stdin)["users"][0]["user_id"])')"
+          curl -sf -c "$JAR" -H 'Content-Type: application/json' -d "{\"login\": \"$LOGIN\", \"password\": \"alfa2026\"}" "$BASE/api/auth/login" >/dev/null
+          for d in 1 7; do curl -sf -b "$JAR" "$BASE/api/metrics?days=$d" > "m$d.json"; done
+          curl -sf -b "$JAR" "$BASE/api/llm/budget" > budget.json || echo '{}' > budget.json
+          python3 - <<'EOF' | tee -a "$GITHUB_STEP_SUMMARY"
+          import json
+          for d in (1, 7):
+              m = json.load(open(f"m{d}.json"))
+              sp = m["product"]["speed_ms"]
+              print(f"::notice title=Скорость за {d} д, мс::{json.dumps(sp, ensure_ascii=False)}")
+              print(f"::notice title=Стоимость разбора за {d} д::{json.dumps(m.get('cost'), ensure_ascii=False)[:400]}")
+              print(f"::notice title=Алерты за {d} д::{json.dumps(m.get('alerts'), ensure_ascii=False)[:800]}")
+              print(f"::notice title=Продукт за {d} д::{json.dumps(m['product'].get('rates'), ensure_ascii=False)[:600]}")
+          m = json.load(open("m1.json"))
+          llm = {k: m["llm"].get(k) for k in ("mode", "spent_rub", "budget_rub", "left_rub", "source")}
+          print(f"::notice title=Модели сегодня::{json.dumps(llm, ensure_ascii=False)} · живых в топ-10: {json.dumps(m.get('live_share'), ensure_ascii=False)[:200]}")
+          print(f"::notice title=Судья (критик)::{json.dumps(m['insights'], ensure_ascii=False)[:400]}")
+          EOF
