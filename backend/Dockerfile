@@ -20,6 +20,9 @@ COPY data/sample/ /app/data/sample/
 COPY data/case/ /app/data/case/
 COPY data/snapshot/ /app/data/snapshot/
 COPY data/eval/ /app/data/eval/
+# отчёты проверок: офлайн-метрики (экран «Качество и бюджет») и «Как мы проверяли» читают их на стенде
+COPY docs/quality/ /app/docs/quality/
+COPY docs/llm/ /app/docs/llm/
 
 ENV PYTHONUNBUFFERED=1 \
     LLM_MODE=auto
