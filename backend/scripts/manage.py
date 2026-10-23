@@ -26,7 +26,8 @@ def warmup(top: int = 5, max_rub: float | None = None, background: bool = False,
 
     --background: приоритет «фон» — не трогает резерв бюджета под пользователей.
     --roles: дополнительно строить инсайты для всех ролей (персонализация по роли в снапшоте).
-    --refresh: пересобрать инсайты, даже если они уже есть (после правки промптов); ответы моделей не из кэша.
+    --refresh: пересобрать все инсайты (после правки промптов); ответы моделей не из кэша.
+    Без --refresh готовые разборы моделью пропускаются, а разборы на правилах пересобираются моделью.
     --max-minutes: мягкий лимит времени — прогон останавливается сам, и снапшот успевает выгрузиться
     (иначе таймаут CI убивает job и все результаты теряются).
     Порядок: сначала основная роль каждой демо-персоны, потом остальные роли — при остановке важное уже готово.
@@ -35,7 +36,7 @@ def warmup(top: int = 5, max_rub: float | None = None, background: bool = False,
 
     deadline = time.monotonic() + max_minutes * 60 if max_minutes else None
     from app.agent.event_brief import get_event_brief
-    from app.agent.orchestrator import get_or_create_insight
+    from app.agent.orchestrator import cached_insight, get_or_create_insight
     from app.data.profiles import get_profile
     from app.data.sensitivity import role_titles
     from app.llm.client import LLMUnavailable, get_llm, llm_priority
@@ -72,7 +73,11 @@ def warmup(top: int = 5, max_rub: float | None = None, background: bool = False,
                 for s in rank_feed(events, p, role, limit=top):
                     if over():
                         raise LLMUnavailable(f"лимит прогона: {max_rub} ₽ или {max_minutes} мин")
-                    ins = get_or_create_insight(s.event, p, role, force=refresh)
+                    # без --refresh пересобираем только разборы на правилах: готовые разборы моделью не трогаем
+                    hit = cached_insight(s.event.id, p.uid, role)
+                    if hit and hit.generated_by != "rules" and not refresh:
+                        continue
+                    ins = get_or_create_insight(s.event, p, role, force=refresh or bool(hit))
                     if ins.scores:
                         judged.append(sum(ins.scores.values()) / len(ins.scores))
                     print(f"insight| {u['label'][:28]:28s} | {role:10s} | {s.event.title[:44]:44s} | {ins.generated_by} | "
