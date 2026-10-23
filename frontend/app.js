@@ -567,7 +567,7 @@ function renderWidget() {
 }
 
 // ---- фильтры ленты: эффект, фактор, период, поиск, сортировка, «непрочитанные»
-const filters = { effect: "all", factor: "", period: "all", text: "", sort: "relevance", unread: false };
+const filters = { effect: "all", factor: "", period: "all", text: "", sort: "recommended", unread: false };
 function readSet() { try { return new Set(JSON.parse(localStorage.getItem("read:" + state.company) || "[]")); } catch (e) { return new Set(); } }
 function markRead(id) {
   const s = readSet(); s.add(id);
@@ -590,7 +590,18 @@ function visibleFeed() {
     && (!t || (it.title + " " + it.summary).toLowerCase().includes(t))
     && (!filters.unread || !read.has(it.event_id)));
   if (filters.sort === "date") list = [...list].sort((a, b) => String(b.published_at).localeCompare(String(a.published_at)));
+  // «По важности» — строго по шкале; «Рекомендуемые» — порядок сервиса: важность плюс разнообразие тем наверху
+  else if (filters.sort === "importance") list = [...list].sort((a, b) => imp(b) - imp(a));
   return list;
+}
+const imp = (it) => it.importance_score ?? it.score;
+// Шкала важности: доля от самой важной карточки ленты, словами — в подсказке и для экранного диктора
+function impBar(it) {
+  const max = Math.max(0.01, ...state.feed.map(imp)), v = imp(it) / max;
+  const word = v >= 0.75 ? "высокая" : v >= 0.45 ? "средняя" : "низкая";
+  const why = it.reasons.slice(0, 3).map((r) => r.factor_title).join(", ");
+  return `<div class="imp-row" title="Важность для компании: ${word}. Учитывает, чем событие связано с компанией (${esc(why)}), свежесть, значимость и оценку ИИ после разбора.">
+    <span class="imp-lbl">важность: ${word}</span><div class="score-bar" role="meter" aria-label="Важность для компании: ${word}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(v * 100)}"><i style="width:${Math.max(4, Math.round(v * 100))}%"></i></div></div>`;
 }
 function renderFeedList(animate = false) {
   const list = $("#feedList");
@@ -613,7 +624,7 @@ function renderFeedList(animate = false) {
       ${it.ai_relevance && it.ai_relevance.level <= 1 ? `<div class="ai-weak" title="${esc(it.ai_relevance.why)}">ИИ после разбора: ${it.ai_relevance.level === 0 ? "не касается компании" : "слабо связано с бизнесом"} — карточка ниже в ленте</div>` : ""}
       ${it.ai_relevance && it.ai_relevance.level === 3 ? `<div class="ai-strong" title="${esc(it.ai_relevance.why)}">ИИ после разбора: существенно для компании</div>` : ""}
       ${it.story ? `<div class="story-badge">Сюжет · ${it.story.count} ${plural(it.story.count, "событие", "события", "событий")}: ${esc(fmtDate(it.story.timeline[0].published_at))} → ${esc(fmtDate(it.story.timeline[it.story.timeline.length - 1].published_at))}</div>` : ""}
-      <div class="score-bar"><i style="width:${Math.min(100, it.score * 60)}%"></i></div>
+      ${impBar(it)}
     </div>`;
   }).join("") || `<div class="empty">${state.feed.length ? "Под фильтры ничего не подошло — сбросьте их." : "Значимых событий нет."}</div>`;
   if (before) for (const el of list.children) {
