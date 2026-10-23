@@ -99,6 +99,23 @@ const STEP_RU = { relevance: "Оценка релевантности", plan: "�
   "repair:rules": "Удаление неподтверждённого", revise: "Правка по замечаниям", preview: "Быстрый вывод по профилю",
   limit: "Лимит времени или стоимости — дальше без LLM", "tool:scenario_calc": "Расчёт сценариев",
   "tool:get_story_timeline": "Хронология сюжета", "tool:get_regulation_dates": "Даты вступления в силу" };
+// «Агент думает»: что сейчас делает агент — словами клиента, без названий инструментов
+const THINK = { relevance: "Оцениваю, насколько событие касается компании", preview: "Готовлю быстрый вывод", plan: "Составляю план анализа",
+  "tool:get_event": "Читаю новость и источники", "tool:get_event_brief": "Читаю новость и источники", "tool:get_company_profile": "Смотрю профиль компании",
+  "tool:get_counterparties": "Проверяю контрагентов в цепочке платежей", "tool:get_bank_theses": "Ищу позицию Альфа-Банка",
+  "tool:search_bank_analytics": "Ищу позицию Альфа-Банка", "tool:check_consistency": "Сверяю новость с прогнозами банка",
+  "tool:scenario_calc": "Считаю эффект за 12 месяцев", "tool:get_peers": "Сравниваю с похожими компаниями", "tool:get_playbook": "Подбираю действия",
+  "tool:get_story_timeline": "Восстанавливаю хронологию сюжета", "tool:get_regulation_dates": "Проверяю сроки вступления в силу",
+  draft: "Пишу разбор", "decide:revise": "Решаю, нужна ли правка", revise: "Исправляю замечания", "repair:rules": "Убираю неподтверждённое",
+  finalize: "Собираю итог", limit: "Завершаю без модели — чтобы не ждать" };
+function thinkText(name) {
+  if (THINK[name]) return THINK[name];
+  if (name.startsWith("critique:llm")) return "Второй взгляд: другая модель проверяет разбор";
+  if (name.startsWith("critique:rules")) return "Проверяю факты, числа и ссылки";
+  if (name.startsWith("tool:search_bank_analytics")) return "Ищу позицию Альфа-Банка";
+  return "Анализирую";
+}
+const THINK_STEPS = 12;
 function stepTitle(name) {
   if (STEP_RU[name]) return STEP_RU[name];
   if (name.startsWith("tool:")) return "Инструмент: " + name.slice(5);
@@ -119,8 +136,13 @@ async function init() {
   state.users = users; state.roles = roles; state.demoPass = demoPass;
   $("#roleSelect").innerHTML = `<option value="">Без роли</option>` + Object.entries(roles).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("");
   bindLogin();
-  $("#companySelect").onchange = () => { state.company = $("#companySelect").value; reload(); };
-  $("#roleSelect").onchange = () => { state.role = $("#roleSelect").value || null; reload(); };
+  $("#companySelect").onchange = () => { state.company = $("#companySelect").value; ctxLabel(); closeCtx(); reload(); };
+  $("#roleSelect").onchange = () => { state.role = $("#roleSelect").value || null; ctxLabel(); closeCtx(); reload(); };
+  // телефон: компания и роль — в выпадающем меню, разбор — отдельным экраном с кнопкой «Назад»
+  $("#digestPdf").onclick = () => printDoc("digest");
+  $("#ctxBtn").onclick = () => { const open = !document.querySelector(".topbar").classList.contains("ctx-open"); document.querySelector(".topbar").classList.toggle("ctx-open", open); $("#ctxBtn").setAttribute("aria-expanded", String(open)); };
+  $("#backToFeed").onclick = () => closeDetail(true);
+  addEventListener("popstate", () => { if (document.body.classList.contains("m-detail")) closeDetail(false); });
   document.querySelectorAll("[data-view]").forEach((el) => el.onclick = () => show(el.dataset.view));
   document.querySelectorAll("[data-goto]").forEach((el) => el.onclick = () => show(el.dataset.goto));
   $("#analyzeBtn").onclick = () => $("#analyzeDialog").showModal();
@@ -192,6 +214,7 @@ async function selectUser(uid, me) {
   $("#companySelect").value = state.company;
   state.role = u?.role || null;
   $("#roleSelect").value = state.role || "";
+  ctxLabel();
   await reload();
   openFromUrl();
 }
@@ -203,7 +226,26 @@ function openFromUrl() {
   if (ev) { show("radar"); openInsight(ev, false, "push"); } else if (["digest", "radar", "home"].includes(view)) show(view);
 }
 
+const isPhone = () => matchMedia("(max-width: 1100px)").matches;  // одна колонка: разбор — отдельным экраном
+function ctxLabel() {
+  const c = $("#companySelect").selectedOptions[0], r = $("#roleSelect").selectedOptions[0];
+  $("#ctxLabel").textContent = [c ? c.textContent.split(" · ")[0].slice(0, 22) : "", r && r.value ? r.textContent : ""].filter(Boolean).join(" · ") || "Компания и роль";
+}
+function closeCtx() { document.querySelector(".topbar").classList.remove("ctx-open"); $("#ctxBtn").setAttribute("aria-expanded", "false"); }
+function openDetail() {
+  if (!isPhone()) return;
+  if (!document.body.classList.contains("m-detail")) history.pushState({ detail: 1 }, "");
+  document.body.classList.add("m-detail");
+  scrollTo({ top: 0 });
+}
+function closeDetail(fromButton) {
+  document.body.classList.remove("m-detail");
+  if (fromButton && history.state && history.state.detail) history.back();
+  const card = document.querySelector(`.feed-item[data-ev="${state.current}"]`);
+  if (card) card.scrollIntoView({ block: "center" });
+}
 function show(view) {
+  if (view !== "radar") document.body.classList.remove("m-detail");
   document.body.dataset.view = view;
   document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.id === `view-${view}`));
   document.querySelectorAll(".nav-item[data-view]").forEach((n) => n.classList.toggle("active", n.dataset.view === view));
@@ -269,7 +311,22 @@ function countUp(el, to) {
 }
 function initHeroGlobe() {
   if (state.globe || typeof BizGlobe === "undefined") return;
-  state.globe = new BizGlobe($("#globe"), { tip: $("#globeTip"), onPick: (s) => { show("radar"); openInsight(s.id, false, "globe"); } });
+  state.globe = new BizGlobe($("#globe"), { tip: $("#globeTip"), onPick: (s) => { show("radar"); openInsight(s.id, false, "globe"); },
+    clusterTip: (items) => `<div class="gt-top"><b>${items.length} ${plural(items.length, "событие", "события", "событий")} рядом</b><span class="muted small">📍 ${esc(items[0].place || "")}</span></div>
+      <ul class="gt-list">${items.slice(0, 4).map((x) => `<li><span class="dot" style="background:var(--${x.effect === "opportunity" ? "opp" : x.effect === "risk" ? "risk" : "watch"})"></span>${esc(x.title)}</li>`).join("")}</ul>
+      <div class="gt-cta">Нажмите — открыть главное →</div>` });
+  state.globeFilter = { days: 0, effects: new Set(["risk", "opportunity", "watch"]) };
+  document.querySelectorAll("[data-gp]").forEach((b) => b.onclick = () => {
+    state.globeFilter.days = +b.dataset.gp;
+    document.querySelectorAll("[data-gp]").forEach((x) => x.classList.toggle("on", x === b));
+    track("globe_period", { meta: { days: +b.dataset.gp } }); renderHero();
+  });
+  document.querySelectorAll("[data-gl]").forEach((b) => b.onclick = () => {
+    const f = state.globeFilter.effects, e = b.dataset.gl;
+    if (f.has(e) && f.size > 1) f.delete(e); else f.add(e);
+    document.querySelectorAll("[data-gl]").forEach((x) => { const on = f.has(x.dataset.gl); x.classList.toggle("off", !on); x.setAttribute("aria-pressed", String(on)); });
+    renderHero();
+  });
 }
 function initLoginGlobe() {
   if (state.loginGlobe || typeof BizGlobe === "undefined") return;
@@ -280,6 +337,8 @@ function initLoginGlobe() {
   state.loginGlobe.setData({ hq, signals: pts.map(([n, e], i) => ({ id: "x" + i, geo: geoOf(n), effect: e, weight: 0.3 + (i % 3) * 0.2 })) });
 }
 function signalOrigin(it) {
+  const c = typeof cityOf === "function" ? cityOf(`${it.title} ${it.summary || ""}`) : null;
+  if (c) return c;
   for (const r of it.regions || []) { const g = geoOf(r); if (g) return [g, geoShort(r)]; }
   for (const c of it.countries || []) { const g = geoOf(c); if (g) return [g, geoShort(c)]; }
   return [GEO["Москва"], "Москва, федеральный уровень"];
@@ -314,14 +373,20 @@ function renderHero() {
   // событие в том же регионе, что и компания (чаще всего — федеральный уровень, Москва), — точка на орбите вокруг компании,
   // чтобы дуга «событие → компания» оставалась видимой; в подсказке — настоящее место
   let near = 0;
-  const signals = feed.slice(0, 16).map((it) => {
+  const gf = state.globeFilter || { days: 0, effects: new Set(["risk", "opportunity", "watch"]) };
+  const since = gf.days ? new Date(Date.now() - gf.days * 864e5).toISOString().slice(0, 10) : "";
+  const shown = feed.filter((it) => (!since || (it.published_at || "") >= since) && gf.effects.has(it.effect === "mixed" ? "watch" : it.effect));
+  const sum = $("#globeSummary");
+  if (sum) sum.textContent = shown.length ? `На глобусе ${shown.length} ${plural(shown.length, "событие", "события", "событий")}: ${shown.slice(0, 3).map((x) => `${EFFECT[x.effect]} — ${x.title}`).join("; ")}.`
+    : "За выбранный период событий нет.";
+  const signals = shown.slice(0, 16).map((it) => {
     let [geo, place] = signalOrigin(it);
     if (Math.hypot(geo[0] - hqGeo[0], (geo[1] - hqGeo[1]) * Math.cos(hqGeo[0] * Math.PI / 180)) < 4) {
       const b = (near * 137.5 + 200) * Math.PI / 180, d = 7 + (near % 4) * 2.6;
       geo = [hqGeo[0] + d * Math.cos(b) * 0.7, hqGeo[1] + d * Math.sin(b) / Math.cos(hqGeo[0] * Math.PI / 180)];
       near += 1;
     }
-    return { id: it.event_id, geo, effect: it.effect, weight: it.score / maxScore,
+    return { id: it.event_id, geo, effect: it.effect, weight: it.score / maxScore, title: it.title, place,
       tipHtml: `<div class="gt-top"><span class="pill ${it.effect}">${EFFECT[it.effect]}</span><span class="muted small">📍 ${esc(place)}</span></div>
         <b>${esc(it.title)}</b><div class="small gt-why">${esc(it.reasons[0]?.why || "")}</div><div class="gt-cta">Нажмите — открыть разбор →</div>` };
   });
@@ -454,11 +519,11 @@ function supplyChain(p) {
   const buyers = p.industry_mix.filter((m) => m.direction === "in"), suppliers = p.industry_mix.filter((m) => m.direction === "out");
   if (!buyers.length && !suppliers.length && !p.n_buyers && !p.n_suppliers) return "";
   const conc = (h) => h == null ? "—" : h > 0.5 ? "очень высокая" : h > 0.25 ? "высокая" : h > 0.1 ? "умеренная" : "низкая";
-  return `<div class="sub-h">Цепочка поставок (граф платежей)</div>
+  return `<div class="sub-h">Цепочка поставок <span class="muted small">— по платежам компании</span></div>
     ${buyers.length || p.unknown_share_in ? `<div class="muted small">Покупатели · ${p.n_buyers} · концентрация ${conc(p.hhi_in)}</div>${mixBars(buyers, p.unknown_share_in || 0)}` : ""}
     ${suppliers.length || p.unknown_share_out ? `<div class="muted small">Поставщики · ${p.n_suppliers} · концентрация ${conc(p.hhi_out)}</div>${mixBars(suppliers, p.unknown_share_out || 0)}` : ""}
-    <div class="chips">${p.network_pct != null ? `<span class="chip" title="PageRank в сети денежных потоков">Узел сети: выше ${Math.round(p.network_pct * 100)}% компаний</span>` : ""}
-      ${p.affiliates.length ? `<span class="chip" title="Компании, связанные через общих физлиц">Связанных компаний: ${p.affiliates.length}</span>` : ""}</div>`;
+    <div class="chips">${p.network_pct != null ? `<span class="chip" title="По объёму и связям платежей компания заметнее, чем ${Math.round(p.network_pct * 100)}% клиентов в выборке">${p.network_pct >= 0.66 ? "Заметный участник цепочек поставок" : p.network_pct >= 0.33 ? "Обычный участник цепочек поставок" : "Небольшой участник цепочек поставок"}</span>` : ""}
+      ${p.affiliates.length ? `<span class="chip" title="Компании, связанные через общих владельцев или руководителей">Связанных компаний в группе: ${p.affiliates.length}</span>` : ""}</div>`;
 }
 function peersBlock(b) {
   if (!b) return "";
@@ -628,20 +693,39 @@ function renderRadar() {
 async function openInsight(eventId, refresh = false, from = "feed") {
   state.current = eventId;
   const t0 = performance.now();
+  openDetail();
   if (!refresh) track("card_open", { event_id: eventId, meta: { from } });
   markRead(eventId);
   document.querySelectorAll(".feed-item").forEach((el) => el.classList.toggle("active", el.dataset.ev === eventId));
-  $("#insightPanel").innerHTML = `<div class="insight"><div id="previewBox"></div><div class="eyebrow">Агент анализирует событие</div>
-    <ol class="progress" id="agentProgress"></ol></div>`;
+  $("#insightPanel").innerHTML = `<div class="insight"><div id="previewBox"></div>
+    <div class="think" role="status" aria-live="polite">
+      <div class="think-orb" aria-hidden="true"><i></i><i></i><i></i></div>
+      <div class="think-body"><div class="eyebrow">Агент готовит разбор для вашей компании</div>
+        <div class="think-now" id="thinkNow">Оцениваю, насколько событие касается компании</div>
+        <div class="think-bar" aria-hidden="true"><i id="thinkBar"></i></div>
+        <div class="think-meta muted small" id="thinkMeta">прошло 0 с · обычно 15–45 с</div>
+        <ol class="think-steps" id="agentProgress" aria-label="Выполненные шаги"></ol></div></div></div>`;
   const prog = () => document.getElementById("agentProgress");
+  let done = 0;
+  clearInterval(state.thinkTimer);
+  state.thinkTimer = setInterval(() => {
+    const m = document.getElementById("thinkMeta");
+    if (!m || state.current !== eventId) return clearInterval(state.thinkTimer);
+    const sec = Math.round((performance.now() - t0) / 1000);
+    m.textContent = `прошло ${sec} с · ${sec < 45 ? "обычно 15–45 с" : "почти готово — модель дописывает разбор"} · шагов: ${done}`;
+  }, 1000);
   try {
     await sse(`/api/insights/${eventId}/stream?${q({ company_id: state.company, role: state.role, refresh })}`, {}, (e) => {
       if (state.current !== eventId || !prog()) return;
       if (e.type === "step_start") {
-        prog().insertAdjacentHTML("beforeend", `<li class="run" data-step="${esc(e.name)}">${esc(stepTitle(e.name))}<span class="muted small"></span></li>`);
+        const now = document.getElementById("thinkNow");
+        if (now && now.textContent !== thinkText(e.name)) { now.classList.remove("swap"); void now.offsetWidth; now.textContent = thinkText(e.name); now.classList.add("swap"); }
       } else if (e.type === "step_end") {
-        const li = [...prog().querySelectorAll("li.run")].reverse().find((x) => x.dataset.step === e.name);
-        if (li) { li.className = e.fallback ? "fallback" : "ok"; li.querySelector("span").textContent = e.fallback ? " · упрощённо" : ""; }
+        done += 1;
+        const bar = document.getElementById("thinkBar");
+        if (bar) bar.style.width = Math.min(94, 6 + done / THINK_STEPS * 88) + "%";
+        const txt = thinkText(e.name);
+        if (![...prog().children].some((x) => x.dataset.t === txt)) prog().insertAdjacentHTML("beforeend", `<li class="${e.fallback ? "fallback" : "ok"}" data-t="${esc(txt)}">${esc(txt)}${e.fallback ? " · упрощённо" : ""}</li>`);
       } else if (e.type === "preview") {
         track("preview_ready", { event_id: eventId, value: Math.round(performance.now() - t0) });
         // главный вывод сразу, полный разбор догружается
@@ -651,6 +735,7 @@ async function openInsight(eventId, refresh = false, from = "feed") {
           <div class="takeaway"><span class="claim-kind small" style="color:var(--ai)">ВЫВОД СЕРВИСА · </span>${esc(p.takeaway.text)}</div>
           ${scenarioCards(p.scenarios, true)}`;
       } else if (e.type === "done") {
+        clearInterval(state.thinkTimer);
         track("insight_ready", { event_id: eventId, value: Math.round(performance.now() - t0), meta: { cached: !!e.cached } });
         state.insight = e.insight; renderInsight("analysis");
       } else if (e.type === "error") { throw new Error(e.detail); }
@@ -843,8 +928,8 @@ function renderInsight(tab) {
         <div class="cta"><button class="btn small" data-act="manager">Обсудить с менеджером</button><button class="btn ghost small" data-act="callback">Заказать обратный звонок</button></div></div>
       <div class="q"><h4><span class="n">5</span>Как это оценивает Альфа-Банк</h4>${claims(i.bank_view)}</div>
       <div class="q"><h4><span class="n">6</span>На чём основан вывод</h4>
-        <div class="small muted">Каждое утверждение выше помечено типом и ссылками. Самопроверка (${i.iterations} итер.):</div>
-        <ul class="quality">${i.quality.map((c) => `<li class="${c.passed ? "ok" : "bad"}">${c.passed ? "✓" : "✗"} ${esc(c.name)}${c.passed ? "" : " — " + esc(c.detail)}</li>`).join("")}</ul>
+        <div class="small muted">Каждое утверждение выше помечено типом и источником. Автоматическая проверка разбора (${i.iterations} ${plural(i.iterations, "проход", "прохода", "проходов")}):</div>
+        <ul class="quality">${i.quality.map((c) => `<li class="${c.passed ? "ok" : "bad"}">${c.passed ? "✓" : "✗"} ${esc(CHECK_RU[c.name] || c.name)}${c.passed ? "" : " — " + esc(cleanRefs(c.detail))}</li>`).join("")}</ul>
         <div class="muted small scale">Шкала уверенности: ${Object.values(CONF_DEF).map(esc).join(" · ")}. Эффект: «риск» — событие ухудшает показатели компании, «возможность» — улучшает, «отслеживать» — влияние неоднозначно или ещё не наступило.</div>
       </div>
       <div class="feedback">Полезно? <button class="btn ghost small" data-fb="1">👍</button><button class="btn ghost small" data-fb="-1">👎</button>
@@ -867,7 +952,7 @@ function renderInsight(tab) {
   $("#insightPanel").innerHTML = `<div class="insight">
     <div><span class="pill ${i.effect}">${EFFECT[i.effect]}</span>
       <span class="muted small">${i.generated_by.startsWith("llm") ? "Разбор подготовлен ИИ и проверен на ошибки" : "Быстрый разбор по профилю компании"} · ${allOk ? "<span class='ok'>✓ самопроверка пройдена</span>" : "<span title='Подробности — в блоке «На чём основан вывод»'>самопроверка: есть замечания</span>"}</span>
-      <button class="btn ghost small" id="refreshBtn" style="float:right">Пересчитать</button></div>
+      <span class="ins-actions"><button class="btn ghost small" id="pdfBtn" title="Сохранить разбор в PDF через печать браузера">Скачать PDF</button><button class="btn ghost small" id="refreshBtn">Пересчитать</button></span></div>
     <h2 style="margin-top:8px">${esc(i.headline)}</h2>
     ${shortBlock(i)}
     ${divergenceBlock(i)}
@@ -879,7 +964,7 @@ function renderInsight(tab) {
     <div class="cta"><button class="btn small" data-act="manager">Обсудить с менеджером</button><button class="btn ghost small" data-act="callback">Заказать обратный звонок</button></div>
     <button class="btn detail-toggle" id="detailToggle">Подробный разбор: карта влияния, сценарии, позиция банка, источники ▾</button>
     <div class="disclaimer">${esc(DISCLAIMER)}</div>`}</div>`;
-  $("#detailToggle").onclick = () => { state.detail = !state.detail; track(state.detail ? "detail_open" : "detail_close", { event_id: state.current }); renderInsight("analysis"); if (!state.detail) $("#insightPanel").scrollTop = 0; };
+  $("#detailToggle").onclick = () => { state.detail = !state.detail; track(state.detail ? "detail_open" : "detail_close", { event_id: state.current }); renderInsight("analysis"); if (!state.detail) $("#insightCol").scrollTop = 0; };
   document.querySelectorAll("[data-tab]").forEach((el) => el.onclick = () => renderInsight(el.dataset.tab));
   bindImpactMap($("#insightPanel"));
   const wi = document.getElementById("whatIf");
@@ -890,6 +975,7 @@ function renderInsight(tab) {
   if (svgMap) svgMap.addEventListener("mouseenter", () => track("map_hover", { event_id: state.current }), { once: true });
   document.querySelectorAll("[data-src]").forEach((el) => el.onclick = () => { renderInsight("sources"); const li = document.getElementById("src-" + CSS.escape(el.dataset.src)); if (li) { li.classList.add("hl"); li.scrollIntoView({ block: "center" }); } });
   $("#refreshBtn").onclick = () => openInsight(state.current, true);
+  $("#pdfBtn").onclick = () => printDoc("insight");
   document.querySelectorAll("[data-fb]").forEach((el) => el.onclick = () => +el.dataset.fb > 0 ? sendFeedback(1) : ($("#fbReasons").hidden = false));
   document.querySelectorAll("[data-fbr]").forEach((el) => el.onclick = () => sendFeedback(-1, el.dataset.fbr));
   document.querySelectorAll("[data-act]").forEach((el) => el.onclick = () => openAction(el.dataset.act, el.dataset.product));
@@ -944,7 +1030,7 @@ function chatBlock() {
   return `<div class="chat"><h4>Задать уточняющий вопрос</h4>
     <div class="quick">${["Какие главные риски?", "Что говорит банк?", "Покажи разрез по контрагентам", "Что делать в первую очередь?", "Откуда эти выводы?"].map((t) => `<button data-q="${t}">${t}</button>`).join("")}</div>
     <div class="chat-log" id="chatLog"></div>
-    <div class="chat-row"><input id="chatInput" placeholder="Например: как это повлияет на наш лизинг?"><button class="btn" id="chatSend">Спросить</button></div></div>`;
+    <div class="chat-row"><input id="chatInput" aria-label="Ваш вопрос по разбору" placeholder="Например: как это повлияет на наш лизинг?"><button class="btn" id="chatSend">Спросить</button></div></div>`;
 }
 function bindChat() {
   if (!$("#chatSend")) return;
@@ -1050,6 +1136,24 @@ async function loadDigest() {
   const open = document.getElementById("digestOpen");
   if (open) open.onclick = () => show("radar");
   bindPush();
+}
+
+// Названия проверок — словами клиента; служебные ссылки в пояснениях не показываем
+const CHECK_RU = { "Ответ на 6 вопросов": "Есть ответы на все 6 вопросов", "Персонализация (не пересказ)": "Вывод опирается на данные компании, а не пересказывает новость",
+  "Нет следов prompt injection": "Текст новости не пытался вмешаться в работу сервиса", "Ссылки на источники корректны": "Все ссылки ведут на реальные источники" };
+function cleanRefs(t) { return String(t || "").replace(/\b(?:news|bank|graph|profile|calc|peers):[^\s,;)]+/g, "источник").replace(/(источник)(,\s*источник)+/g, "$1"); }
+
+// ---------------------------------------------------------------- PDF: печать браузера со своими стилями
+function printDoc(kind) {
+  const c = $("#companySelect").selectedOptions[0], r = $("#roleSelect").selectedOptions[0];
+  $("#printMeta").textContent = [c ? c.textContent : "", r && r.value ? r.textContent : "", new Date().toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" })].filter(Boolean).join(" · ");
+  const wasDetail = state.detail;
+  if (kind === "insight" && !state.detail) { state.detail = true; renderInsight("analysis"); }
+  document.body.dataset.print = kind;
+  track("pdf_export", { event_id: kind === "insight" ? state.current : null, meta: { kind } });
+  const done = () => { delete document.body.dataset.print; if (kind === "insight" && !wasDetail) { state.detail = false; renderInsight("analysis"); } removeEventListener("afterprint", done); };
+  addEventListener("afterprint", done);
+  setTimeout(() => window.print(), 60);
 }
 
 // ---------------------------------------------------------------- push в браузере

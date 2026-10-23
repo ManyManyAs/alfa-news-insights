@@ -40,11 +40,14 @@
     </div>
   </section>
 
+  <!-- шапка документа для печати и PDF (на экране скрыта) -->
+  <div class="print-head" aria-hidden="true"><b>Альфа-Бизнес · Бизнес-радар</b><span id="printMeta"></span></div>
+
   <!-- ============================== Шапка ============================== -->
   <header class="topbar">
     <div class="brand"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M9 22a7 7 0 0 1 14 0M12.5 22a3.5 3.5 0 0 1 7 0" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round"/><circle cx="16" cy="22" r="1.6" fill="currentColor"/></svg></span>
       <span class="brand-txt">Альфа-Бизнес<small>Бизнес-радар</small></span><span class="proto">прототип хакатона</span></div>
-    <div class="session">
+    <div class="session" id="sessionBox">
       <label class="sess-user">Пользователь
         <span class="user-chip"><span id="userName">—</span><button class="link-btn" id="logoutBtn" title="Выйти и войти другим пользователем">Выйти</button></span>
       </label>
@@ -52,7 +55,8 @@
       <label>Роль<select id="roleSelect"></select></label>
     </div>
     <div class="top-actions">
-      <button class="btn btn-red small tour-btn" id="tourBtn" title="Пошаговый сценарий проверки решения">▶ Тур для жюри</button>
+      <button class="btn ghost small ctx-btn" id="ctxBtn" aria-expanded="false" aria-controls="sessionBox"><span id="ctxLabel">Компания и роль</span><span aria-hidden="true">▾</span></button>
+      <button class="btn btn-red small tour-btn" id="tourBtn" title="Пошаговый сценарий проверки решения">▶ <span class="t-long">Тур для жюри</span><span class="t-short">Тур</span></button>
       <button class="icon-btn" id="themeBtn" title="Светлая / тёмная тема" aria-label="Переключить тему"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></button>
     </div>
   </header>
@@ -90,10 +94,14 @@
           <div class="hero-globe">
             <canvas id="globe" aria-label="Глобус: где происходят события, которые влияют на компанию" role="img"></canvas>
             <div class="globe-tip" id="globeTip" hidden></div>
-            <div class="globe-legend">
-              <span><i class="lg risk"></i>риск</span><span><i class="lg opportunity"></i>возможность</span><span><i class="lg watch"></i>отслеживать</span><span><i class="lg hq"></i>ваша компания</span><span><i class="lg partner"></i>партнёры ВЭД</span>
+            <div class="globe-period" role="group" aria-label="Период событий на глобусе">
+              <button data-gp="1">Сегодня</button><button data-gp="7">Неделя</button><button data-gp="30">Месяц</button><button data-gp="0" class="on">Всё</button>
             </div>
-            <div class="globe-hint">Потяните, чтобы повернуть · наведите на точку</div>
+            <div class="globe-legend" role="group" aria-label="Фильтр по эффекту: нажмите, чтобы скрыть или показать">
+              <button data-gl="risk" aria-pressed="true"><i class="lg risk"></i>риск</button><button data-gl="opportunity" aria-pressed="true"><i class="lg opportunity"></i>возможность</button><button data-gl="watch" aria-pressed="true"><i class="lg watch"></i>отслеживать</button><span><i class="lg hq"></i>ваша компания</span><span><i class="lg partner"></i>партнёры ВЭД</span>
+            </div>
+            <div class="globe-hint">Потяните или используйте стрелки · наведите на точку</div>
+            <p class="sr-only" id="globeSummary" aria-live="polite"></p>
           </div>
           <div class="ticker" id="ticker" aria-label="Макропрогноз Альфа-Банка"><div class="ticker-track" id="tickerTrack"></div></div>
         </div>
@@ -147,15 +155,17 @@
             </div>
             <div id="feedList"></div>
           </div>
-          <div class="insight-col" id="insightPanel">
-            <div class="empty">Выберите событие слева — сервис объяснит, что оно значит именно для вашей компании.</div>
+          <div class="insight-col" id="insightCol">
+            <div class="m-back"><button class="btn ghost small" id="backToFeed">← К ленте</button></div>
+            <div id="insightPanel"><div class="empty">Выберите событие слева — сервис объяснит, что оно значит именно для вашей компании.</div></div>
           </div>
         </div>
       </section>
 
       <section id="view-digest" class="view">
         <div class="page-head"><div><div class="eyebrow">Сводка под роль</div><h2>Дайджест</h2></div>
-          <div class="seg" role="group" aria-label="Период дайджеста"><button class="on" data-dper="week">Неделя</button><button data-dper="day">День</button></div></div>
+          <div class="ph-actions"><button class="btn ghost small" id="digestPdf">Скачать PDF</button>
+          <div class="seg" role="group" aria-label="Период дайджеста"><button class="on" data-dper="week">Неделя</button><button data-dper="day">День</button></div></div></div>
         <div id="digestBox" class="digest-grid"><div class="skeleton"></div></div>
       </section>
 

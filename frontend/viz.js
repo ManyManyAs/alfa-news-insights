@@ -82,7 +82,7 @@ function impactMap(ins) {
   effects.forEach((e, i) => { nodes += node(colX[3], ys(effects.length, i), nodeW[3], wrapText(e.label, 15), "ef " + e.effect, e.rs); });
   const heads = ["Событие", "Фактор", "Признак компании", "Эффект"].map((t, i) => `<span style="left:${colX[i] / W * 100}%">${t}</span>`).join("");
   return `<div class="impact"><div class="im-heads">${heads}</div>
-    <svg viewBox="0 0 ${W} ${H}" class="im-svg" role="img" aria-label="Карта влияния события на компанию">${edges}${nodes}</svg>
+    <svg viewBox="0 0 ${W} ${H}" class="im-svg" role="img" aria-label="${esc("Карта влияния: " + links.map((l) => `${factors[l.f].label} → ${l.bIdx.map((i) => bases[i].label).join(", ")} → ${effects[l.e].label}`).join("; "))}">${edges}${nodes}</svg>
     <div class="muted small">Наведите на узел, чтобы увидеть путь. Толщина — вклад в релевантность; пунктир — влияние через контрагентов или похожие компании.</div></div>`;
 }
 
