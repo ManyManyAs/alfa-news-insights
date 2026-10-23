@@ -27,7 +27,7 @@ from app.knowledge.bank import get_knowledge
 
 AVG_MONTHLY_WAGE = 95_000  # ₽, оценка средней зарплаты для ФОТ по численности (явно помечается как оценка)
 PAYROLL_TAXES = 1.3  # страховые взносы
-CALC_VERSION = 4  # меняется вместе с формулами: разборы в кэше и снапшоте пересчитываются при чтении
+CALC_VERSION = 5  # меняется вместе с формулами: разборы в кэше и снапшоте пересчитываются при чтении
 MARGIN = 0.25  # маржинальный доход с рубля выручки (оценка: какая часть изменения выручки доходит до прибыли)
 PURCHASES_SHARE = 0.6  # закупки ≈ 60% выручки (оценка)
 RATE_FACTORS = {"key_rate", "credit_conditions", "bond_market"}
@@ -393,8 +393,30 @@ def scenarios(p: CompanyProfile, factors: list[str], user: Inputs | None = None,
     rev = defaults(p)[0].get("revenue_rub")
     peak = max((abs(s["total_rub"]) for s in out), default=0)
     negligible = not any(s["rows"] for s in out) or peak < max(NEGLIGIBLE_RUB, NEGLIGIBLE_SHARE * (rev or 0))
+    sens = sensitivity(p, u, plan_w, fx_rel, levers)
     for s in out:
         s["negligible"] = negligible
+        s["sensitivity"] = sens
+        s["event_levers"] = levers
+    return out
+
+
+def sensitivity(p: CompanyProfile, u: dict, plan_w: float, fx_rel: bool, levers: list[str]) -> list[dict]:
+    """Чувствительность компании — не прогноз по событию: сколько за 12 месяцев стоит отклонение от прогноза банка
+    на типовую величину (ставка +1 п.п., рубль слабее на 10%, зарплаты быстрее на 1 п.п.). Показывается и тогда, когда
+    событие денег не меняет: клиент видит, к чему компания чувствительна, и что можно ограничить инструментами банка."""
+    shocks = (("rate", "Ставка на 1 п.п. выше прогноза банка", {"rate_delta_pp": 1.0}),
+              ("fx", "Рубль на 10% слабее прогноза банка", {"fx_change_pct": 10.0}),
+              ("wages", "Зарплаты растут на 1 п.п. быстрее прогноза банка", {"wage_growth_pct": plan_w + 1.0}))
+    out = []
+    for lever, title, kw in shocks:
+        if lever == "fx" and not fx_rel:
+            continue
+        inp = Inputs(**{**{k: v for k, v in u.items() if v is not None and k not in kw}, **kw})
+        row = next((r for r in calc(p, inp, None, 0)["rows"] if r["lever"] == lever), None)
+        if row and abs(row["effect_rub"]) >= 1000:
+            out.append({"lever": lever, "title": title, "effect_rub": row["effect_rub"], "formula": row["formula"],
+                        "event_lever": lever in levers})
     return out
 
 

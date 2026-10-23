@@ -865,10 +865,24 @@ function claims(list) {
 const SCEN_CLASS = { base: "watch", negative: "risk", positive: "opportunity" };
 const SCEN_SHORT = { negative: "Негативный", base: "Базовый", positive: "Позитивный" };
 const SCEN_ORDER = ["negative", "base", "positive"];
+// «Заметного влияния нет» — с объяснением, почему ноль, и чувствительностью компании (не прогноз по событию)
+const LEVER_RU = { rate: "ставку", fx: "курс рубля", wages: "зарплаты", demand: "спрос", costs: "цены закупок" };
+function noMoney(s, weak = false) {
+  const lv = (s.event_levers || []).filter((x) => LEVER_RU[x]);
+  const why = weak
+    ? "После разбора связь события с компанией оценена как слабая — суммы под ним были бы натяжкой, поэтому их не показываем."
+    : lv.length
+    ? `Событие касается того, что влияет на компанию (${lv.map((x) => LEVER_RU[x]).join(", ")}), но не отклоняет это от прогноза Альфа-Банка, который считаем уже заложенным в план. Поэтому к плану — 0 ₽.`
+    : "Событие не меняет ставку, курс, зарплаты или рынок компании так, чтобы это можно было честно оценить в рублях. Поэтому суммы не показываем.";
+  const sens = (s.sensitivity || []).map((x) => `<li><span>${esc(x.title)}</span><b class="${x.effect_rub < 0 ? "bad" : "ok"}">${rub(x.effect_rub)} за год</b>
+    ${x.event_lever ? `<i class="sens-tag">этот рычаг затрагивает событие</i>` : ""}</li>`).join("");
+  return `<div class="no-money"><b>Заметного влияния на прибыль не ожидаем.</b> ${why}
+    ${sens ? `<div class="sens"><div class="sub-h">К чему чувствительна компания — на случай отклонения от прогноза банка</div><ul>${sens}</ul>
+      <div class="muted small">Это не прогноз по событию, а расчёт калькулятора сервиса по оценкам профиля. Свои цифры долга, импорта и ФОТ можно ввести в «Что если».</div></div>` : ""}</div>`;
+}
 function scenarioCards(list, compact = false, weak = false) {
   if (!list || !list.length) return "";
-  if (list[0].negligible || weak) return `<div class="no-money"><b>Заметного влияния на прибыль не ожидаем.</b> Событие не меняет ставку, курс,
-    зарплаты или рынок компании так, чтобы это можно было честно оценить в рублях. Поэтому суммы не показываем.</div>`;
+  if (list[0].negligible || weak) return noMoney(list[0], weak && !list[0].negligible);
   const est = list[0].estimated || [];
   const byName = Object.fromEntries(list.map((s) => [s.name, s]));
   const cards = `<div class="scenarios">${SCEN_ORDER.filter((n) => byName[n]).map((n) => { const s = byName[n]; return `<div class="scen ${SCEN_CLASS[s.name]}">

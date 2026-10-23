@@ -63,3 +63,22 @@ def test_takeaway_repeating_headline_is_detected():
     diff = _ins(headline="Дефицит кадров в общепите: вакансий +12%, зарплаты +9,6%",
                 takeaway=Claim(text="Фонд оплаты труда ресторана в 2027 году вырастет быстрее плана — бюджет стоит пересчитать"))
     assert not repeats_headline(diff)
+
+
+def test_scenarios_carry_company_sensitivity():
+    """Этап 3: рядом с «заметного влияния нет» — чувствительность компании к отклонениям от прогноза банка."""
+    from app.agent.scenario import CALC_VERSION, scenarios
+    from app.bootstrap import load_demo_users
+    from app.data.profiles import get_profile
+
+    rates = []
+    for u in load_demo_users():
+        p = get_profile(u["primary_company"])
+        sc = scenarios(p, ["key_rate"])
+        sens = sc[0]["sensitivity"]
+        assert sc[0]["version"] == CALC_VERSION and all(s["sensitivity"] == sens for s in sc)
+        assert all(x["lever"] in ("rate", "fx", "wages") and abs(x["effect_rub"]) >= 1000 for x in sens)
+        rates += [x for x in sens if x["lever"] == "rate"]
+    # событие о ставке двигает этот рычаг; у компаний с кредитом ставка выше прогноза — рост расходов по долгу,
+    # у компаний только с депозитами — доход (знак плюс тоже верен)
+    assert rates and all(x["event_lever"] for x in rates) and any(x["effect_rub"] < 0 for x in rates)
