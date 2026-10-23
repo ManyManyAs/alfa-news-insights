@@ -450,7 +450,7 @@ def ensure_scenarios(ins: Insight) -> Insight:
         ev = get_event(ins.event_id)
         dates = ev.classification.effective_dates if ev else []
         ins.scenarios = [Scenario(**s) for s in scenarios(p, factors, reasons=ins.relevance.get("reasons", []),
-                                                          effective_dates=dates)]
+                                                          effective_dates=dates, regions=ev.classification.regions if ev else None)]
     return ins
 
 

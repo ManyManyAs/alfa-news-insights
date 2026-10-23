@@ -35,15 +35,18 @@ def test_calc_formulas():
 
 
 def test_scenarios_anchor_on_bank_forecast():
+    """База — прогноз банка (уже в плане): 0; сценарии — умеренные отклонения ±1 п.п. к прогнозу."""
     from app.agent.scenario import bank_baseline, scenarios
     from app.data.models import CompanyProfile
 
     p = CompanyProfile(uid="X", okved="41.20", okved_name="Стройка", products=["CL_PRODUCT_LOA_MARK"], revenue=1e9)
     sc = {s["name"]: s for s in scenarios(p, ["key_rate"])}
     assert set(sc) == {"base", "negative", "positive"}
-    assert sc["base"]["params"]["rate_delta_pp"] == bank_baseline()["rate_delta_pp"]
-    assert any(r.startswith("bank:") for r in sc["base"]["sources"])
-    assert sc["negative"]["total_rub"] < sc["base"]["total_rub"] < sc["positive"]["total_rub"]
+    assert sc["base"]["total_rub"] == 0 and sc["base"]["params"]["rate_delta_pp"] == 0
+    assert sc["negative"]["params"]["rate_delta_pp"] == 1.0 and sc["positive"]["params"]["rate_delta_pp"] == -1.0
+    assert sc["negative"]["total_rub"] == -1_250_000  # долг 25% выручки × 50% плавающей × 1 п.п.
+    assert any(r.startswith("bank:") for r in sc["base"]["sources"]) and bank_baseline()["key_rate_avg_next"]
+    assert not sc["base"]["negligible"]
 
 
 def test_agent_v2_insight_and_preview():
@@ -130,22 +133,30 @@ def test_humanize_removes_internal_ids():
     assert h("По оценке банка, рынок труда не охлаждается. Расходы — 5 млн ₽.").startswith("По оценке банка")
 
 
-def test_business_levers_demand_costs_and_start():
-    from app.agent.scenario import business_levers, scenarios, start_month
+def test_business_levers_honest():
+    """Отраслевой рычаг — только при числе в новости, однозначном эффекте, прямой связи и своём регионе."""
+    from app.agent.scenario import business_levers, scenarios
     from app.data.models import CompanyProfile
 
     p = CompanyProfile(uid="X", okved="56.10", okved_name="Рестораны", products=[], revenue=1e9, workers="16-100",
+                       region="Москва",
                        industry_mix=[{"direction": "out", "okved2": "46", "name": "Оптовая торговля", "share": 0.6}])
     demand = {"factor": "consumer_demand", "factor_title": "Потребительский спрос", "effect": "opportunity",
               "direction": "up", "contribution": 0.6, "basis": ["profile:OKVED=56"], "evidence": "оборот вырос на 5,3%"}
-    fuel = {"factor": "inflation", "factor_title": "Инфляция", "effect": "risk", "direction": "up", "contribution": 0.6,
-            "basis": ["graph:out:46"], "evidence": "цены выросли"}
+    fuel = {"factor": "fuel", "factor_title": "Топливо", "effect": "risk", "direction": "up", "contribution": 0.6,
+            "basis": ["graph:out:46"], "evidence": "бензин подорожал на 12%"}
     spec = business_levers(p, [demand, fuel])
-    assert spec["demand"]["shock"] == 5.3 and spec["demand"]["share"] == 0.5
+    assert spec["demand"]["shock"] == 5.3 and spec["demand"]["pass"] == 0.5
     assert spec["costs"]["share"] == 0.6 and "Оптовая торговля" in spec["costs"]["basis"]
-    sc = {s["name"]: s for s in scenarios(p, ["consumer_demand", "inflation"], reasons=[demand, fuel])}
-    assert sc["positive"]["total_rub"] > sc["base"]["total_rub"] > sc["negative"]["total_rub"]
-    assert all(len(s["monthly"]) == 12 and s["monthly"][-1] == s["total_rub"] for s in sc.values())
-    # связь только через общий макрофон — отраслевой рычаг не создаётся
+    # без числа в новости, при неоднозначном эффекте, через общий макрофон или о чужом регионе — суммы нет
+    assert business_levers(p, [{**demand, "evidence": "оборот растёт"}]) == {}
+    assert business_levers(p, [{**demand, "effect": "watch"}]) == {}
     assert business_levers(p, [{**demand, "basis": ["baseline"]}]) == {}
-    assert start_month(["2099-01-01"]) == 11 and start_month(["2000-01-01"]) == 0
+    assert business_levers(p, [demand], regions=["Ханты-Мансийский автономный округ - Югра"]) == {}
+    sc = {s["name"]: s for s in scenarios(p, ["consumer_demand"], reasons=[demand])}
+    assert sc["base"]["total_rub"] == 0 and sc["positive"]["total_rub"] > 0 > sc["negative"]["total_rub"]
+    assert abs(sc["positive"]["total_rub"]) <= 0.015 * 1e9  # потолок 1,5% выручки
+    assert all(len(s["monthly"]) == 12 for s in sc.values())
+    # событие без измеримого канала — «заметного эффекта нет», а не выдуманные суммы
+    weak = scenarios(p, ["construction"], reasons=[{**demand, "factor": "construction", "evidence": "расселили 1,1 млн кв. м"}])
+    assert weak[0]["negligible"]

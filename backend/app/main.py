@@ -363,7 +363,8 @@ def feed(company_id: str, role: str | None = None, limit: int = Query(20, le=50)
             "demo": cls.trust == "demo", "shadowed": s.shadowed,
             "ai_relevance": ({"level": mat[s.event.id][0], "why": mat[s.event.id][1]} if s.event.id in mat else None),
             # итоговая важность для компании: оценка профиля × поправка ИИ после разбора — по ней сортировка «По важности»
-            "importance_score": round(s.score * MATERIALITY_WEIGHT.get(mat.get(s.event.id, (2, ""))[0], 1.0), 3)}
+            "importance_score": round(s.score * MATERIALITY_WEIGHT.get(mat.get(s.event.id, (2, ""))[0], 1.0), 3),
+            "imp": importance_level(s.score, mat.get(s.event.id))}
 
     # «Тишина — тоже ответ»: за неделю ничего значимого — говорим прямо и показываем последнее важное
     week_ago = (datetime.now(UTC) - timedelta(days=QUIET_DAYS)).isoformat()
@@ -375,6 +376,24 @@ def feed(company_id: str, role: str | None = None, limit: int = Query(20, le=50)
 
 
 MATERIALITY_WEIGHT = {0: 0.3, 1: 0.6, 2: 1.0, 3: 1.15}
+# Пороги шкалы важности по профилю откалиброваны на размеченном наборе (159 пар «профиль — новость»):
+# оценка ≥ 1,0 — 100% событий размечены как критичные, 0,6–1,0 — почти все релевантные, ниже — смешанные.
+IMPORTANCE_HIGH, IMPORTANCE_MID = 1.0, 0.6
+IMPORTANCE_RU = {0: "не касается", 1: "низкая", 2: "средняя", 3: "высокая"}
+
+
+def importance_level(score: float, mat: tuple[int, str] | None) -> dict:
+    """Единая важность события для компании (0–3), без завышения.
+
+    По профилю — пороги выше. Если модель уже сделала полный разбор, её оценка главнее, но поднять важность
+    она может не больше чем на одну ступень выше профиля: если связь с компанией по данным слабая, «существенно»
+    от модели не превращается в «высокую». Понизить — может всегда.
+    """
+    rules = 3 if score >= IMPORTANCE_HIGH else 2 if score >= IMPORTANCE_MID else 1
+    if mat is None:
+        return {"level": rules, "label": IMPORTANCE_RU[rules], "source": "profile", "why": ""}
+    level = min(int(mat[0]), rules + 1)
+    return {"level": level, "label": IMPORTANCE_RU[level], "source": "ai", "why": mat[1] or ""}
 
 
 def ai_materiality(company_uid: str, role: str | None) -> dict[str, tuple[int, str]]:
@@ -465,15 +484,16 @@ def scenario(req: ScenarioRequest, user: str = Depends(current_user)):
     Параметры компании (долг, импорт, ФОТ) по умолчанию оцениваются по профилю, пользователь может ввести свои.
     """
     p = authorized_profile(req.company_id, user)
-    factors, reasons, dates = [], [], []
+    factors, reasons, dates, regions = [], [], [], None
     if req.event_id and (ev := get_event(req.event_id)):
         factors = [f.factor for f in ev.classification.factors]
         reasons = score_event(ev, p, compute_exposures(p, req.role)).reasons
         dates = ev.classification.effective_dates
-    spec = business_levers(p, reasons)
+        regions = ev.classification.regions
+    spec = business_levers(p, reasons, regions)
     start = start_month(dates) if spec else 0
     defaults, estimated = scenario_defaults(p)
-    sc = scenario_set(p, factors, req.inputs, reasons=reasons, effective_dates=dates)
+    sc = scenario_set(p, factors, req.inputs, reasons=reasons, effective_dates=dates, regions=regions)
     res = scenario_calc(p, req.inputs, spec, start)
     res["monthly"] = scenario_timeline(res["rows"], sc[0]["months"], start)
     return {"result": res, "defaults": {**defaults, "margin": MARGIN}, "estimated": estimated,
@@ -525,6 +545,61 @@ def digest(company_id: str, role: str | None = None, period: str = Query("week",
         "dates": sorted(dates, key=lambda x: x["date"])[:5], "stories": stories[:3],
         "bank_revisions": [{"title": f["title"], "period": f["period"], "text": f["text"]} for f in kb.revisions()][:3],
     }
+
+
+PROTECT_ACTIONS = {
+    "rate": "зафиксировать ставку по части кредитов или рефинансировать долг",
+    "fx": "захеджировать валютные платежи (форвард на ближайшие поставки)",
+    "costs": "зафиксировать цены в договорах с ключевыми поставщиками",
+    "wages": "заложить индексацию зарплат в бюджет заранее",
+}
+
+
+@app.get("/api/money")
+def money_at_stake(company_id: str, role: str | None = None, user: str = Depends(current_user)):
+    """«Деньги на кону» за 12 месяцев по ленте: возможный плюс, возможный минус и что можно ограничить действиями.
+
+    Не суммируем новости: у разных новостей одна и та же причина (ставка, курс, спрос) — это один риск.
+    Поэтому считаем по рычагам: для каждого рычага берём самый сильный минус и самый сильный плюс среди новостей,
+    затем складываем рычаги. В расчёт идут только события средней и высокой важности с заметным денежным эффектом.
+    """
+    p = authorized_profile(company_id, user)
+    mat = ai_materiality(p.uid, role)
+    levers: dict[str, dict] = {}
+    used = 0
+    for s in cached_rank(p, role, 20)[:15]:
+        if importance_level(s.score, mat.get(s.event.id))["level"] < 2:
+            continue
+        ins = cached_insight(s.event.id, p.uid, role)
+        if ins is not None and ins.materiality is not None and ins.materiality <= 1:
+            continue
+        cls = s.event.classification
+        sc = ([x.model_dump() for x in ins.scenarios] if ins and ins.scenarios else
+              scenario_set(p, s.matched_factors, reasons=s.reasons, effective_dates=cls.effective_dates, regions=cls.regions))
+        if not sc or sc[0].get("negligible"):
+            continue
+        by = {x["name"]: x for x in sc}
+        used += 1
+        for name, pick in (("negative", min), ("positive", max)):
+            for r in by.get(name, {}).get("rows", []):
+                key = r["lever"] if r["lever"] in PROTECT_ACTIONS else f"{r['lever']}:{r['title']}"
+                lv = levers.setdefault(key, {"lever": r["lever"], "title": r["title"], "down": 0, "up": 0, "events": []})
+                field = "down" if name == "negative" else "up"
+                v = r["effect_rub"]
+                if (field == "down" and v < 0) or (field == "up" and v > 0):
+                    lv[field] = pick(lv[field], v)
+                    if not any(e["event_id"] == s.event.id for e in lv["events"]):
+                        lv["events"].append({"event_id": s.event.id, "title": s.event.title, "effect": s.effect})
+    rows = sorted((v for v in levers.values() if v["down"] or v["up"]), key=lambda v: -(abs(v["down"]) + v["up"]))
+    for v in rows:
+        v["action"] = PROTECT_ACTIONS.get(v["lever"], "")
+        v["events"] = v["events"][:4]
+    down = sum(v["down"] for v in rows)
+    up = sum(v["up"] for v in rows)
+    protect = sum(v["down"] for v in rows if v["action"])
+    rev = p.revenue if not p.revenue_suspicious else None
+    return {"up": round(up), "down": round(down), "protect": round(protect), "levers": rows, "events_used": used,
+            "share_up": round(up / rev, 4) if rev else None, "share_down": round(down / rev, 4) if rev else None}
 
 
 @app.get("/api/stories/{story_id}")

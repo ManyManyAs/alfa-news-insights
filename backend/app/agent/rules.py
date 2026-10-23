@@ -209,14 +209,16 @@ def draft_rules(ctx: AgentContext) -> Insight:
     from app.agent.scenario import money, scenarios, triggers
 
     factors = [r["factor"] for r in reasons] + scored.matched_factors
-    scen = [Scenario(**s) for s in scenarios(ctx.profile, factors, reasons=scored.reasons, effective_dates=cls.effective_dates)]
+    scen = [Scenario(**s) for s in scenarios(ctx.profile, factors, reasons=scored.reasons, effective_dates=cls.effective_dates,
+                                               regions=cls.regions)]
     change = [Claim(text=t["text"], kind="ai_inference", confidence="medium",
                     sources=news_src[:1] if t["source"] in (None, "news") else [t["source"]])
               for t in triggers(ctx.profile, factors, cls.effective_dates)]
     neg = next((s for s in scen if s.name == "negative"), None)
-    if neg and neg.total_rub and len(actions) < 5:
+    if neg and neg.total_rub and not neg.negligible and len(actions) < 5:
         actions.append(Action(text=f"Проверить устойчивость бюджета к негативному сценарию — {neg.assumptions}: "
-                                   f"по оценке это {money(neg.total_rub)} в год; уточните суммы в калькуляторе «Что если»",
+                                   f"по оценке сервиса это {money(neg.total_rub)} за 12 месяцев к плану; "
+                                   f"уточните суммы в калькуляторе «Что если»",
                               action_type="analysis", kind="ai_inference", sources=["calc:scenario"]))
 
     from app.data.sensitivity import role_titles
