@@ -27,7 +27,7 @@ from app.knowledge.bank import get_knowledge
 
 AVG_MONTHLY_WAGE = 95_000  # ₽, оценка средней зарплаты для ФОТ по численности (явно помечается как оценка)
 PAYROLL_TAXES = 1.3  # страховые взносы
-CALC_VERSION = 2  # меняется вместе с формулами: разборы в кэше и снапшоте пересчитываются при чтении
+CALC_VERSION = 3  # меняется вместе с формулами: разборы в кэше и снапшоте пересчитываются при чтении
 MARGIN = 0.25  # маржинальный доход с рубля выручки (оценка: какая часть изменения выручки доходит до прибыли)
 PURCHASES_SHARE = 0.6  # закупки ≈ 60% выручки (оценка)
 RATE_FACTORS = {"key_rate", "credit_conditions", "bond_market"}
@@ -41,6 +41,13 @@ TAX_FACTORS = {"tax_regulation"}
 TAX_SHOCK_PP = 0.5  # п.п. выручки: стресс налоговой нагрузки
 SHOCK_RE = re.compile(r"(?:на|[+−–-])\s?(\d{1,2}(?:[.,]\d)?)\s?%")
 FX_FACTORS = {"fx_rub", "china_trade", "sanctions_trade", "commodity_oil"}
+FX_FACTORS_STRICT = {"fx_rub", "china_trade"}  # курс в сценарии — только если новость про курс или расчёты в валюте
+# Отклонения от прогноза банка в негативном и позитивном сценариях: умеренные, без «катастроф»
+RATE_DEV = (1.0, -1.0)    # п.п. ключевой ставки: снижение не началось / пошло быстрее прогноза
+FX_DEV = (10.0, -5.0)     # % курса: рубль слабее / крепче прогноза
+WAGE_DEV = (3.0, -2.0)    # п.п. роста зарплат сверх / ниже прогноза
+CAP_SHARE = 0.015         # отраслевой рычаг — не больше 1,5% выручки в любом сценарии
+NEGLIGIBLE_RUB, NEGLIGIBLE_SHARE = 150_000, 0.0005  # меньше — «заметного денежного эффекта нет»
 WAGE_FACTORS = {"labor_market"}
 
 
@@ -155,74 +162,57 @@ def _shock_from_text(text: str) -> float | None:
     return None
 
 
-def business_levers(p: CompanyProfile, reasons: list[dict] | None) -> dict:
-    """Отраслевые рычаги из причин релевантности: спрос (выручка), затраты (закупки), налоги.
+def business_levers(p: CompanyProfile, reasons: list[dict] | None, regions: list[str] | None = None) -> dict:
+    """Отраслевые рычаги события — только там, где деньги можно оценить честно.
 
-    Канал выбирается по смыслу фактора и тому, чем событие связано с компанией:
-    - спрос — фактор про рынок сбыта; доля выручки — покупатели из этой отрасли в графе платежей или своя отрасль
-      (половина выручки, оценка). Связь только через «общий макрофон» рычаг не создаёт;
-    - затраты — фактор про цены ресурсов (топливо, инфляция, логистика), а для сырья — когда рост цены против
-      компании; доля закупок — поставщики из этой отрасли или все закупки, если компания прямо зависит от ресурса;
-    - налоги — только если в новости речь о налогах, взносах, льготах или пошлинах.
-    Сила шока масштабируется тем, насколько событие касается компании (вклад причины в релевантность).
+    Рычаг появляется, если одновременно:
+    - в новости есть число изменения объёмного показателя («продажи −5%», «оборот +5,3%») или цены ресурса
+      («бензин +26%») — без числа сумму не придумываем;
+    - эффект для компании однозначен (риск или возможность, а не «следить»);
+    - компания прямо связана с этим рынком: своя отрасль или покупатели/поставщики из отрасли с долей ≥ 20%;
+    - событие касается региона компании или её контрагентов либо всей страны.
+    Сила переноса консервативна: своя отрасль — половина изменения рынка, через контрагентов — четверть.
     """
     mix = {(m["direction"], m["okved2"]): m for m in p.industry_mix}
+    my_regions = {p.region} | {r["region"] for r in p.cp_regions if r.get("share", 0) >= 0.2}
+    if regions and not (set(regions) & my_regions):
+        return {}  # региональная новость о чужом регионе: денежного эффекта для компании не считаем
     out: dict = {}
     for r in sorted(reasons or [], key=lambda r: -r.get("contribution", 0)):
-        f = r.get("factor")
-        if f not in BUSINESS_SHOCK and f not in TAX_FACTORS:
-            continue
-        effect = r.get("effect")
-        sign = {"risk": -1, "opportunity": 1}.get(effect, 0)
-        bases = list(r.get("basis") or []) + [x["basis"] for x in r.get("indirect") or []]
-        # прямая связь с выручкой — только своя отрасль; продукты банка (кредит, лизинг) — не канал сбыта
-        direct = any(b.startswith("profile:OKVED") for b in bases)
-        direct_cost = direct or any(b.startswith(("profile:FTS", "profile:CL_PRODUCT_LEA")) for b in bases)
-        bases = list(dict.fromkeys(bases))
-        buyers = [mix[k] for b in bases if b.startswith("graph:in:") and (k := ("in", b.split(":")[2])) in mix]
-        suppliers = [mix[k] for b in bases if b.startswith("graph:out:") and (k := ("out", b.split(":")[2])) in mix]
-        intensity = max(0.25, min(1.0, r.get("contribution", 0.6) / 0.6))
-        shock_news = _shock_from_text(r.get("evidence", ""))
-        title = r.get("factor_title", f)
-        if f in TAX_FACTORS:
-            if "tax" not in out and re.search(r"налог|ндс|взнос|льгот|пошлин|акциз", (r.get("evidence") or "").lower()) \
-                    and (direct or buyers):
-                out["tax"] = {"factor": f, "title": title, "sign": sign, "share": 1.0,
-                              "shock": round(TAX_SHOCK_PP * intensity, 2), "shock_src": "стресс-сценарий",
-                              "basis": "налоговая нагрузка компании"}
-            continue
-        # число из новости берём как шок спроса только для объёмных показателей (продажи, оборот, ввод жилья);
-        # рост цены аренды или сырья на 12% не означает рост спроса на 12%
+        f, effect = r.get("factor"), r.get("effect")
         if f not in VOLUME_FACTORS and f not in COST_FACTORS:
-            shock_news = None
-        # через покупателей событие действует слабее, чем на собственный рынок (эффект второго порядка)
-        indirect = 0.5 if buyers and not direct and f not in COST_FACTORS else 1.0
-        shock = round((shock_news or BUSINESS_SHOCK[f]) * intensity * indirect, 1)
-        src = "по данным новости" if shock_news else "типовой шок для фактора"
-        if intensity * indirect < 1:
-            src += ", с поправкой на силу связи"
-        direction = r.get("direction")
-        price_against = (direction == "up" and effect == "risk") or (direction == "down" and effect == "opportunity")
-        is_cost = f in COST_FACTORS or (f in {"commodity_oil", "commodity_metals", "agriculture", "gold"} and price_against
-                                        and not buyers)
-        if is_cost:
-            if "costs" in out or not (suppliers or direct_cost):
+            continue
+        sign = {"risk": -1, "opportunity": 1}.get(effect)
+        shock = _shock_from_text(r.get("evidence", ""))
+        if sign is None or shock is None:
+            continue
+        bases = list(dict.fromkeys(list(r.get("basis") or []) + [x["basis"] for x in r.get("indirect") or []]))
+        direct = any(b.startswith("profile:OKVED") for b in bases)
+        buyers = [mix[k] for b in bases if b.startswith("graph:in:") and (k := ("in", b.split(":")[2])) in mix
+                  and mix[k]["share"] >= 0.2]
+        suppliers = [mix[k] for b in bases if b.startswith("graph:out:") and (k := ("out", b.split(":")[2])) in mix
+                     and mix[k]["share"] >= 0.2]
+        title = r.get("factor_title", f)
+        if f in COST_FACTORS:
+            if "costs" in out or not (suppliers or direct):
                 continue
-            share = min(1.0, sum(m["share"] for m in suppliers)) if suppliers else 1.0
+            share = min(1.0, sum(m["share"] for m in suppliers)) if suppliers else 0.5
             basis = ("поставщики: " + ", ".join(f"{m['name']} ({m['share']:.0%} платежей)" for m in suppliers)) if suppliers \
-                else "закупки компании"
+                else "ресурс — заметная статья затрат отрасли (оценка: половина закупок)"
             out["costs"] = {"factor": f, "title": title, "sign": sign, "share": round(share, 3), "shock": shock,
-                            "shock_src": src, "basis": basis}
+                            "pass": 0.5 if suppliers else 1.0, "basis": basis}
         else:
             if "demand" in out or not (buyers or direct):
                 continue
-            if buyers:
-                share = min(1.0, sum(m["share"] for m in buyers))
-                basis = "покупатели: " + ", ".join(f"{m['name']} ({m['share']:.0%} поступлений)" for m in buyers)
+            if direct:
+                share, pass_, basis = 1.0, 0.5, "своя отрасль: половина изменения рынка доходит до выручки (оценка)"
             else:
-                share, basis = 0.5, "своя отрасль — половина выручки (оценка)"
+                share = min(1.0, sum(m["share"] for m in buyers))
+                pass_ = 0.25
+                basis = "покупатели: " + ", ".join(f"{m['name']} ({m['share']:.0%} поступлений)" for m in buyers) \
+                    + "; до компании доходит четверть изменения их рынка (оценка)"
             out["demand"] = {"factor": f, "title": title, "sign": sign, "share": round(share, 3), "shock": shock,
-                             "shock_src": src, "basis": basis}
+                             "pass": pass_, "basis": basis}
     return out
 
 
@@ -241,13 +231,13 @@ def calc(p: CompanyProfile, inp: Inputs, spec: dict | None = None, start: int = 
         debt = -(v["debt_rub"] or 0) * (v["floating_share"] or 0) * inp.rate_delta_pp / 100
         dep = (v["deposits_rub"] or 0) * inp.rate_delta_pp / 100
         rows.append({"lever": "rate", "title": "Ставка по кредитам и депозитам", "effect_rub": round(debt + dep),
-                     "formula": f"−долг × доля под плавающей ставкой × ({num(inp.rate_delta_pp)} п.п.)"
+                     "formula": f"−долг × доля под плавающей ставкой × ({num(inp.rate_delta_pp)} п.п. к прогнозу банка)"
                                 + (" + доход по депозитам" if dep else ""), "basis": "кредиты и депозиты компании"})
     if v["import_rub"] or v["export_rub"]:
         imp = -(v["import_rub"] or 0) * inp.fx_change_pct / 100 * (1 - (v["pass_through"] or 0))
         exp = (v["export_rub"] or 0) * inp.fx_change_pct / 100
         rows.append({"lever": "fx", "title": "Курс рубля", "effect_rub": round(imp + exp),
-                     "formula": f"−импорт × ({num(inp.fx_change_pct, 0)}%) × (1 − доля, переносимая в цены)"
+                     "formula": f"−импорт × ({num(inp.fx_change_pct, 0)}% к прогнозу курса) × (1 − доля, переносимая в цены)"
                                 + (" + выручка экспорта" if exp else ""), "basis": "внешнеторговые платежи"})
     if v["payroll_rub"] and (inp.wage_growth_pct is not None or inp.planned_wage_growth_pct is not None):
         rows.append({"lever": "wages", "title": "Зарплаты", "effect_rub": round(-v["payroll_rub"] * (wage - planned) / 100),
@@ -262,7 +252,7 @@ def calc(p: CompanyProfile, inp: Inputs, spec: dict | None = None, start: int = 
         sp = spec["demand"]
         eff = rev * sp["share"] * inp.demand_change_pct / 100 * margin * active
         rows.append({"lever": "demand", "title": f"Выручка: {_low(sp['title'])}", "effect_rub": round(eff),
-                     "formula": f"выручка × {sp['share']:.0%} (затронутая доля) × ({num(inp.demand_change_pct, 1)}% спроса) "
+                     "formula": f"выручка × {sp['share']:.0%} × ({num(inp.demand_change_pct, 1)}% спроса для компании) "
                                 f"× {margin:.0%} маржинальность" + (f" × {12 - start} мес. из 12" if start else ""),
                      "basis": sp["basis"]})
     if "costs" in spec and inp.cost_change_pct is not None and purchases:
@@ -285,10 +275,22 @@ def calc(p: CompanyProfile, inp: Inputs, spec: dict | None = None, start: int = 
 
 
 def relevant_levers(factors: list[str], spec: dict | None = None) -> list[str]:
+    """Рычаги, которые двигает само событие. Без «рычага по умолчанию»: если событие не про ставку, курс,
+    зарплаты или измеримый рынок компании — денежной оценки нет."""
     fs = set(factors)
-    out = [lv for lv, group in (("rate", RATE_FACTORS), ("fx", FX_FACTORS), ("wages", WAGE_FACTORS)) if fs & group]
-    out += [k for k in ("demand", "costs", "tax") if k in (spec or {})]
-    return out or ["rate"]
+    out = [lv for lv, group in (("rate", RATE_FACTORS), ("fx", FX_FACTORS_STRICT), ("wages", WAGE_FACTORS)) if fs & group]
+    return out + [k for k in ("demand", "costs") if k in (spec or {})]
+
+
+def primary_factors(reasons: list[dict] | None, factors: list[str]) -> list[str]:
+    """Главные факторы события для компании: причины со связью через профиль (не только общий макрофон)
+    и с понятным направлением. Без причин (старые вызовы) — переданный список."""
+    if reasons is None:
+        return factors
+    top = [r for r in sorted(reasons, key=lambda r: -r.get("contribution", 0))
+           if r.get("factor") not in ("country", "industry", "region", "watch")
+           and r.get("direction") in ("up", "down", "stable") and any(b != "baseline" for b in r.get("basis") or [])]
+    return [r["factor"] for r in top[:2]]
 
 
 # Форма накопления эффекта по месяцам: ставка и курс меняются постепенно, зарплаты индексируют с января,
@@ -319,84 +321,96 @@ def timeline(rows: list[dict], months: list[str], start: int) -> list[int]:
 
 
 def scenarios(p: CompanyProfile, factors: list[str], user: Inputs | None = None, reasons: list[dict] | None = None,
-              effective_dates: list[str] | None = None) -> list[dict]:
-    """Три сценария на 12 месяцев: базовый (прогноз банка + данные новости), негативный и позитивный."""
+              effective_dates: list[str] | None = None, regions: list[str] | None = None) -> list[dict]:
+    """Три сценария на 12 месяцев относительно плана компании.
+
+    База — прогноз Альфа-Банка и текущая динамика рынков: считаем, что они уже заложены в план, поэтому в базе 0.
+    Негативный и позитивный — умеренные отклонения: ставка ±1 п.п., курс +10/−5%, зарплаты +3/−2 п.п. к прогнозу
+    банка. Отраслевой рычаг (выручка, закупки) есть только при числе в новости и прямой связи с компанией
+    (business_levers): тенденция продолжится — полная сила переноса, развернётся — половина в обратную сторону.
+    Если эффект меньше 150 тыс. ₽ и 0,05% выручки — помечаем как несущественный, суммы не показываем.
+    """
     base = bank_baseline()
-    spec = business_levers(p, reasons)
-    levers = relevant_levers(factors, spec)
+    spec = business_levers(p, reasons, regions)
+    levers = relevant_levers(primary_factors(reasons, factors), spec)
     start = start_month(effective_dates) if spec else 0
     months = horizon_months()
     u = (user or Inputs()).model_dump()
+    fx_rel = bool(p.fts)
+    plan_w = base["wage_growth_pct"] or 0
+
+    def macro(name: str) -> dict:
+        k = {"base": None, "negative": 0, "positive": 1}[name]
+        out: dict = {}
+        if "rate" in levers:
+            out["rate_delta_pp"] = 0.0 if k is None else RATE_DEV[k]
+        if "fx" in levers and fx_rel:
+            out["fx_change_pct"] = 0.0 if k is None else FX_DEV[k]
+        if "wages" in levers:
+            out["wage_growth_pct"] = plan_w + (0.0 if k is None else WAGE_DEV[k])
+        return out
 
     def biz(kind: str, name: str) -> float | None:
         sp = spec.get(kind)
         if not sp:
             return None
-        m, sg = sp["shock"], sp["sign"]
-        # для затрат «риск» — рост цен (шок +), для спроса «риск» — падение (шок −)
-        adverse = m if kind in ("costs", "tax") else -m
-        if sg < 0:  # событие против компании: в базе шок наступает, в негативе — вдвое сильнее, в позитиве — нет
-            k = {"base": 1, "negative": 2, "positive": 0}[name]
-        elif sg > 0:  # в пользу компании
-            k = {"base": -1, "negative": 0, "positive": -2}[name]
-        else:  # неоднозначно: база — без изменений, сценарии — в обе стороны
-            k = {"base": 0, "negative": 1, "positive": -1}[name]
-        if kind == "tax" and sg != 0 and name == "base":
-            k = k / 2  # налоговые изменения часто ещё обсуждаются: в базе — половина стресса
-        return round(adverse * k, 2)
+        # База — 0: цифра из новости чаще описывает уже случившееся, а текущая динамика обычно уже в плане.
+        # Сценарии — что будет, если тенденция из новости продолжится (полная сила переноса) или развернётся (половина).
+        m = sp["shock"] * sp["pass"]
+        favourable = ({"base": 0.0, "negative": -0.5, "positive": 1.0} if sp["sign"] > 0
+                      else {"base": 0.0, "negative": -1.0, "positive": 0.5})
+        k = favourable[name]  # знак: + — в пользу компании
+        return round(m * k if kind == "demand" else -m * k, 2)
 
-    plan = {
-        "base": {"rate_delta_pp": base["rate_delta_pp"], "fx_change_pct": base["fx_change_pct"],
-                 "wage_growth_pct": base["wage_growth_pct"]},
-        "negative": {"rate_delta_pp": base["rate_delta_pp"] + 2, "fx_change_pct": base["fx_change_pct"] + 15,
-                     "wage_growth_pct": (base["wage_growth_pct"] or 0) + 5},
-        "positive": {"rate_delta_pp": base["rate_delta_pp"] - 1, "fx_change_pct": base["fx_change_pct"] - 5,
-                     "wage_growth_pct": (base["wage_growth_pct"] or 0) - 3},
-    }
-    titles = {"base": "Базовый — прогноз Альфа-Банка" if not spec else "Базовый — прогноз банка и данные новости",
-              "negative": "Негативный", "positive": "Позитивный"}
+    titles = {"base": "Базовый — прогноз Альфа-Банка", "negative": "Негативный", "positive": "Позитивный"}
     out = []
-    for name, shock in plan.items():
-        params = {k: v for k, v in shock.items() if (k.startswith("rate") and "rate" in levers)
-                  or (k.startswith("fx") and "fx" in levers) or (k.startswith("wage") and "wages" in levers)}
-        for kind, key in (("demand", "demand_change_pct"), ("costs", "cost_change_pct"), ("tax", "tax_change_pp")):
+    for name in ("base", "negative", "positive"):
+        params = macro(name)
+        for kind, key in (("demand", "demand_change_pct"), ("costs", "cost_change_pct")):
             val = biz(kind, name)
             if val is not None:
                 params[key] = val
         inp = Inputs(**{**{k: v for k, v in u.items() if v is not None and k not in params}, **params})
         res = calc(p, inp, spec, start)
-        res["rows"] = [r for r in res["rows"] if r["lever"] in levers]
-        res["total_rub"] = round(sum(r["effect_rub"] for r in res["rows"]))
         rev = res["values"]["revenue_rub"]
-        res["share_of_revenue"] = round(res["total_rub"] / rev, 4) if rev else None
+        rows = [r for r in res["rows"] if r["lever"] in levers and (r["lever"] != "fx" or fx_rel)]
+        for r in rows:  # потолок для отраслевых рычагов: не больше 1,5% выручки
+            if r["lever"] in ("demand", "costs") and rev and abs(r["effect_rub"]) > CAP_SHARE * rev:
+                r["effect_rub"] = round(CAP_SHARE * rev * (1 if r["effect_rub"] > 0 else -1))
+                r["formula"] += f" · ограничено {CAP_SHARE:.1%} выручки"
+        total = round(sum(r["effect_rub"] for r in rows))
         srcs = [r for lv in levers if (r := base["refs"].get(lv))] if name == "base" else []
         out.append({"name": name, "title": titles[name], "params": params, "assumptions": _assumptions(params, base, spec),
-                    "total_rub": res["total_rub"], "share_of_revenue": res["share_of_revenue"], "rows": res["rows"],
-                    "estimated": res["estimated"], "monthly": timeline(res["rows"], months, start),
+                    "total_rub": total, "share_of_revenue": round(total / rev, 4) if rev else None, "rows": rows,
+                    "estimated": res["estimated"], "monthly": timeline(rows, months, start),
                     "months": months, "start_month": start, "version": CALC_VERSION,
                     "sources": (srcs or ["calc:scenario"]) if name == "base" else ["calc:scenario"]})
+    rev = defaults(p)[0].get("revenue_rub")
+    peak = max((abs(s["total_rub"]) for s in out), default=0)
+    negligible = not any(s["rows"] for s in out) or peak < max(NEGLIGIBLE_RUB, NEGLIGIBLE_SHARE * (rev or 0))
+    for s in out:
+        s["negligible"] = negligible
     return out
 
 
 def _assumptions(params: dict, base: dict, spec: dict | None = None) -> str:
     parts = []
     spec = spec or {}
-    if "rate_delta_pp" in params and base["key_rate_now"] is not None:
-        parts.append(f"средняя ключевая ставка {num(base['key_rate_now'] + params['rate_delta_pp'])}% "
-                     f"(сейчас {num(base['key_rate_now'])}%)")
+    if "rate_delta_pp" in params and base["key_rate_avg_next"] is not None:
+        d = params["rate_delta_pp"]
+        parts.append(f"средняя ставка {num(base['key_rate_avg_next'] + d)}%" + (" — как в прогнозе банка" if not d
+                     else f" ({_pct(d, ' п.п.')} к прогнозу банка)"))
     if "fx_change_pct" in params:
-        parts.append(f"рубль {'слабее' if params['fx_change_pct'] > 0 else 'крепче'} на {abs(params['fx_change_pct']):.0f}%")
+        d = params["fx_change_pct"]
+        parts.append("курс — как в прогнозе банка" if not d else f"рубль {'слабее' if d > 0 else 'крепче'} прогноза на {abs(d):.0f}%")
     if params.get("wage_growth_pct") is not None:
         parts.append(f"зарплаты +{num(params['wage_growth_pct'])}% за год")
     if params.get("demand_change_pct") is not None:
         v = params["demand_change_pct"]
-        parts.append(f"спрос на продукцию {'без изменений' if not v else _pct(v)}")
+        parts.append("спрос — как в плане" if not v else f"спрос для компании {_pct(v)} к плану (тенденция из новости)")
     if params.get("cost_change_pct") is not None:
         v = params["cost_change_pct"]
-        parts.append(f"цены закупок {'без изменений' if not v else _pct(v)}")
-    if params.get("tax_change_pp") is not None:
-        v = params["tax_change_pp"]
-        parts.append("налоговая нагрузка без изменений" if not v else f"налоговая нагрузка {_pct(v, ' п.п. выручки')}")
+        parts.append("цены закупок — как в плане" if not v else f"цены закупок {_pct(v)} к плану (тенденция из новости)")
     return "; ".join(parts)
 
 

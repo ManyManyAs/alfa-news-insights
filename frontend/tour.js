@@ -14,8 +14,8 @@ const TOUR = [
     text: "Фильтры, поиск, сюжеты вместо дублей, доверие к источнику, «вступает в силу через N дней». Модель уточняет порядок и пишет причину у карточки." },
   { view: "radar", sel: "#insightPanel .impact-wrap", open: true, title: "Карта влияния",
     text: "Как событие доходит до компании: событие → фактор → признак компании или контрагент → эффект. Наведите на узел, чтобы увидеть путь. Это не пересказ новости." },
-  { view: "radar", sel: "#insightPanel .scenarios", open: true, title: "Сценарии и «что если»",
-    text: "Три сценария на 12 месяцев в рублях: база — прогноз Альфа-Банка. Ниже калькулятор: двигайте ставку и курс, вводите свой долг — пересчёт мгновенный." },
+  { view: "radar", sel: "#insightPanel .effect-block", open: true, title: "Деньги: эффект за 12 месяцев",
+    text: "Что событие может дать или стоить компании в рублях. База — прогноз Альфа-Банка, то есть «как в плане»; негативный и позитивный — умеренные отклонения. Если заметного влияния нет, сервис честно так и пишет. Ниже калькулятор «Что если» — подставьте свои цифры." },
   { view: "radar", sel: "#insightPanel .tabs", open: true, title: "Источники и трассировка",
     text: "У каждого утверждения — тип (факт / позиция банка / вывод сервиса) и ссылки. Вкладка «Как получен вывод» показывает шаги агента: модели, инструменты, стоимость." },
   { view: "digest", sel: "#digestBox", title: "Дайджест под роль",
@@ -76,6 +76,9 @@ async function goStep(i) {
   show(s.view);
   // одна колонка (телефон, планшет): шаги про разбор показывают экран разбора, шаги про ленту — ленту
   document.body.classList.toggle("m-detail", !!s.open && matchMedia("(max-width: 1100px)").matches);
+  // телефон: выбор компании и роли спрятан в меню — для шага «Кто смотрит» раскрываем его
+  const top = document.querySelector(".topbar");
+  if (top) top.classList.toggle("ctx-open", s.sel === ".session" && matchMedia("(max-width: 640px)").matches);
   if (s.open) {
     if (!state.detail) { state.detail = true; if (state.insight) renderInsight("analysis"); }  // шаги про детали разбора
     if (!document.querySelector("#insightPanel .tabs") && state.feed.length) openInsight(state.feed[0].event_id);
@@ -136,7 +139,10 @@ function place() {
 }
 
 function startTour() { closeOnboarding(); if (typeof track === "function") track("tour_start"); goStep(0); }
-function endTour() { tourStep = -1; const o = document.getElementById("tour"); if (o) o.classList.remove("on"); }
+function endTour() {
+  tourStep = -1; const o = document.getElementById("tour"); if (o) o.classList.remove("on");
+  const top = document.querySelector(".topbar"); if (top) top.classList.remove("ctx-open");
+}
 
 // Онбординг: при первом визите — «мы изучили вашу компанию: 5 факторов» и предложение пройти тур
 function maybeOnboard() {

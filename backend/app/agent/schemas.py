@@ -74,6 +74,7 @@ class Scenario(BaseModel):
     months: list[str] = Field(default_factory=list)
     start_month: int = 0  # с какого месяца горизонта действует отраслевой эффект
     version: int = 0  # версия калькулятора: старые расчёты в кэше пересчитываются
+    negligible: bool = False  # заметного денежного эффекта нет — суммы не показываем
 
 
 class QualityCheck(BaseModel):

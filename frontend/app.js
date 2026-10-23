@@ -256,10 +256,38 @@ function show(view) {
   if (view === "radar") track("feed_view");
 }
 
+// «Деньги на кону»: возможный плюс, возможный минус и что можно ограничить — по рычагам, без двойного счёта новостей
+async function loadMoney() {
+  const box = $("#moneyCard");
+  if (!box) return;
+  let m;
+  try { m = await api(`/api/money?${q({ company_id: state.company, role: state.role })}`); } catch (e) { box.innerHTML = ""; return; }
+  const pr = (x) => (x == null ? "" : ` · ${pctRev(x)} выручки`);
+  if (!m.levers.length) {
+    box.innerHTML = `<div class="eyebrow">Деньги на кону · 12 месяцев</div><h3>Заметного влияния на прибыль не видно</h3>
+      <p class="muted">В ленте сейчас нет событий, которые по нашим расчётам заметно меняют прибыль компании за 12 месяцев. Это тоже ответ: менять план не нужно.</p>`;
+    return;
+  }
+  box.innerHTML = `<div class="eyebrow">Деньги на кону · 12 месяцев</div>
+    <h3>Что события из ленты могут дать и сколько могут стоить</h3>
+    <div class="money-tiles">
+      <div class="mt up"><span>Возможный плюс</span><b>${rub(m.up)}</b><i>${pr(m.share_up).slice(3)}</i></div>
+      <div class="mt down"><span>Возможный минус</span><b>${rub(m.down)}</b><i>${pr(m.share_down).slice(3)}</i></div>
+      <div class="mt protect"><span>Минус, который можно ограничить</span><b>${rub(m.protect)}</b><i>есть инструменты банка</i></div>
+    </div>
+    <ul class="money-list">${m.levers.map((v) => `<li>
+      <div class="ml-head"><b>${esc(v.title)}</b><span class="ml-range">${v.down ? `<span class="bad">${rub(v.down)}</span>` : ""}${v.down && v.up ? " … " : ""}${v.up ? `<span class="ok">${rub(v.up)}</span>` : ""}</span></div>
+      <div class="ml-ev">${v.events.map((e) => `<button class="link-btn" data-money-ev="${esc(e.event_id)}">${esc(e.title)}</button>`).join("")}</div>
+      ${v.action ? `<div class="ml-act">Как ограничить: ${esc(v.action)}</div>` : ""}</li>`).join("")}</ul>
+    <p class="muted small">Это не сумма по новостям: одна причина (например, ставка) считается один раз, по самой сильной новости. Если всё пойдёт по прогнозу Альфа-Банка, план не меняется. Плюс и минус — умеренные отклонения от прогноза, а не худший и лучший случай. Учтены ${m.events_used} ${plural(m.events_used, "событие", "события", "событий")} средней и высокой важности; события без заметного денежного эффекта не учитываются.</p>`;
+  box.querySelectorAll("[data-money-ev]").forEach((b) => b.onclick = () => { show("radar"); openInsight(b.dataset.moneyEv, false, "money"); });
+}
+
 async function reload() {
   state.insight = null; state.current = null;
   $("#insightPanel").innerHTML = `<div class="empty">Выберите событие — сервис объяснит, что оно значит именно для вашей компании.</div>`;
   await Promise.all([loadProfile(), loadFeed(), state.bankLoaded ? null : loadBank()]);
+  loadMoney();
   if ($("#view-digest").classList.contains("active")) loadDigest();
 }
 
@@ -552,7 +580,7 @@ async function loadFeed() {
 
 function renderWidget() {
   // на главную — только то, что модель не считает слабо связанным с компанией
-  const items = state.feed.filter((it) => !(it.ai_relevance && it.ai_relevance.level <= 1)), quiet = state.quiet, read = readSet();
+  const items = state.feed.filter((it) => !(impLevel(it).source !== "profile" && impLevel(it).level <= 1)), quiet = state.quiet, read = readSet();
   $("#widgetList").innerHTML = items.slice(0, 4).map((it) => `
     <div class="w-item eff-${it.effect} ${read.has(it.event_id) ? "read" : ""}" data-ev="${it.event_id}" tabindex="0" role="button">
       ${read.has(it.event_id) ? "" : `<span class="new-dot" title="Не прочитано"></span>`}<span class="pill ${it.effect}">${EFFECT[it.effect]}</span><span class="muted small">${fmtDate(it.published_at)}</span>${read.has(it.event_id) ? `<span class="read-mark">✓ прочитано</span>` : ""}
@@ -594,14 +622,25 @@ function visibleFeed() {
   else if (filters.sort === "importance") list = [...list].sort((a, b) => imp(b) - imp(a));
   return list;
 }
-const imp = (it) => it.importance_score ?? it.score;
-// Шкала важности: доля от самой важной карточки ленты, словами — в подсказке и для экранного диктора
+const IMP_RU = ["не касается", "низкая", "средняя", "высокая"];
+// Единая важность (0–3): сервер считает её по профилю и по оценке ИИ после полного разбора (не выше профиля + 1).
+// Быстрая оценка ИИ по заголовку (реранк) может понизить важность и поднять не больше чем на одну ступень.
+function impLevel(it) {
+  const base = it.imp || { level: 2, source: "profile" };
+  const note = state.rerank && state.rerank.notes && state.rerank.notes[it.event_id];
+  if (base.source === "ai" || !note) return { ...base };
+  const r = Math.max(1, Math.min(3, note.relevance));
+  const level = r < base.level ? r : Math.min(r, base.level + 1);
+  return { level, label: IMP_RU[level], source: "rerank", why: note.why };
+}
+const imp = (it) => impLevel(it).level * 10 + (it.importance_score ?? it.score);
+const IMP_SRC = { profile: "по данным компании", ai: "оценка ИИ после разбора", rerank: "оценка ИИ по заголовку" };
 function impBar(it) {
-  const max = Math.max(0.01, ...state.feed.map(imp)), v = imp(it) / max;
-  const word = v >= 0.75 ? "высокая" : v >= 0.45 ? "средняя" : "низкая";
+  const L = impLevel(it), w = [6, 33, 66, 100][L.level];
   const why = it.reasons.slice(0, 3).map((r) => r.factor_title).join(", ");
-  return `<div class="imp-row" title="Важность для компании: ${word}. Учитывает, чем событие связано с компанией (${esc(why)}), свежесть, значимость и оценку ИИ после разбора.">
-    <span class="imp-lbl">важность: ${word}</span><div class="score-bar" role="meter" aria-label="Важность для компании: ${word}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(v * 100)}"><i style="width:${Math.max(4, Math.round(v * 100))}%"></i></div></div>`;
+  const tip = `Важность для компании: ${L.label} (${IMP_SRC[L.source]}). Связь: ${why}.${L.why ? " " + L.why : ""}`;
+  return `<div class="imp-row" title="${esc(tip)}">
+    <span class="imp-lbl l${L.level}">важность: ${L.label}${L.source !== "profile" ? ` <span class="imp-src">· ИИ</span>` : ""}</span><div class="score-bar" role="meter" aria-label="${esc(tip)}" aria-valuemin="0" aria-valuemax="3" aria-valuenow="${L.level}"><i class="l${L.level}" style="width:${w}%"></i></div></div>`;
 }
 function renderFeedList(animate = false) {
   const list = $("#feedList");
@@ -620,9 +659,8 @@ function renderFeedList(animate = false) {
       <div class="chips">${entityChips(it)}</div>
       <div class="reasons">${esc(reasonText(it))}</div>
       ${personalNote(it)}
-      ${n ? `<div class="ai-note"><b>ИИ:</b> ${esc(n.why)} <span class="rel r${n.relevance}">${"●".repeat(n.relevance)}${"○".repeat(3 - n.relevance)}</span></div>` : ""}
-      ${it.ai_relevance && it.ai_relevance.level <= 1 ? `<div class="ai-weak" title="${esc(it.ai_relevance.why)}">ИИ после разбора: ${it.ai_relevance.level === 0 ? "не касается компании" : "слабо связано с бизнесом"} — карточка ниже в ленте</div>` : ""}
-      ${it.ai_relevance && it.ai_relevance.level === 3 ? `<div class="ai-strong" title="${esc(it.ai_relevance.why)}">ИИ после разбора: существенно для компании</div>` : ""}
+      ${n && !(it.imp && it.imp.source === "ai") ? `<div class="ai-note"><b>ИИ:</b> ${esc(n.why)}</div>` : ""}
+      ${it.imp && it.imp.source === "ai" && it.imp.why ? `<div class="ai-note"><b>ИИ после разбора:</b> ${esc(it.imp.why)}</div>` : ""}
       ${it.story ? `<div class="story-badge">Сюжет · ${it.story.count} ${plural(it.story.count, "событие", "события", "событий")}: ${esc(fmtDate(it.story.timeline[0].published_at))} → ${esc(fmtDate(it.story.timeline[it.story.timeline.length - 1].published_at))}</div>` : ""}
       ${impBar(it)}
     </div>`;
@@ -772,18 +810,21 @@ function claims(list) {
 const SCEN_CLASS = { base: "watch", negative: "risk", positive: "opportunity" };
 const SCEN_SHORT = { negative: "Негативный", base: "Базовый", positive: "Позитивный" };
 const SCEN_ORDER = ["negative", "base", "positive"];
-function scenarioCards(list, compact = false) {
+function scenarioCards(list, compact = false, weak = false) {
   if (!list || !list.length) return "";
+  if (list[0].negligible || weak) return `<div class="no-money"><b>Заметного влияния на прибыль не ожидаем.</b> Событие не меняет ставку, курс,
+    зарплаты или рынок компании так, чтобы это можно было честно оценить в рублях. Поэтому суммы не показываем.</div>`;
   const est = list[0].estimated || [];
   const byName = Object.fromEntries(list.map((s) => [s.name, s]));
   const cards = `<div class="scenarios">${SCEN_ORDER.filter((n) => byName[n]).map((n) => { const s = byName[n]; return `<div class="scen ${SCEN_CLASS[s.name]}">
       <div class="scen-t">${esc(s.title)}</div>
-      <div class="scen-v ${s.total_rub < 0 ? "bad" : s.total_rub > 0 ? "ok" : ""}">${rub(s.total_rub)}</div>
+      <div class="scen-v ${s.total_rub < 0 ? "bad" : s.total_rub > 0 ? "ok" : ""}">${s.name === "base" && !s.total_rub ? "0 ₽ к плану" : rub(s.total_rub)}</div>
       ${s.share_of_revenue != null ? `<div class="muted small">${pctRev(s.share_of_revenue)} выручки</div>` : ""}
       <div class="small">${esc(s.assumptions)}</div></div>`; }).join("")}</div>`;
   if (compact) return cards;
   return cards + effectChart(list) + leverTable(list)
-    + `<div class="muted small scen-note">${est.length ? `Оценено по профилю: ${esc(est.join("; "))}. ` : ""}Суммы считает калькулятор по формулам, а не модель. Свои цифры — в блоке «Что если».</div>`;
+    + `<div class="muted small scen-note">Базовый сценарий — прогноз Альфа-Банка: считаем, что он уже заложен в ваш план. Негативный и позитивный — умеренные отклонения от него, а не худший и лучший случай.
+      ${est.length ? `Оценено по профилю: ${esc(est.join("; "))}. ` : ""}Суммы считает калькулятор по формулам, а не модель. Свои цифры — в блоке «Что если».</div>`;
 }
 function pctRev(x) {
   const v = Math.abs(x * 100);
@@ -862,8 +903,8 @@ async function initWhatIf() {
       ${biz.demand ? slider("wiDem", `Спрос на продукцию, %`, -20, 20, 0.5, bp.demand_change_pct ?? 0, `в базовом сценарии: ${fmtPct(bp.demand_change_pct ?? 0)} — ${esc(biz.demand.shock_src)}; ${esc(biz.demand.basis)}`) : ""}
       ${biz.costs ? slider("wiCost", `Цены закупок, %`, -15, 30, 0.5, bp.cost_change_pct ?? 0, `в базовом сценарии: ${fmtPct(bp.cost_change_pct ?? 0)} — ${esc(biz.costs.shock_src)}; ${esc(biz.costs.basis)}`) : ""}
       ${biz.tax ? slider("wiTax", "Налоговая нагрузка, п.п. выручки", -2, 2, 0.05, bp.tax_change_pp ?? 0, `в базовом сценарии: ${fmtPct(bp.tax_change_pp ?? 0, " п.п.")} — стресс-сценарий, уточните по своей отчётности`) : ""}
-      ${slider("wiRate", "Ключевая ставка, изменение", -4, 4, 0.25, b.rate_delta_pp, `прогноз банка: ${fmtPct(b.rate_delta_pp, " п.п.")} (средняя ${String(b.key_rate_avg_next).replace(".", ",")}% против ${String(b.key_rate_now).replace(".", ",")}% сейчас)`)}
-      ${slider("wiFx", "Курс рубля: ослабление, %", -20, 40, 0.1, b.fx_change_pct, `прогноз банка: ${String(b.fx_change_pct).replace(".", ",")}% (${b.usd_rub.join(" → ")} ₽/$)`)}
+      ${slider("wiRate", "Ключевая ставка: отклонение от прогноза банка", -3, 3, 0.25, 0, `0 — как в прогнозе: средняя ${String(b.key_rate_avg_next).replace(".", ",")}% за год (сейчас ${String(b.key_rate_now).replace(".", ",")}%)`)}
+      ${slider("wiFx", "Курс рубля: слабее прогноза банка, %", -15, 25, 0.5, 0, `0 — как в прогнозе: ${b.usd_rub.join(" → ")} ₽/$`)}
       ${slider("wiWage", "Рост зарплат за год, %", 0, 25, 0.1, b.wage_growth_pct, `прогноз банка: ${String(b.wage_growth_pct).replace(".", ",")}% — заложен в бюджет как база`)}
     </div>
     <div class="wi-fields">${fields.map(field).join("")}</div>
@@ -900,12 +941,22 @@ function shortBlock(i) {
   const act = (i.actions || []).find((a) => a.due) || (i.actions || [])[0];
   const row = (t, html) => `<div class="sh-row"><div class="sh-k">${t}</div><div class="sh-v">${html}</div></div>`;
   return `<div class="takeaway short">
-    <div class="sh-head"><span class="claim-kind">КОРОТКО</span>${i.materiality != null ? `<span class="sh-mat m${i.materiality}" title="${esc(i.materiality_why || "")}">${["не касается компании", "слабая связь", "заметное влияние", "существенно для компании"][i.materiality]}</span>` : ""}</div>
+    <div class="sh-head"><span class="claim-kind">КОРОТКО</span>${(() => { const card = (state.feed || []).find((x) => x.event_id === i.event_id); const L = card ? impLevel(card) : i.materiality != null ? { level: i.materiality, label: IMP_RU[i.materiality] } : null;
+      return L ? `<span class="sh-mat m${L.level}" title="${esc(i.materiality_why || "")}">важность: ${L.label}</span>` : ""; })()}</div>
     ${fact ? row("Что случилось", esc(fact.text)) : ""}
-    ${row("Что это значит", `${esc(i.takeaway.text)}${base && (lo || hi) ? `<div class="sh-range">Эффект за 12 месяцев к текущим условиям: базовый сценарий <b class="${base.total_rub < 0 ? "neg" : base.total_rub > 0 ? "pos" : ""}">${rub(base.total_rub)}</b>
-      <span class="sh-note">диапазон от ${rub(lo)} до ${rub(hi)}${(base.rows || []).length ? " · больше всего — " + esc(base.rows.slice().sort((a, b) => Math.abs(b.effect_rub) - Math.abs(a.effect_rub))[0].title.replace(/^./, (c) => c.toLowerCase())) : ""}${base.start_month ? " · начнётся с " + esc((base.months || [])[base.start_month] || "") : ""} · расчёт и разбивка — в подробном разборе</span></div>` : ""}`)}
+    ${row("Что это значит", `${esc(i.takeaway.text)}${moneyLine(i, sc, lo, hi)}`)}
     ${act ? row("Что сделать", `${esc(act.text)}${act.owner || act.due ? `<div class="sh-meta">${act.owner ? `👤 ${esc(act.owner)}` : ""}${act.due ? ` · ⏱ ${esc(act.due)}` : ""}</div>` : ""}`) : ""}
     <div class="sh-src">${srcTags(i.takeaway.sources)}</div></div>`;
+}
+// Деньги: честно — без суммы, если событие не влияет на прибыль заметно или ИИ после разбора оценил связь как слабую
+function moneyOff(i) { const s = (i.scenarios || [])[0]; return !s || s.negligible || (i.materiality != null && i.materiality <= 1); }
+function moneyLine(i, sc, lo, hi) {
+  if (!(i.scenarios || []).length) return "";
+  if (moneyOff(i)) return `<div class="sh-range"><span class="sh-note">Деньги: заметного влияния на прибыль за 12 месяцев не ожидаем — суммы не показываем.</span></div>`;
+  const neg = sc.negative, pos = sc.positive;
+  const main = (neg && neg.rows.length ? neg.rows : pos.rows).slice().sort((a, b) => Math.abs(b.effect_rub) - Math.abs(a.effect_rub))[0];
+  return `<div class="sh-range">Что на кону за 12 месяцев: от <b class="${lo < 0 ? "neg" : ""}">${rub(lo)}</b> до <b class="${hi > 0 ? "pos" : ""}">${rub(hi)}</b>
+    <span class="sh-note">если всё пойдёт по прогнозу Альфа-Банка — без изменений к плану${main ? " · главный рычаг — " + esc(main.title.replace(/^./, (c) => c.toLowerCase())) : ""}${sc.base.start_month ? " · начнётся с " + esc((sc.base.months || [])[sc.base.start_month] || "") : ""} · расчёт — в подробном разборе</span></div>`;
 }
 // Новость и позиция банка расходятся — показываем наверху оба взгляда, без выбора «кто прав»
 function divergenceBlock(i) {
@@ -930,7 +981,7 @@ function renderInsight(tab) {
       <div class="q"><h4><span class="n">3</span>Возможные последствия</h4>
         <div class="cols"><div><b class="bad small">Риски</b>${claims(i.consequences.risks)}</div><div><b class="ok small">Возможности</b>${claims(i.consequences.opportunities)}</div></div>
         <b class="small muted">Что повлияет на развитие ситуации</b>${claims(i.consequences.drivers)}
-        ${(i.scenarios || []).length ? `<div class="sub-h">Эффект для компании за 12 месяцев</div>${scenarioCards(i.scenarios)}` : ""}
+        ${(i.scenarios || []).length ? `<div class="effect-block"><div class="sub-h">Эффект для компании за 12 месяцев</div>${scenarioCards(i.scenarios, false, moneyOff(i))}</div>` : ""}
         ${(i.what_could_change || []).length ? `<div class="sub-h">Что может изменить вывод</div>${claims(i.what_could_change)}` : ""}
         ${whatIfBlock()}</div>
       <div class="q"><h4><span class="n">4</span>Что можно сделать</h4>${claims(i.actions)}

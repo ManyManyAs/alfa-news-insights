@@ -102,3 +102,24 @@ def test_watch_api_and_metrics_live_share(client, demo):
     assert client.delete(f"/api/companies/{c}/watch?kind=topic&value=fx_rub", headers=h).json()["watch"] == []
     ls = client.get("/api/metrics").json()["live_share"]
     assert ls["target"] == 0.7 and "by_persona" in ls
+
+
+def test_importance_level_not_inflated():
+    from app.main import importance_level
+
+    assert importance_level(1.2, None)["level"] == 3 and importance_level(0.7, None)["level"] == 2
+    assert importance_level(0.4, None)["level"] == 1
+    # ИИ после разбора может понизить важность, а поднять — не больше чем на ступень выше профиля
+    assert importance_level(1.2, (1, "слабо"))["level"] == 1
+    assert importance_level(0.4, (3, "существенно"))["level"] == 2
+    assert importance_level(0.4, (3, ""))["source"] == "ai"
+
+
+def test_money_at_stake_no_double_count(client, demo):
+    h = {"X-User-Id": demo["user_id"]}
+    m = client.get(f"/api/money?company_id={demo['primary_company']}&role={demo['role']}", headers=h).json()
+    assert {"up", "down", "protect", "levers"} <= set(m)
+    keys = [v["lever"] for v in m["levers"] if v["lever"] in ("rate", "fx", "wages")]
+    assert len(keys) == len(set(keys))  # одна причина — одна строка, а не по строке на новость
+    assert m["down"] <= m["protect"] <= 0 or m["protect"] >= m["down"]
+    assert m["up"] == sum(v["up"] for v in m["levers"]) and m["down"] == sum(v["down"] for v in m["levers"])
