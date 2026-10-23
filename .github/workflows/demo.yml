@@ -115,6 +115,18 @@ jobs:
           name: demo-${{ inputs.target }}-${{ github.run_id }}
           path: /tmp/shots
           retention-days: 14
+      - name: Скриншоты локальной проверки в ветку demo-local (для просмотра без артефактов)
+        if: always() && inputs.target == 'local'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          D=$(mktemp -d); cp /tmp/shots/*.png /tmp/shots/*.log "$D"/ 2>/dev/null || :
+          git checkout -q --orphan demo-local
+          git rm -rqf .
+          cp "$D"/* . 2>/dev/null || :
+          git add -A
+          git commit -qm "Скриншоты локальной проверки (ветка ${{ github.ref_name }}, run ${{ github.run_id }})"
+          git push -qf origin demo-local
       - name: PR со скриншотами и видео
         if: inputs.target == 'stand'
         env:

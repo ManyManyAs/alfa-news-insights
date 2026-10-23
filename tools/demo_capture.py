@@ -185,14 +185,25 @@ async def shots(b):
         await pg.screenshot(path=OUT / "12_notifications.png")
         await pg.keyboard.press("Escape")
 
+    async def s_widths():
+        # оболочка на ширинах ноутбука: шапка в одну строку, у страницы нет горизонтальной прокрутки
+        await pg.click(".nav-item[data-view=home]")
+        for w in (1024, 1280):
+            await pg.set_viewport_size({"width": w, "height": 800})
+            await asyncio.sleep(1)
+            top = await pg.evaluate("() => document.querySelector('.topbar').offsetHeight")
+            wide = await pg.evaluate("() => document.documentElement.scrollWidth - innerWidth")
+            await pg.screenshot(path=OUT / f"16_width_{w}.png")
+            if top > 84 or wide > 1:
+                raise AssertionError(f"ширина {w}: высота шапки {top} px, лишняя ширина {wide} px")
+        await pg.set_viewport_size({"width": 1440, "height": 900})
+
     for name, fn in [("вход", s_login), ("главная", s_home), ("лента и разбор", s_insight), ("сценарии", s_scen),
                      ("чат", s_chat), ("трассировка", s_trace), ("мои действия", s_tasks), ("календарь", s_calendar), ("прогнозы банка", s_forecasts), ("дайджест", s_digest), ("качество и бюджет", s_quality),
-                     ("разделы банка", s_bank), ("уведомления", s_bell)]:
+                     ("разделы банка", s_bank), ("уведомления", s_bell), ("ширины экрана", s_widths)]:
         await step(name, fn())
     await ctx.close()
 
-    if SMOKE:
-        return
     ctx = await b.new_context(viewport={"width": 1440, "height": 900}, color_scheme="dark", locale="ru-RU")
     pg = await ctx.new_page()
 
@@ -215,6 +226,12 @@ async def shots(b):
         await pg.wait_for_selector(".feed-item", timeout=30000)
         await asyncio.sleep(2)
         await pg.screenshot(path=OUT / "10_mobile.png")
+        wide = await pg.evaluate("() => document.documentElement.scrollWidth - innerWidth")
+        await pg.click("#ctxBtn")
+        await asyncio.sleep(0.5)
+        await pg.screenshot(path=OUT / "10b_mobile_context.png")
+        if wide > 1:
+            raise AssertionError(f"на телефоне лишняя ширина {wide} px")
 
     await step("телефон", s_mobile())
     await ctx.close()

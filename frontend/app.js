@@ -17,16 +17,34 @@ const DISCLAIMER = "Материал носит информационно-ан�
 const TRUST = { official: ["официально", "Регулятор или орган власти"], agency: ["агентство", "Информационное агентство"],
   media: ["СМИ", "Деловое СМИ: мнения и прогнозы помечаются как предположения"], user: ["ваша новость", "Добавлено пользователем"],
   demo: ["демо", "Синтетический демо-пример"] };
+// Контурные иконки вместо эмодзи (как в интерфейсе Альфа-Бизнеса): одинаково выглядят на всех системах
+const ICO = {
+  pin: '<path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/>',
+  up: '<path d="M12 19V5M6 11l6-6 6 6"/>',
+  mute: '<path d="M11 5 6 9H3v6h3l5 4z"/><path d="m22 9-6 6M16 9l6 6"/>',
+  money: '<rect x="2.5" y="6" width="19" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 9.5v5M18 9.5v5"/>',
+  eye: '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+  spark: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  like: '<path d="M7 10v11H3V10zM7 10l4-7a2 2 0 0 1 3 2l-1 5h6a2 2 0 0 1 2 2.3l-1.3 7A2 2 0 0 1 17.7 21H7"/>',
+  dislike: '<path d="M7 14V3H3v11zM7 14l4 7a2 2 0 0 0 3-2l-1-5h6a2 2 0 0 0 2-2.3l-1.3-7A2 2 0 0 0 17.7 3H7"/>',
+  cal: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+  warn: '<path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17v.5"/>',
+  info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/>',
+  doc: '<path d="M6 2h8l5 5v15H6z"/><path d="M14 2v5h5M9 13h7M9 17h7"/>',
+};
+function ico(name) { return `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${ICO[name] || ""}</svg>`; }
 function plural(n, one, few, many) { const m10 = n % 10, m100 = n % 100; return m10 === 1 && m100 !== 11 ? one : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? few : many; }
 function effectiveTag(e) {
   if (!e) return "";
   const when = e.days === 0 ? "сегодня" : `через ${e.days} ${plural(e.days, "день", "дня", "дней")}`;
-  return `<span class="pill due ${e.days <= 30 ? "soon" : ""}" title="Дата вступления в силу: ${esc(e.date)}">⏱ вступает в силу ${when}</span>`;
+  return `<span class="pill due ${e.days <= 30 ? "soon" : ""}" title="Дата вступления в силу: ${esc(e.date)}">${ico("clock")} вступает в силу ${when}</span>`;
 }
 function entityChips(it) {
   const t = TRUST[it.trust] || TRUST.media;
   return `<span class="chip trust ${esc(it.trust)}" title="${esc(t[1])}">${esc(t[0])}</span>`
-    + (it.regions || []).slice(0, 2).map((r) => `<span class="chip geo">📍 ${esc(r)}</span>`).join("")
+    + (it.regions || []).slice(0, 2).map((r) => `<span class="chip geo">${ico("pin")}${esc(r)}</span>`).join("")
     + (it.industries || []).slice(0, 2).map((x) => `<span class="chip ind" title="ОКВЭД ${esc(x.code)}">${esc(x.name)}</span>`).join("");
 }
 function storyLine(s, current) {
@@ -192,7 +210,7 @@ function bindLogin() {
     } catch (err) { $("#loginErr").textContent = err.message; }
     state.loggingIn = false;
   };
-  $("#logoutBtn").onclick = async () => { await api("/api/auth/logout", { method: "POST" }); state.user = null; showLogin(); };
+  document.querySelectorAll(".logout").forEach((b) => b.onclick = async () => { await api("/api/auth/logout", { method: "POST" }); state.user = null; closeCtx(); showLogin(); });
 }
 
 async function enterApp() {
@@ -208,8 +226,11 @@ async function enterApp() {
 async function selectUser(uid, me) {
   state.user = uid;
   const u = state.users.find((x) => x.user_id === uid);
-  $("#userName").textContent = u ? u.label : uid;
+  const label = u ? u.label : uid;
+  $("#userName").textContent = label;
   $("#userName").title = "Логин " + uid;
+  document.querySelectorAll(".user-name-m").forEach((el) => el.textContent = label);
+  $("#userAvatar").textContent = initials(label);
   const seenNames = {};
   $("#companySelect").innerHTML = me.companies.map((c) => {
     const n = (seenNames[c.name] = (seenNames[c.name] || 0) + 1);
@@ -232,6 +253,8 @@ function openFromUrl() {
 }
 
 const isPhone = () => matchMedia("(max-width: 1100px)").matches;  // одна колонка: разбор — отдельным экраном
+// Буква для аватара пользователя в шапке (демо-пользователи названы по типу бизнеса: «Девелопер с кредитом» → «Д»)
+function initials(label) { return (String(label || "?").trim()[0] || "?").toUpperCase(); }
 function ctxLabel() {
   const c = $("#companySelect").selectedOptions[0], r = $("#roleSelect").selectedOptions[0];
   $("#ctxLabel").textContent = [c ? c.textContent.split(" · ")[0].slice(0, 22) : "", r && r.value ? r.textContent : ""].filter(Boolean).join(" · ") || "Компания и роль";
@@ -354,7 +377,7 @@ function countUp(el, to) {
 function initHeroGlobe() {
   if (state.globe || typeof BizGlobe === "undefined") return;
   state.globe = new BizGlobe($("#globe"), { tip: $("#globeTip"), onPick: (s) => { show("radar"); openInsight(s.id, false, "globe"); },
-    clusterTip: (items) => `<div class="gt-top"><b>${items.length} ${plural(items.length, "событие", "события", "событий")} рядом</b><span class="muted small">📍 ${esc(items[0].place || "")}</span></div>
+    clusterTip: (items) => `<div class="gt-top"><b>${items.length} ${plural(items.length, "событие", "события", "событий")} рядом</b><span class="muted small">${ico("pin")} ${esc(items[0].place || "")}</span></div>
       <ul class="gt-list">${items.slice(0, 4).map((x) => `<li><span class="dot" style="background:var(--${x.effect === "opportunity" ? "opp" : x.effect === "risk" ? "risk" : "watch"})"></span>${esc(x.title)}</li>`).join("")}</ul>
       <div class="gt-cta">Нажмите — открыть главное →</div>` });
   state.globeFilter = { days: 0, effects: new Set(["risk", "opportunity", "watch"]) };
@@ -429,7 +452,7 @@ function renderHero() {
       near += 1;
     }
     return { id: it.event_id, geo, effect: it.effect, weight: it.score / maxScore, title: it.title, place,
-      tipHtml: `<div class="gt-top"><span class="pill ${it.effect}">${EFFECT[it.effect]}</span><span class="muted small">📍 ${esc(place)}</span></div>
+      tipHtml: `<div class="gt-top"><span class="pill ${it.effect}">${EFFECT[it.effect]}</span><span class="muted small">${ico("pin")} ${esc(place)}</span></div>
         <b>${esc(it.title)}</b><div class="small gt-why">${esc(it.reasons[0]?.why || "")}</div><div class="gt-cta">Нажмите — открыть разбор →</div>` };
   });
   const partners = (p.fts_countries || []).slice(0, 6).map((c) => ({ geo: geoOf(c), label: geoShort(c) }));
@@ -532,7 +555,7 @@ function mixBars(rows, unknown) {
   return all.map((m) => `<div class="mix-row${m.unknown ? " unk" : ""}"><span>${esc(m.name)}</span><i style="width:${Math.max(3, m.share * 100)}%"></i><b>${Math.round(m.share * 100)}%</b></div>`).join("");
 }
 const LEVEL_NEXT = { normal: "more", more: "mute", mute: "normal" };
-const LEVEL_ICON = { more: "⬆ ", mute: "🔇 ", normal: "" };
+const LEVEL_ICON = { more: ico("up"), mute: ico("mute"), normal: "" };
 function levelOf(o) { return !o ? "normal" : o.source !== "manual" ? "normal" : o.multiplier === 0 ? "mute" : "more"; }
 function interestChip(factor, title, weight, o, reasons) {
   const lvl = levelOf(o);
@@ -628,7 +651,7 @@ function renderFocus() {
       <span class="pill ${main.effect}">${EFFECT[main.effect]}</span><span class="muted small">${fmtDate(main.published_at)} · важность: ${esc(impLevel(main).label || IMP_RU[impLevel(main).level] || "")}</span>
       <h3>${esc(main.title)}</h3>
       <div class="why">Почему вам: ${esc(main.reasons[0]?.why || "")}</div>
-      <div class="focus-chips">${m ? `<span class="fchip">💰 ${moneyText(m)} · ${esc(m.title.toLowerCase())}</span>` : ""}${main.effective ? effectiveTag(main.effective) : ""}</div>
+      <div class="focus-chips">${m ? `<span class="fchip">${ico("money")} ${moneyText(m)} · ${esc(m.title.toLowerCase())}</span>` : ""}${main.effective ? effectiveTag(main.effective) : ""}</div>
     </div>
     <div class="focus-foot">
       <button class="btn btn-red small" data-focus-open>Открыть разбор</button>
@@ -651,7 +674,7 @@ function renderWidget() {
       <div class="title"><b>${esc(it.title)}</b></div>
       <div class="why">Почему вам: ${esc(it.reasons[0]?.why || "")}</div>
       ${it.effective ? `<div>${effectiveTag(it.effective)}</div>` : ""}
-      ${(() => { const m = eventMoney(it.event_id); return m ? `<div class="w-money">💰 ${moneyText(m)}</div>` : ""; })()}
+      ${(() => { const m = eventMoney(it.event_id); return m ? `<div class="w-money">${ico("money")} ${moneyText(m)}</div>` : ""; })()}
     </div>`).join("") || `<div class="muted">Значимых событий для компании нет.</div>`;
   if (quiet) {
     $("#widgetList").insertAdjacentHTML("afterbegin", `<div class="quiet">За последние ${quiet.days} дней значимых для вашей компании событий не было — это тоже ответ: менять планы не нужно.${quiet.last ? ` Последнее важное — ниже.` : ""}</div>`);
@@ -789,7 +812,7 @@ function personalNote(it) {
   const r = it.reasons.find((x) => x.personal);
   if (!r) return "";
   const m = r.personal.multiplier, why = r.personal.why;
-  const lead = r.factor === "watch" ? "👁" : m === 0 ? "🔇" : m > 1 ? "▲ Выше в ленте:" : "▼ Ниже в ленте:";
+  const lead = r.factor === "watch" ? ico("eye") : m === 0 ? ico("mute") : m > 1 ? "▲ Выше в ленте:" : "▼ Ниже в ленте:";
   return `<div class="personal${m < 1 ? " down" : ""}">${lead} ${esc(why.replace(/^Вы /, "вы "))}</div>`;
 }
 async function hideEvent(id, hidden = true) {
@@ -842,7 +865,7 @@ async function applyRerank(key) {
   state.feed.sort((a, b) => (pos.get(a.event_id) ?? 1e9) - (pos.get(b.event_id) ?? 1e9));
   renderFeedList(true);
   renderWidget();
-  $("#rerankNote").textContent = "✨ Порядок уточнён ИИ под ваш профиль";
+  $("#rerankNote").innerHTML = `${ico("spark")} Порядок уточнён ИИ под ваш профиль`;
 }
 
 // Радар на главной: чувствительность компании и сигналы ленты
@@ -928,7 +951,7 @@ function srcTags(ids) {
 }
 function claims(list) {
   return (list || []).map((c) => `<div class="claim ${c.kind} ${c.confidence === "low" ? "conf-low" : ""}">
-    <span class="kind">${KIND[c.kind] || c.kind}</span>${esc(c.text)}${c.owner || c.due ? `<div class="act-meta">${c.owner ? `<span class="am-owner">👤 ${esc(c.owner)}</span>` : ""}${c.due ? `<span class="am-due">⏱ ${esc(c.due)}</span>` : ""}</div>` : ""}<div>${srcTags(c.sources)}${c.kind !== "fact" ? `<span class="conf ${c.confidence}" title="${esc(CONF_DEF[c.confidence] || "")}">${CONF[c.confidence] || ""}</span>` : ""}</div></div>`).join("") || `<div class="muted small">нет данных</div>`;
+    <span class="kind">${KIND[c.kind] || c.kind}</span>${esc(c.text)}${c.owner || c.due ? `<div class="act-meta">${c.owner ? `<span class="am-owner">${ico("user")} ${esc(c.owner)}</span>` : ""}${c.due ? `<span class="am-due">${ico("clock")} ${esc(c.due)}</span>` : ""}</div>` : ""}<div>${srcTags(c.sources)}${c.kind !== "fact" ? `<span class="conf ${c.confidence}" title="${esc(CONF_DEF[c.confidence] || "")}">${CONF[c.confidence] || ""}</span>` : ""}</div></div>`).join("") || `<div class="muted small">нет данных</div>`;
 }
 
 const SCEN_CLASS = { base: "watch", negative: "risk", positive: "opportunity" };
@@ -1083,7 +1106,7 @@ function shortBlock(i) {
       return L ? `<span class="sh-mat m${L.level}" title="${esc(i.materiality_why || "")}">важность: ${L.label}</span>` : ""; })()}</div>
     ${fact ? row("Что случилось", esc(fact.text)) : ""}
     ${row("Что это значит", `${esc(i.takeaway.text)}${moneyLine(i, sc, lo, hi)}`)}
-    ${act ? row("Что сделать", `${esc(act.text)}${act.owner || act.due ? `<div class="sh-meta">${act.owner ? `👤 ${esc(act.owner)}` : ""}${act.due ? ` · ⏱ ${esc(act.due)}` : ""}</div>` : ""}`) : ""}
+    ${act ? row("Что сделать", `${esc(act.text)}${act.owner || act.due ? `<div class="sh-meta">${act.owner ? `${ico("user")} ${esc(act.owner)}` : ""}${act.due ? ` · ${ico("clock")} ${esc(act.due)}` : ""}</div>` : ""}`) : ""}
     <div class="sh-src">${srcTags(i.takeaway.sources)}</div></div>`;
 }
 // Деньги: честно — без суммы, если событие не влияет на прибыль заметно или ИИ после разбора оценил связь как слабую
@@ -1132,7 +1155,7 @@ function renderInsight(tab) {
         <ul class="quality">${i.quality.map((c) => `<li class="${c.passed ? "ok" : "bad"}">${c.passed ? "✓" : "✗"} ${esc(CHECK_RU[c.name] || c.name)}${c.passed ? "" : " — " + esc(cleanRefs(c.detail))}</li>`).join("")}</ul>
         <div class="muted small scale">Шкала уверенности: ${Object.values(CONF_DEF).map(esc).join(" · ")}. Эффект: «риск» — событие ухудшает показатели компании, «возможность» — улучшает, «отслеживать» — влияние неоднозначно или ещё не наступило.</div>
       </div>
-      <div class="feedback">Полезно? <button class="btn ghost small" data-fb="1">👍</button><button class="btn ghost small" data-fb="-1">👎</button>
+      <div class="feedback">Полезно? <button class="btn ghost small" data-fb="1" aria-label="Полезно">${ico("like")}</button><button class="btn ghost small" data-fb="-1" aria-label="Не полезно">${ico("dislike")}</button>
         <span id="fbReasons" hidden>Что не так?
           <button class="btn ghost small" data-fbr="not_relevant">Не про мой бизнес</button>
           <button class="btn ghost small" data-fbr="known">Уже знал(а)</button>
@@ -1189,7 +1212,7 @@ function actionsBlock(list) {
   if (!list || !list.length) return `<div class="muted small">нет данных</div>`;
   return list.map((a, k) => `${claims([a])}<div class="act-btns">
     <button class="btn ghost small" data-task="${k}" title="Добавить в «Мои действия» с исполнителем и сроком">＋ В мои действия</button>
-    <button class="btn ghost small" data-ics="${k}" title="Файл для календаря (Outlook, Google, Яндекс)">📅 Напомнить</button></div>`).join("");
+    <button class="btn ghost small" data-ics="${k}" title="Файл для календаря (Outlook, Google, Яндекс)">${ico("cal")} Напомнить</button></div>`).join("");
 }
 async function addTask(a, btn) {
   if (!a) return;
@@ -1241,7 +1264,7 @@ async function loadTasks() {
     return `<li class="task ${t.status} ${late ? "late" : ""}">
       <label class="chk"><input type="checkbox" data-tdone="${t.id}" ${t.status === "done" ? "checked" : ""} aria-label="Выполнено"></label>
       <div class="task-body"><b>${esc(t.text)}</b>
-        <div class="muted small">${t.owner ? `👤 ${esc(t.owner)}` : ""}${t.due ? ` · ⏱ ${esc(t.due)}${late ? " · <span class='bad'>срок прошёл</span>" : ""}` : ""}</div>
+        <div class="muted small">${t.owner ? `${ico("user")} ${esc(t.owner)}` : ""}${t.due ? ` · ${ico("clock")} ${esc(t.due)}${late ? " · <span class='bad'>срок прошёл</span>" : ""}` : ""}</div>
         ${t.event_id ? `<button class="link-btn" data-tev="${esc(t.event_id)}">По событию: ${esc(t.event_title || "открыть разбор")}</button>` : ""}</div>
       <button class="icon-btn small" data-tdel="${t.id}" title="Удалить" aria-label="Удалить">×</button></li>`;
   };
@@ -1396,7 +1419,7 @@ async function loadDigest() {
       <h3>${esc(d.company)}</h3>
       <p>${esc(lead)}</p>
       <div class="sub-h">Главное</div><ul class="dg-list">${d.top.map(item).join("") || `<li class="muted">Нет событий</li>`}</ul>
-      ${d.dates.length ? `<div class="sub-h">Сроки</div><ul class="dg-list">${d.dates.map((x) => `<li data-ev="${x.event_id}" tabindex="0" role="button">⏱ <b>${fmtDate(x.date)}</b> — через ${x.days} ${plural(x.days, "день", "дня", "дней")}: ${esc(x.title)}</li>`).join("")}</ul>` : ""}
+      ${d.dates.length ? `<div class="sub-h">Сроки</div><ul class="dg-list">${d.dates.map((x) => `<li data-ev="${x.event_id}" tabindex="0" role="button">${ico("clock")} <b>${fmtDate(x.date)}</b> — через ${x.days} ${plural(x.days, "день", "дня", "дней")}: ${esc(x.title)}</li>`).join("")}</ul>` : ""}
       ${d.stories.length ? `<div class="sub-h">Сюжеты, которые развивались</div><ul class="dg-list">${d.stories.map((x) => `<li>${esc(x.title)} <span class="muted small">· ${x.count} ${plural(x.count, "событие", "события", "событий")}</span></li>`).join("")}</ul>` : ""}
       ${d.bank_revisions.length ? `<div class="sub-h">Альфа-Банк пересмотрел прогнозы</div><ul class="dg-list">${d.bank_revisions.map((x) => `<li>${esc(x.text)}</li>`).join("")}</ul>` : ""}
     </div>
@@ -1532,7 +1555,7 @@ async function loadMetrics() {
   const tile = (t, v, s = "", cls = "") => `<div class="card metric ${cls}"><div class="muted small">${t}</div><div class="v">${v}</div><div class="muted small">${s}</div></div>`;
   const vsTarget = (v, target, lowerBetter = false) => v == null ? "" : (lowerBetter ? v <= target : v >= target) ? "good" : "warn";
   const alerts = m.alerts.length
-    ? m.alerts.map((a) => `<div class="alert ${a.level}">${a.level === "warn" ? "⚠" : "ℹ"} ${esc(a.text)}</div>`).join("")
+    ? m.alerts.map((a) => `<div class="alert ${a.level}">${a.level === "warn" ? ico("warn") : ico("info")} ${esc(a.text)}</div>`).join("")
     : `<div class="alert ok">✓ Все показатели в норме: бюджет, скорость, источники, обратная связь, безопасность</div>`;
   const actionsTotal = Object.values(p.actions).reduce((a, b) => a + b, 0);
   const steps = [["Открыли главную", f.home_views], ["Перешли из виджета", f.widget_clicks], ["Открыли ленту", f.feed_views],
@@ -1555,7 +1578,7 @@ async function loadMetrics() {
       ${tile("Активные пользователи", p.active_users)}
       ${tile("CTR виджета на главной", pct(r.widget_ctr), "клики по карточкам / показы главной", vsTarget(r.widget_ctr, 0.15))}
       ${tile("Открывают разбор из ленты", pct(r.feed_open_rate), "открытия / заходы в ленту", vsTarget(r.feed_open_rate, 0.3))}
-      ${tile("Полезно 👍", pct(r.helpful_share), `👍 ${p.feedback.pos} · 👎 ${p.feedback.neg}${reasons.length ? " · " + reasons.map(([k, v]) => `${FB_REASONS[k] || esc(k)}: ${v}`).join(", ") : ""}`, vsTarget(r.helpful_share, 0.8))}
+      ${tile("Полезно", pct(r.helpful_share), `полезно: ${p.feedback.pos} · не полезно: ${p.feedback.neg}${reasons.length ? " · " + reasons.map(([k, v]) => `${FB_REASONS[k] || esc(k)}: ${v}`).join(", ") : ""}`, vsTarget(r.helpful_share, 0.8))}
       ${tile("Проверяют первоисточник", pct(r.source_ctr), "доля разборов с переходом к источнику")}
       ${tile("Вопросы в чате", num(r.chat_per_insight), "на один открытый разбор")}
       ${tile("Сценарий «что если»", pct(r.whatif_rate), "доля разборов, где открыли сценарий")}
@@ -1722,7 +1745,7 @@ async function loadForecasts() {
       ${r ? `<div class="rev ${r.direction}">${r.direction === "up" ? "▲ повысил" : "▼ понизил"} с ${fmtVal(r.from, f.unit)} (${fmtDate(r.from_date)}) до ${fmtVal(r.to, f.unit)} (${fmtDate(r.to_date)})</div>` : ""}
       ${stepChart(f)}
       ${e ? `<div class="muted small">Почему важно вам: ${esc(e.title)}${e.reasons && e.reasons[0] && e.reasons[0].why && !/Макрофактор/.test(e.reasons[0].why) ? " — " + esc(e.reasons[0].why) : ""}</div>` : ""}
-      <div class="fc-src small">📄 ${esc(doc.title || f.doc_id)}${f.page ? `, стр. ${f.page}` : ""} · ${fmtDate(f.date)}</div></div>`;
+      <div class="fc-src small">${ico("doc")} ${esc(doc.title || f.doc_id)}${f.page ? `, стр. ${f.page}` : ""} · ${fmtDate(f.date)}</div></div>`;
   };
   const revs = rel.filter((f) => f.revision);
   await updateRevBadge();
