@@ -52,6 +52,12 @@ async def login(pg, idx=0):
     await asyncio.sleep(2)
 
 
+# какие элементы вылезают за правый край окна (для сообщения об ошибке)
+WIDE_JS = """() => [...document.querySelectorAll('body *')].filter((e) => e.offsetParent && e.getBoundingClientRect().right > innerWidth + 1)
+  .map((e) => e.tagName.toLowerCase() + (e.id ? '#' + e.id : '') + (e.className && typeof e.className === 'string' ? '.' + e.className.trim().split(/\\s+/).join('.') : ''))
+  .slice(-6).join(', ')"""
+
+
 async def wait_js(pg, expr: str, timeout: float = 60):
     """Ожидание условия опросом через evaluate: CSP стенда запрещает eval, а ожидание функции-строкой его использует."""
     t0 = time.monotonic()
@@ -195,7 +201,8 @@ async def shots(b):
             wide = await pg.evaluate("() => document.documentElement.scrollWidth - innerWidth")
             await pg.screenshot(path=OUT / f"16_width_{w}.png")
             if top > 84 or wide > 1:
-                raise AssertionError(f"ширина {w}: высота шапки {top} px, лишняя ширина {wide} px")
+                who = await pg.evaluate(WIDE_JS)
+                raise AssertionError(f"ширина {w}: высота шапки {top} px, лишняя ширина {wide} px; шире экрана: {who}")
         await pg.set_viewport_size({"width": 1440, "height": 900})
 
     for name, fn in [("вход", s_login), ("главная", s_home), ("лента и разбор", s_insight), ("сценарии", s_scen),
@@ -231,7 +238,7 @@ async def shots(b):
         await asyncio.sleep(0.5)
         await pg.screenshot(path=OUT / "10b_mobile_context.png")
         if wide > 1:
-            raise AssertionError(f"на телефоне лишняя ширина {wide} px")
+            raise AssertionError(f"на телефоне лишняя ширина {wide} px; шире экрана: {await pg.evaluate(WIDE_JS)}")
 
     await step("телефон", s_mobile())
     await ctx.close()
