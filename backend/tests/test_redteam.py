@@ -138,7 +138,10 @@ def _demo_user():
     lambda c, h, cid: c.post("/api/actions", headers=h, json={"company_id": cid, "kind": "manager"}),
     lambda c, h, cid: c.put(f"/api/companies/{cid}/preferences", headers=h, json={"factor": "key_rate", "level": "mute"}),
     lambda c, h, cid: c.post("/api/news/analyze", headers=h, json={"text": "Новость про ставку", "company_id": cid}),
-], ids=["feed", "company", "digest", "rerank", "scenario", "hide", "action", "preferences", "analyze"])
+    lambda c, h, cid: c.get(f"/api/tasks?company_id={cid}", headers=h),
+    lambda c, h, cid: c.post("/api/tasks", headers=h, json={"company_id": cid, "text": "Чужая задача"}),
+    lambda c, h, cid: c.patch("/api/tasks/1", headers=h, json={"company_id": cid, "status": "done"}),
+], ids=["feed", "company", "digest", "rerank", "scenario", "hide", "action", "preferences", "analyze", "tasks", "task-add", "task-done"])
 def test_foreign_company_denied(client, demo, call):
     _, h = demo
     assert call(client, h, _foreign_company()).status_code == 403

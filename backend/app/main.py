@@ -51,7 +51,7 @@ from app.ranking.personal import reset as reset_overrides
 from app.ranking.rerank import rerank
 from app.ranking.scorer import LIVE_TRUST, rank_feed, score_event
 from app.security import auth
-from app.security.guard import AccessDenied, MaskIdsFilter, audit, check_company_access
+from app.security.guard import AccessDenied, MaskIdsFilter, audit, check_company_access, sanitize_untrusted
 from app.storage import db
 from app.storage.snapshot import snapshot_dir
 
@@ -417,6 +417,68 @@ class HideRequest(BaseModel):
     company_id: str
     event_id: str
     hidden: bool = True
+
+
+class TaskIn(BaseModel):
+    company_id: str
+    event_id: str | None = Field(None, max_length=200)
+    text: str = Field(..., min_length=3, max_length=600)
+    owner: str = Field("", max_length=60)
+    due: str = Field("", max_length=80)
+
+
+class TaskPatch(BaseModel):
+    company_id: str
+    status: str = Field(..., pattern="^(open|done)$")
+
+
+def _task_row(r) -> dict:
+    return {k: r[k] for k in ("id", "event_id", "event_title", "text", "owner", "due", "status", "created_at", "updated_at")}
+
+
+@app.get("/api/tasks")
+def list_tasks(company_id: str, user: str = Depends(current_user)):
+    """«Мои действия»: шаги из разборов, взятые в работу, — по компании (видны всем её пользователям, как задачи в банке)."""
+    p = authorized_profile(company_id, user)
+    rows = db.query("SELECT * FROM tasks WHERE company_uid=? ORDER BY status='done', created_at DESC LIMIT 200", (p.uid,))
+    return {"tasks": [_task_row(r) for r in rows]}
+
+
+@app.post("/api/tasks")
+def create_task(req: TaskIn, user: str = Depends(current_user)):
+    p = authorized_profile(req.company_id, user)
+    throttle(user, "task", 30)
+    ev = get_event(req.event_id) if req.event_id else None
+    text = sanitize_untrusted(req.text)[0]
+    with db.tx() as conn:
+        dup = conn.execute("SELECT id FROM tasks WHERE company_uid=? AND text=? AND status='open'", (p.uid, text)).fetchone()
+        if dup:
+            return {"ok": True, "id": dup[0], "duplicate": True}
+        cur = conn.execute("INSERT INTO tasks(user_id, company_uid, event_id, event_title, text, owner, due) VALUES (?,?,?,?,?,?,?)",
+                           (user, p.uid, req.event_id, ev.title if ev else None, text, req.owner.strip(), req.due.strip()))
+    audit(user, "task:create", p.uid, True)
+    return {"ok": True, "id": cur.lastrowid}
+
+
+@app.patch("/api/tasks/{task_id}")
+def update_task(task_id: int, req: TaskPatch, user: str = Depends(current_user)):
+    p = authorized_profile(req.company_id, user)
+    with db.tx() as conn:
+        n = conn.execute("UPDATE tasks SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND company_uid=?",
+                         (req.status, task_id, p.uid)).rowcount
+    if not n:
+        raise HTTPException(404, "Задача не найдена")
+    return {"ok": True}
+
+
+@app.delete("/api/tasks/{task_id}")
+def delete_task(task_id: int, company_id: str, user: str = Depends(current_user)):
+    p = authorized_profile(company_id, user)
+    with db.tx() as conn:
+        n = conn.execute("DELETE FROM tasks WHERE id=? AND company_uid=?", (task_id, p.uid)).rowcount
+    if not n:
+        raise HTTPException(404, "Задача не найдена")
+    return {"ok": True}
 
 
 @app.post("/api/feed/hide")

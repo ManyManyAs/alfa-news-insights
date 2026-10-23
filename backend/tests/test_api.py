@@ -123,3 +123,20 @@ def test_money_at_stake_no_double_count(client, demo):
     assert len(keys) == len(set(keys))  # одна причина — одна строка, а не по строке на новость
     assert m["down"] <= m["protect"] <= 0 or m["protect"] >= m["down"]
     assert m["up"] == sum(v["up"] for v in m["levers"]) and m["down"] == sum(v["down"] for v in m["levers"])
+
+
+
+def test_tasks_lifecycle(client, demo):
+    """«Мои действия»: шаг из разбора взят в работу, отмечен выполненным, удалён; дубль не создаётся."""
+    h, cid = {"X-User-Id": demo["user_id"]}, demo["primary_company"]
+    body = {"company_id": cid, "text": "Пересчитать график процентных платежей", "owner": "финдиректор", "due": "до 30.11.2026"}
+    r = client.post("/api/tasks", headers=h, json=body).json()
+    assert r["ok"] and not r.get("duplicate")
+    assert client.post("/api/tasks", headers=h, json=body).json()["duplicate"]
+    tasks = client.get(f"/api/tasks?company_id={cid}", headers=h).json()["tasks"]
+    t = next(x for x in tasks if x["id"] == r["id"])
+    assert t["status"] == "open" and t["owner"] == "финдиректор" and t["due"] == "до 30.11.2026"
+    assert client.patch(f"/api/tasks/{t['id']}", headers=h, json={"company_id": cid, "status": "done"}).status_code == 200
+    assert next(x for x in client.get(f"/api/tasks?company_id={cid}", headers=h).json()["tasks"] if x["id"] == t["id"])["status"] == "done"
+    assert client.delete(f"/api/tasks/{t['id']}?company_id={cid}", headers=h).status_code == 200
+    assert client.delete(f"/api/tasks/{t['id']}?company_id={cid}", headers=h).status_code == 404

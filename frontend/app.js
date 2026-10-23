@@ -258,6 +258,7 @@ function show(view, sub) {
   if (view === "metrics") loadMetrics();
   if (view === "sources") loadSources();
   if (view === "digest") { loadDigest(); track("digest_view"); }
+  if (view === "tasks") loadTasks();
   if (view === "home") track("home_view");
   if (view === "radar") track("feed_view");
 }
@@ -295,7 +296,9 @@ async function reload() {
   $("#insightPanel").innerHTML = `<div class="empty">Выберите событие — сервис объяснит, что оно значит именно для вашей компании.</div>`;
   await Promise.all([loadProfile(), loadFeed(), state.bankLoaded ? null : loadBank()]);
   loadMoney();
+  loadTaskCount();
   if ($("#view-digest").classList.contains("active")) loadDigest();
+  if ($("#view-tasks").classList.contains("active")) loadTasks();
 }
 
 // ---------------------------------------------------------------- позиция банка (макропрогноз)
@@ -1106,7 +1109,7 @@ function renderInsight(tab) {
         ${(i.scenarios || []).length ? `<div class="effect-block"><div class="sub-h">Эффект для компании за 12 месяцев</div>${scenarioCards(i.scenarios, false, moneyOff(i))}</div>` : ""}
         ${(i.what_could_change || []).length ? `<div class="sub-h">Что может изменить вывод</div>${claims(i.what_could_change)}` : ""}
         ${whatIfBlock()}</div>
-      <div class="q"><h4><span class="n">4</span>Что можно сделать</h4>${claims(i.actions)}
+      <div class="q"><h4><span class="n">4</span>Что можно сделать</h4>${actionsBlock(i.actions)}
         ${i.products.map((p) => `<div class="product"><span class="lbl">${esc(p.label)}</span><br><b>${esc(PRODUCT_RU[p.product] || p.product)}</b> — ${esc(p.why)}
           <div><button class="btn small" data-act="application" data-product="${esc(PRODUCT_RU[p.product] || p.product)}">Оставить заявку</button></div></div>`).join("")}
         <div class="cta"><button class="btn small" data-act="manager">Обсудить с менеджером</button><button class="btn ghost small" data-act="callback">Заказать обратный звонок</button></div></div>
@@ -1163,7 +1166,88 @@ function renderInsight(tab) {
   document.querySelectorAll("[data-fb]").forEach((el) => el.onclick = () => +el.dataset.fb > 0 ? sendFeedback(1) : ($("#fbReasons").hidden = false));
   document.querySelectorAll("[data-fbr]").forEach((el) => el.onclick = () => sendFeedback(-1, el.dataset.fbr));
   document.querySelectorAll("[data-act]").forEach((el) => el.onclick = () => openAction(el.dataset.act, el.dataset.product));
+  document.querySelectorAll("[data-task]").forEach((el) => el.onclick = () => addTask(i.actions[+el.dataset.task], el));
+  document.querySelectorAll("[data-ics]").forEach((el) => el.onclick = () => downloadIcs(i.actions[+el.dataset.ics], i.headline));
   bindChat();
+}
+
+// ---------------------------------------------------------------- «Мои действия»: шаги из разборов в работе
+function actionsBlock(list) {
+  if (!list || !list.length) return `<div class="muted small">нет данных</div>`;
+  return list.map((a, k) => `${claims([a])}<div class="act-btns">
+    <button class="btn ghost small" data-task="${k}" title="Добавить в «Мои действия» с исполнителем и сроком">＋ В мои действия</button>
+    <button class="btn ghost small" data-ics="${k}" title="Файл для календаря (Outlook, Google, Яндекс)">📅 Напомнить</button></div>`).join("");
+}
+async function addTask(a, btn) {
+  if (!a) return;
+  try {
+    const r = await api("/api/tasks", { method: "POST", body: JSON.stringify({ company_id: state.company, event_id: state.current, text: a.text, owner: a.owner || "", due: a.due || "" }) });
+    btn.textContent = "✓ В моих действиях"; btn.disabled = true;
+    toast(r.duplicate ? "Это действие уже в «Моих действиях»" : `Добавлено в «Мои действия»${a.owner ? ": " + a.owner : ""}${a.due ? ", " + a.due : ""}`);
+    track("action_open", { event_id: state.current, meta: { kind: "task" } });
+    loadTaskCount();
+  } catch (e) { toast("Не удалось добавить: " + e.message); }
+}
+// Срок из текста «до 30.11.2026» → дата; иначе — через неделю
+function dueDate(due) {
+  const m = /(\d{1,2})\.(\d{1,2})(?:\.(\d{4}))?/.exec(due || "");
+  if (m) { const y = +(m[3] || new Date().getFullYear()); const d = new Date(y, +m[2] - 1, +m[1]); if (!isNaN(d)) return d; }
+  const d = new Date(); d.setDate(d.getDate() + 7); return d;
+}
+function downloadIcs(a, title) {
+  if (!a) return;
+  const d = dueDate(a.due), ymd = (x) => `${x.getFullYear()}${String(x.getMonth() + 1).padStart(2, "0")}${String(x.getDate()).padStart(2, "0")}`;
+  const next = new Date(d); next.setDate(d.getDate() + 1);
+  const clean = (t) => String(t || "").replace(/[\\;,]/g, (c) => "\\" + c).replace(/\n/g, " ");
+  const ics = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Alfa-Business//Business Radar//RU", "BEGIN:VEVENT",
+    `UID:${Date.now()}-${Math.random().toString(36).slice(2)}@business-radar`, `DTSTAMP:${ymd(new Date())}T090000Z`,
+    `DTSTART;VALUE=DATE:${ymd(d)}`, `DTEND;VALUE=DATE:${ymd(next)}`, `SUMMARY:${clean(a.text.slice(0, 120))}`,
+    `DESCRIPTION:${clean(`${a.owner ? "Исполнитель: " + a.owner + ". " : ""}По событию: ${title}. Бизнес-радар, Альфа-Бизнес.`)}`,
+    "BEGIN:VALARM", "TRIGGER:-PT9H", "ACTION:DISPLAY", "DESCRIPTION:Напоминание Бизнес-радара", "END:VALARM", "END:VEVENT", "END:VCALENDAR"].join("\r\n");
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(new Blob([ics], { type: "text/calendar" }));
+  link.download = "napominanie.ics"; document.body.appendChild(link); link.click(); link.remove();
+  setTimeout(() => URL.revokeObjectURL(link.href), 2000);
+  toast(`Напоминание на ${d.toLocaleDateString("ru-RU")} — откройте файл, чтобы добавить в календарь`);
+}
+async function loadTaskCount() {
+  try {
+    const { tasks } = await api(`/api/tasks?${q({ company_id: state.company })}`);
+    state.tasks = tasks;
+    const n = tasks.filter((t) => t.status === "open").length, b = $("#tasksBadge");
+    b.hidden = !n; b.textContent = String(n || "");
+  } catch (e) { /* не критично */ }
+}
+async function loadTasks() {
+  const box = $("#tasksBox");
+  box.innerHTML = `<div class="skeleton"></div>`;
+  await loadTaskCount();
+  const tasks = state.tasks || [], today = new Date(); today.setHours(0, 0, 0, 0);
+  const row = (t) => {
+    const d = /\d{1,2}\.\d{1,2}/.test(t.due || "") ? dueDate(t.due) : null, late = t.status === "open" && d && d < today;
+    return `<li class="task ${t.status} ${late ? "late" : ""}">
+      <label class="chk"><input type="checkbox" data-tdone="${t.id}" ${t.status === "done" ? "checked" : ""} aria-label="Выполнено"></label>
+      <div class="task-body"><b>${esc(t.text)}</b>
+        <div class="muted small">${t.owner ? `👤 ${esc(t.owner)}` : ""}${t.due ? ` · ⏱ ${esc(t.due)}${late ? " · <span class='bad'>срок прошёл</span>" : ""}` : ""}</div>
+        ${t.event_id ? `<button class="link-btn" data-tev="${esc(t.event_id)}">По событию: ${esc(t.event_title || "открыть разбор")}</button>` : ""}</div>
+      <button class="icon-btn small" data-tdel="${t.id}" title="Удалить" aria-label="Удалить">×</button></li>`;
+  };
+  const open = tasks.filter((t) => t.status === "open"), done = tasks.filter((t) => t.status === "done");
+  box.innerHTML = tasks.length ? `<div class="card"><div class="eyebrow">В работе · ${open.length}</div>
+      ${open.length ? `<ul class="tasks">${open.map(row).join("")}</ul>` : `<p class="muted">Всё сделано.</p>`}</div>
+      ${done.length ? `<div class="card"><div class="eyebrow">Сделано · ${done.length}</div><ul class="tasks">${done.map(row).join("")}</ul></div>` : ""}`
+    : `<div class="card"><h3>Пока пусто</h3><p class="muted">Откройте разбор события и нажмите «＋ В мои действия» у шага, который берёте в работу: он появится здесь с исполнителем и сроком. Задачи видны всем пользователям компании.</p>
+      <button class="btn btn-red small" data-goto2="radar">Открыть ленту</button></div>`;
+  box.querySelectorAll("[data-tdone]").forEach((c) => c.onchange = async () => {
+    await api(`/api/tasks/${c.dataset.tdone}`, { method: "PATCH", body: JSON.stringify({ company_id: state.company, status: c.checked ? "done" : "open" }) });
+    loadTasks();
+  });
+  box.querySelectorAll("[data-tdel]").forEach((b) => b.onclick = async () => {
+    await api(`/api/tasks/${b.dataset.tdel}?${q({ company_id: state.company })}`, { method: "DELETE" });
+    loadTasks();
+  });
+  box.querySelectorAll("[data-tev]").forEach((b) => b.onclick = () => { show("radar"); openInsight(b.dataset.tev, false, "tasks"); });
+  box.querySelectorAll("[data-goto2]").forEach((b) => b.onclick = () => show(b.dataset.goto2));
 }
 
 async function loadTrace(traceId) {
