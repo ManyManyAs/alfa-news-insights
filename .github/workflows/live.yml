@@ -104,18 +104,29 @@ jobs:
           PRIO="--background"; if [ "${{ inputs.interactive }}" = "true" ]; then PRIO=""; fi
           python scripts/manage.py warmup --top ${{ inputs.top }} --max-rub ${{ inputs.max_rub }} --max-minutes 85 $PRIO $ROLES $REFRESH | tee warmup.log
           grep -E "LLM-судья|Потрачено" warmup.log >> "$GITHUB_STEP_SUMMARY" || true
+          grep -E "LLM-судья|Потрачено|Остановлено" warmup.log | while read -r l; do echo "::notice title=warmup::$l"; done
       - name: Два судьи на готовых разборах
         if: inputs.task == 'judges' || inputs.task == 'all'
         run: |
           python scripts/judges.py --limit 20 --max-rub ${{ inputs.max_rub }}
           cat ../docs/llm/judges.md >> "$GITHUB_STEP_SUMMARY"
+          grep -E "^\*\*Итог|^Прогон" ../docs/llm/judges.md | while read -r l; do echo "::notice title=judges::$l"; done
       - name: Живой red-team
         if: inputs.task == 'redteam' || inputs.task == 'all'
         run: |
           # отдельная копия БД: новости-атаки не должны попасть в снапшот и ленту жюри
           python -c "import sqlite3; sqlite3.connect('/tmp/live.db').backup(sqlite3.connect('/tmp/redteam.db'))"
-          cp /tmp/live.demo_users.json /tmp/redteam.demo_users.json
-          DB_PATH=/tmp/redteam.db python scripts/redteam_live.py --max-rub ${{ inputs.max_rub }}
+          cp /tmp/live.demo_users.json /tmp/redteam.demo_users.json 2>/dev/null || true
+          set +e
+          DB_PATH=/tmp/redteam.db python scripts/redteam_live.py --max-rub ${{ inputs.max_rub }} > redteam.log 2>&1
+          RC=$?
+          cat redteam.log
+          if [ "$RC" != "0" ]; then
+            # аннотация видна в API и на странице запуска даже без доступа к логам
+            echo "::error title=red-team::$(grep -v '^\s*$' redteam.log | tail -6 | tr '\n' ' ' | cut -c1-900)"
+            exit "$RC"
+          fi
+          grep -E "Итог|Прогон" ../docs/llm/redteam_live.md | while read -r l; do echo "::notice title=red-team::$l"; done
           cat ../docs/llm/redteam_live.md >> "$GITHUB_STEP_SUMMARY"
       - name: Экспорт снапшота
         run: python scripts/manage.py snapshot-export
