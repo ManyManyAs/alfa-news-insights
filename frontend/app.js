@@ -820,9 +820,20 @@ function renderFeedList(animate = false) {
   const reasonText = (it) => it.reasons.slice(0, 2).map((r) => `${r.factor_title}${r.direction && r.direction !== "unknown" ? " " + DIR[r.direction] : ""}`).join(" · ");
   const items = visibleFeed();
   $("#feedCount").textContent = `${items.length} из ${state.feed.length}`;
+  // число событий у фильтров эффекта — как счётчики у вкладок в интернет-банке
+  document.querySelectorAll("[data-feff]").forEach((b) => {
+    const k = b.dataset.feff, n = k === "all" ? state.feed.length : state.feed.filter((x) => x.effect === k).length;
+    if (!b.dataset.label) b.dataset.label = b.textContent;
+    b.innerHTML = `${esc(b.dataset.label)}<span class="seg-n">${n}</span>`;
+  });
+  // при сортировке по дате — группы по дням, как операции в выписке
+  const byDate = $("#fSort").value === "date";
+  let day = "";
   list.innerHTML = items.map((it) => {
     const n = notes[it.event_id];
-    return `<div class="feed-item eff-${it.effect} ${read.has(it.event_id) ? "read" : ""} ${it.event_id === state.current ? "active" : ""}" data-ev="${it.event_id}" tabindex="0" role="button">
+    const d = (it.published_at || "").slice(0, 10), head = byDate && d !== day ? `<div class="feed-day">${esc(dayTitle(d))}</div>` : "";
+    day = d;
+    return `${head}<div class="feed-item eff-${it.effect} ${read.has(it.event_id) ? "read" : ""} ${it.event_id === state.current ? "active" : ""}" data-ev="${it.event_id}" tabindex="0" role="button">
       ${it.hidden ? `<button class="link-btn unhide" data-unhide="${it.event_id}">Вернуть в ленту</button>` : `<button class="hide-btn" data-hide="${it.event_id}" title="Скрыть из ленты" aria-label="Скрыть из ленты">×</button>`}
       <div><span class="pill ${it.effect}">${EFFECT[it.effect]}</span>${it.has_bank_view ? `<span class="pill bank">есть позиция банка</span>` : ""}${effectiveTag(it.effective)}</div>
       <div class="title">${read.has(it.event_id) ? "" : `<span class="new-dot" title="Не прочитано"></span>`}${esc(it.title)}${read.has(it.event_id) ? `<span class="read-mark">✓ прочитано</span>` : ""}</div>
@@ -841,6 +852,14 @@ function renderFeedList(animate = false) {
     if (dy) el.animate([{ transform: `translateY(${dy}px)` }, { transform: "none" }], { duration: 450, easing: "ease-out" });
   }
   bindCards(list);
+}
+function dayTitle(d) {
+  if (!d) return "Без даты";
+  const t = new Date(); t.setHours(0, 0, 0, 0);
+  const x = new Date(d + "T00:00:00"), n = Math.round((t - x) / 864e5);
+  if (n === 0) return "Сегодня";
+  if (n === 1) return "Вчера";
+  return x.toLocaleDateString("ru-RU", { day: "numeric", month: "long", ...(x.getFullYear() !== t.getFullYear() ? { year: "numeric" } : {}) });
 }
 function personalNote(it) {
   const r = it.reasons.find((x) => x.personal);

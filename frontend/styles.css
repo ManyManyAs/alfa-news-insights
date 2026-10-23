@@ -986,3 +986,9 @@ body.logged-out .layout, body.logged-out .topbar { display: none; }
 @media (max-width: 1100px) { .home-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 640px) { .home-strip { gap: 8px; margin: 14px 0; } .hs-tile { padding: 12px; gap: 10px; } .hs-ico { width: 34px; height: 34px; } .hs-txt b { font-size: 18px; } .hs-txt span { font-size: 12px; } }
 @media print { .home-strip { display: none; } }
+
+/* лента: счётчики у фильтров и группы по дням */
+.seg-n { margin-left: 6px; font-size: 11.5px; font-weight: 700; opacity: .6; font-variant-numeric: tabular-nums; }
+.seg button.on .seg-n { opacity: .75; }
+.feed-day { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin: 18px 4px 8px; }
+.feed-day:first-child { margin-top: 4px; }
