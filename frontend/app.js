@@ -685,17 +685,26 @@ function updateBadge() {
   b.title = t;
   b.closest(".nav-item").setAttribute("aria-label", n ? `Бизнес-радар, ${t}` : "Бизнес-радар");
   const bn = $("#bellN");
-  if (bn) { bn.hidden = !n; bn.textContent = n > 9 ? "9+" : String(n || ""); $("#bellBtn").title = n ? t : "Новых рисков нет"; }
+  const nr = (state.freshRevs || []).length, total = n + nr;
+  if (bn) { bn.hidden = !total; bn.textContent = total > 9 ? "9+" : String(total || ""); $("#bellBtn").title = total ? [t, nr ? `новых пересмотров прогноза банка: ${nr}` : ""].filter(Boolean).join("; ") : "Новых уведомлений нет"; }
   if (!$("#bellPop").hidden) renderBell();
 }
 // Колокольчик: непрочитанные риски списком; открыть событие или прочитать все — число уменьшается
 function renderBell() {
   const read = readSet(), list = (state.feed || []).filter((i) => i.effect === "risk" && !read.has(i.event_id)).slice(0, 8);
-  $("#bellPop").innerHTML = `<div class="bell-head"><b>Новые риски для компании</b>${list.length ? `<button class="link-btn" id="bellAll">прочитать все</button>` : ""}</div>
+  const revs = state.freshRevs || [];
+  const revHtml = revs.length ? `<div class="bell-sec">Банк пересмотрел прогноз</div><ul>${revs.map((f) => `<li data-goview="forecasts" tabindex="0" role="button"><b>${esc(f.title)}, ${esc(f.period)}: ${fmtVal(f.revision.from, f.unit)} → ${fmtVal(f.revision.to, f.unit)}</b>
+      <span class="muted small">${fmtDate(f.revision.to_date)} · позиция Альфа-Банка</span></li>`).join("")}</ul>` : "";
+  $("#bellPop").innerHTML = `<div class="bell-head"><b>Уведомления</b>${list.length ? `<button class="link-btn" id="bellAll">прочитать все риски</button>` : ""}</div>
+    <div class="bell-sec">Новые риски для компании</div>
     ${list.length ? `<ul>${list.map((i) => `<li data-ev="${i.event_id}" tabindex="0" role="button"><b>${esc(i.title)}</b>
       <span class="muted small">${fmtDate(i.published_at)} · ${esc((i.reasons[0] || {}).why || "")}</span></li>`).join("")}</ul>
       <p class="muted small">Событие отмечается прочитанным, когда вы его открываете.</p>`
-    : `<p class="muted">Новых рисков нет — всё прочитано. Новые появятся после следующего сбора новостей.</p>`}`;
+    : `<p class="muted">Новых рисков нет — всё прочитано. Новые появятся после следующего сбора новостей.</p>`}${revHtml}`;
+  $("#bellPop").querySelectorAll("li[data-goview]").forEach((li) => {
+    const go = () => { toggleBell(false); show(li.dataset.goview); };
+    li.onclick = go; li.onkeydown = (e) => { if (e.key === "Enter") go(); };
+  });
   $("#bellPop").querySelectorAll("li[data-ev]").forEach((li) => {
     const go = () => { toggleBell(false); show("radar"); openInsight(li.dataset.ev, false, "bell"); };
     li.onclick = go; li.onkeydown = (e) => { if (e.key === "Enter") go(); };
@@ -1666,11 +1675,27 @@ function companyFactors() {
   const ex = (state.exposures || []).filter((e) => e.weight > 0);
   return new Map(ex.map((e) => [e.factor, e]));
 }
-// Пересмотры прогноза по темам компании — для значка и блока «банк изменил взгляд»
-async function updateRevBadge() {
+// Пересмотры прогноза по темам компании. Значок — НОВЫЕ пересмотры, которых пользователь ещё не видел:
+// открыли раздел «Прогнозы банка» — пересмотры считаются просмотренными, число пропадает
+const revKey = (f) => `${f.indicator}|${f.period}|${f.revision.to_date}`;
+function seenRevs() { try { return new Set(JSON.parse(localStorage.getItem("fcseen:" + state.company) || "[]")); } catch (e) { return new Set(); } }
+function markRevsSeen(list) {
+  const s = seenRevs(); list.forEach((f) => s.add(revKey(f)));
+  try { localStorage.setItem("fcseen:" + state.company, JSON.stringify([...s].slice(-200))); } catch (e) { /* хранилище недоступно */ }
+}
+async function companyRevisions() {
   const d = await bankForecasts(), fx = companyFactors();
-  const n = d.forecasts.filter((f) => f.revision && fx.has(f.factor)).length, b = $("#revBadge");
-  if (b) { b.hidden = !n; b.textContent = String(n || ""); }
+  return d.forecasts.filter((f) => f.revision && fx.has(f.factor));
+}
+async function updateRevBadge() {
+  const seen = seenRevs(), fresh = (await companyRevisions()).filter((f) => !seen.has(revKey(f)));
+  state.freshRevs = fresh;
+  const b = $("#revBadge");
+  if (b) {
+    b.hidden = !fresh.length; b.textContent = String(fresh.length || "");
+    b.title = fresh.length ? `Новых пересмотров прогноза банка: ${fresh.length}. Откройте раздел — они отметятся просмотренными` : "";
+  }
+  if (state.feed) updateBadge();
 }
 function stepChart(f) {
   const h = f.history || [];
@@ -1691,20 +1716,27 @@ async function loadForecasts() {
   const other = d.forecasts.filter((f) => !fx.has(f.factor) && f.period >= "2026");
   const card = (f) => {
     const r = f.revision, doc = docs[f.doc_id] || {}, e = fx.get(f.factor);
-    return `<div class="fc-card ${r ? "rev" : ""}">
-      <div class="fc-top"><span>${esc(f.title)}, ${esc(f.period)}</span><b>${fmtVal(f.value, f.unit)}</b></div>
+    const isNew = r && (state.freshRevs || []).some((x) => revKey(x) === revKey(f));
+    return `<div class="fc-card ${r ? "revised" : ""}">
+      <div class="fc-top"><span>${esc(f.title)}, ${esc(f.period)}${isNew ? `<span class="fc-new">новое</span>` : ""}</span><b>${fmtVal(f.value, f.unit)}</b></div>
       ${r ? `<div class="rev ${r.direction}">${r.direction === "up" ? "▲ повысил" : "▼ понизил"} с ${fmtVal(r.from, f.unit)} (${fmtDate(r.from_date)}) до ${fmtVal(r.to, f.unit)} (${fmtDate(r.to_date)})</div>` : ""}
       ${stepChart(f)}
-      ${e ? `<div class="muted small">Касается вас: ${esc((e.reasons && e.reasons[0] && (e.reasons[0].why || e.reasons[0])) || e.title)}</div>` : ""}
+      ${e ? `<div class="muted small">Почему важно вам: ${esc(e.title)}${e.reasons && e.reasons[0] && e.reasons[0].why && !/Макрофактор/.test(e.reasons[0].why) ? " — " + esc(e.reasons[0].why) : ""}</div>` : ""}
       <div class="fc-src small">📄 ${esc(doc.title || f.doc_id)}${f.page ? `, стр. ${f.page}` : ""} · ${fmtDate(f.date)}</div></div>`;
   };
   const revs = rel.filter((f) => f.revision);
+  await updateRevBadge();
+  const fresh = new Set((state.freshRevs || []).map(revKey));
   box.innerHTML = `
-    ${revs.length ? `<div class="card fc-alert"><div class="eyebrow">Банк изменил взгляд</div><h3>${revs.length} ${plural(revs.length, "пересмотр", "пересмотра", "пересмотров")} прогноза по темам вашей компании</h3>
-      <ul>${revs.map((f) => `<li><b>${esc(f.title)}, ${esc(f.period)}</b>: ${fmtVal(f.revision.from, f.unit)} → ${fmtVal(f.revision.to, f.unit)}</li>`).join("")}</ul>
-      <p class="muted small">Сценарии в разборах строятся от последнего прогноза банка: «база» — это он.</p></div>` : ""}
+    ${revs.length ? `<div class="card fc-alert"><div class="eyebrow">Банк изменил взгляд</div><h3>${revs.length} ${plural(revs.length, "пересмотр", "пересмотра", "пересмотров")} прогноза по темам вашей компании${fresh.size ? ` · ${fresh.size} ${plural(fresh.size, "новый", "новых", "новых")}` : ""}</h3>
+      <ul>${revs.map((f) => `<li><b>${esc(f.title)}, ${esc(f.period)}</b>: ${fmtVal(f.revision.from, f.unit)} → ${fmtVal(f.revision.to, f.unit)} <span class="muted small">(${fmtDate(f.revision.to_date)})</span>${fresh.has(revKey(f)) ? `<span class="fc-new">новое</span>` : ""}</li>`).join("")}</ul>
+      <p class="muted small">Число у пункта меню «Прогнозы банка» — пересмотры, которых вы ещё не видели; после открытия этого раздела оно пропадает. Сценарии в разборах строятся от последнего прогноза банка: «база» — это он.</p></div>` : ""}
     <h3 class="fc-h">Темы, к которым чувствительна компания</h3>
     <div class="fc-grid">${rel.map(card).join("") || `<p class="muted">Нет прогнозов банка по темам компании.</p>`}</div>
     <details class="fc-more"><summary>Остальные прогнозы банка (${other.length})</summary><div class="fc-grid">${other.map(card).join("")}</div></details>
     <p class="muted small">${d.theses_count} тезисов и ${d.forecasts.length} прогнозов из ${(d.documents || []).length} аналитических материалов Альфа-Банка.</p>`;
+  markRevsSeen(revs);
+  state.freshRevs = [];
+  const b = $("#revBadge"); if (b) { b.hidden = true; b.textContent = ""; }
+  updateBadge();
 }
