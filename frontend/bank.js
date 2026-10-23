@@ -80,6 +80,9 @@ async function scenarioRow(inputs, lever) {
   } catch (e) { return null; }
 }
 
+// Сумма без знака: долг, ФОТ, выручка — это величины, а не эффект «плюс/минус»
+function amount(v) { return v == null ? "—" : rub(Math.abs(v)).replace(/^[+−]/, ""); }
+
 function stat(label, value, hint) {
   return `<div class="bk-stat"><span>${esc(label)}</span><b>${value}</b>${hint ? `<i>${esc(hint)}</i>` : ""}</div>`;
 }
@@ -99,7 +102,7 @@ async function renderBankSection(key) {
       <div class="peer-row"><span>${esc(m.name)}</span><span class="bar"><i style="width:${Math.round(m.share * 100)}%"></i></span><b>${Math.round(m.share * 100)}%</b></div>`).join("");
     hero = `<div class="bk-hero">
       <div class="eyebrow light">Платёжный поток компании</div>
-      <h3>${rev ? rub(rev) : "Выручка не указана"} <small>выручка за год</small></h3>
+      <h3>${rev ? amount(rev) : "Выручка не указана"} <small>выручка за год</small></h3>
       <div class="bk-stats">${stat("Покупателей", p.n_buyers ?? "—")}${stat("Поставщиков", p.n_suppliers ?? "—")}
         ${stat("Крупнейший покупатель", p.top_buyer_share != null ? Math.round(p.top_buyer_share * 100) + "%" : "—", "доля поступлений")}
         ${stat("Продукты банка", (p.products || []).length)}</div>
@@ -117,8 +120,8 @@ async function renderBankSection(key) {
     const kr = s && s.baseline && s.baseline.key_rate_now;
     hero = `<div class="bk-hero">
       <div class="eyebrow light">${loan ? "Кредиты и лизинг компании" : "Кредитов в банке нет"}</div>
-      <h3>${debt ? rub(debt) : "—"} <small>${debt ? "долг, оценка по профилю" : "долга в банке нет"}</small></h3>
-      <div class="bk-stats">${stat("Ключевая ставка сейчас", kr != null ? String(kr).replace(".", ",") + "%" : "—")}
+      <h3>${debt ? amount(debt) : "—"} <small>${debt ? "долг, оценка по профилю" : "долга в банке нет"}</small></h3>
+      <div class="bk-stats">${stat("Ключевая ставка", kr != null ? String(kr).replace(".", ",") + "%" : "—", "по материалам Альфа-Банка")}
         ${stat("Ставка +1 п.п. к прогнозу банка", s && s.effect ? rub(s.effect) : "—", "за 12 месяцев, по калькулятору")}
         ${stat("Плавающая часть долга", s && s.defaults.floating_share != null ? Math.round(s.defaults.floating_share * 100) + "%" : "—", "оценка, можно уточнить в разборе")}</div>
       ${s && s.estimated.length ? `<div class="bk-note">Как оценено: ${esc(s.estimated.join("; "))}. Свои цифры можно ввести в калькуляторе «Что если» в любом разборе.</div>` : ""}</div>`;
@@ -129,7 +132,7 @@ async function renderBankSection(key) {
     hero = `<div class="bk-hero">
       <div class="eyebrow light">${p.fts ? "Компания ведёт ВЭД" : "ВЭД в данных компании нет"}</div>
       <h3>${(p.fts_countries || []).length ? esc(p.fts_countries.slice(0, 4).join(", ")) : "—"} <small>страны-партнёры</small></h3>
-      <div class="bk-stats">${stat("Импорт", s && s.defaults.import_rub ? rub(s.defaults.import_rub) : "—", "оценка по профилю")}
+      <div class="bk-stats">${stat("Импорт", s && s.defaults.import_rub ? amount(s.defaults.import_rub) : "—", "оценка по профилю")}
         ${stat("Рубль слабее на 10%", s && s.effect ? rub(s.effect) : "—", "за 12 месяцев, по калькулятору")}
         ${stat("Перенос в цены", s && s.defaults.pass_through != null ? Math.round(s.defaults.pass_through * 100) + "%" : "—", "доля удорожания, которую компания переносит в цены")}</div></div>`;
   }
@@ -139,7 +142,7 @@ async function renderBankSection(key) {
     const pay = s && s.defaults.payroll_rub;
     hero = `<div class="bk-hero">
       <div class="eyebrow light">${has("CL_PRODUCT_ZPP_MARK") ? "Зарплатный проект подключён" : "Зарплатный проект не подключён"}</div>
-      <h3>${pay ? rub(pay) : "—"} <small>фонд оплаты труда за год, оценка</small></h3>
+      <h3>${pay ? amount(pay) : "—"} <small>фонд оплаты труда за год, оценка</small></h3>
       <div class="bk-stats">${stat("Сотрудников", esc(p.workers || "—"))}
         ${stat("Рост зарплат на 1 п.п.", pay ? rub(-Math.round(pay * 0.01)) : "—", "≈ 1% ФОТ за год")}</div>
       ${s && s.estimated.length ? `<div class="bk-note">Как оценено: ${esc(s.estimated.filter((x) => x.startsWith("ФОТ")).join("; ") || "по численности")}.</div>` : ""}</div>`;
