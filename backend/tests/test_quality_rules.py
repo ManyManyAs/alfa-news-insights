@@ -79,5 +79,6 @@ def test_scenarios_carry_company_sensitivity():
         assert sc[0]["version"] == CALC_VERSION and all(s["sensitivity"] == sens for s in sc)
         assert all(x["lever"] in ("rate", "fx", "wages") and abs(x["effect_rub"]) >= 1000 for x in sens)
         rates += [x for x in sens if x["lever"] == "rate"]
-    # у компаний с кредитом ставка выше прогноза — это рост расходов по долгу; событие о ставке двигает этот рычаг
-    assert rates and all(x["effect_rub"] < 0 and x["event_lever"] for x in rates)
+    # событие о ставке двигает этот рычаг; у компаний с кредитом ставка выше прогноза — рост расходов по долгу,
+    # у компаний только с депозитами — доход (знак плюс тоже верен)
+    assert rates and all(x["event_lever"] for x in rates) and any(x["effect_rub"] < 0 for x in rates)
