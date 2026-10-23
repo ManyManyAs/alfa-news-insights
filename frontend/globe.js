@@ -51,6 +51,24 @@ const GEO = {
   "СЛОВЕНИЯ": [46.06, 14.51], "АРМЕНИЯ": [40.18, 44.51], "УРУГВАЙ": [-34.9, -56.16], "ИРАН": [35.69, 51.39],
   "ВЕЛИКОБРИТАНИЯ": [51.5, -0.13], "КАНАДА": [45.42, -75.7], "САУДОВСКАЯ АРАВИЯ": [24.71, 46.68],
 };
+// Города из текста новости точнее региона: «склады в Казани» — точка в Казани, а не в центре Татарстана
+const CITY = [
+  [/казан/i, "Казань", [55.79, 49.12]], [/екатеринбург/i, "Екатеринбург", [56.84, 60.6]], [/новосибирск/i, "Новосибирск", [55.03, 82.92]],
+  [/санкт-петербург|петербург/i, "Санкт-Петербург", [59.94, 30.31]], [/владивосток/i, "Владивосток", [43.12, 131.89]],
+  [/новороссийск/i, "Новороссийск", [44.72, 37.77]], [/мурманск/i, "Мурманск", [68.97, 33.08]], [/красноярск/i, "Красноярск", [56.01, 92.85]],
+  [/нижн(ий|ем|его) новгород/i, "Нижний Новгород", [56.33, 44.0]], [/самар/i, "Самара", [53.2, 50.15]], [/ростов/i, "Ростов-на-Дону", [47.23, 39.7]],
+  [/краснодар/i, "Краснодар", [45.04, 38.98]], [/челябинск/i, "Челябинск", [55.16, 61.4]], [/калининград/i, "Калининград", [54.71, 20.51]],
+  [/шанха/i, "Шанхай", [31.23, 121.47]], [/пекин/i, "Пекин", [39.9, 116.4]], [/гонконг/i, "Гонконг", [22.32, 114.17]],
+  [/стамбул/i, "Стамбул", [41.01, 28.97]], [/анкар/i, "Анкара", [39.93, 32.86]], [/дуба/i, "Дубай", [25.2, 55.27]],
+  [/нью-йорк|уолл-стрит/i, "Нью-Йорк", [40.71, -74.0]], [/вашингтон|ФРС/i, "Вашингтон", [38.9, -77.04]], [/лондон/i, "Лондон", [51.5, -0.13]],
+  [/брюссел|евросоюз|\bЕС\b/i, "Брюссель", [50.85, 4.35]], [/франкфурт|ЕЦБ/i, "Франкфурт", [50.11, 8.68]], [/дели|индии/i, "Нью-Дели", [28.61, 77.21]],
+  [/ташкент/i, "Ташкент", [41.3, 69.24]], [/астан|казахстан/i, "Астана", [51.17, 71.45]], [/минск|беларус/i, "Минск", [53.9, 27.56]],
+  [/опек|эр-рияд|саудовск/i, "Эр-Рияд", [24.71, 46.68]],
+];
+function cityOf(text) {
+  for (const [rx, name, geo] of CITY) if (rx.test(text || "")) return [geo, name];
+  return null;
+}
 const GEO_NAME = { "Москва": "Москва", "Санкт-Петербург": "Санкт-Петербург" };
 function geoOf(name) {
   if (!name) return null;
@@ -72,7 +90,7 @@ class BizGlobe {
     this.opts = { ambient: false, onPick: null, tip: null, ...opts };
     this.lon = 70; this.tilt = opts.ambient ? 30 : 40; this.vel = opts.ambient ? 5 : 2.4;  // градусы, градусы/с
     this.dragging = false; this.idleT = 0; this.hover = null;
-    this.signals = []; this.partners = []; this.hq = null;
+    this.signals = []; this.partners = []; this.hq = null; this.clusters = [];
     this.reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
     this.land = [];
     for (let i = 0; i < GLOBE_LAND.length; i += 2) {
@@ -112,7 +130,25 @@ class BizGlobe {
   setData({ hq, partners = [], signals = [] }) {
     this.hq = hq || null;
     this.partners = partners.filter((p) => p.geo);
-    this.signals = signals.filter((s) => s.geo).map((s, i) => ({ ...s, phase: i * 0.37 % 1, arc: this.hq ? this.arcPoints(s.geo, this.hq.geo) : null }));
+    const now = performance.now(), old = new Map(this.signals.map((s) => [s.id, s.born]));
+    // новые сигналы «вырастают»: дуга дорисовывается от места события к компании (при смене периода — заметно)
+    const list = signals.filter((s) => s.geo).map((s, i) => ({ ...s, phase: i * 0.37 % 1, born: old.get(s.id) ?? now + i * 60,
+      arc: this.hq ? this.arcPoints(s.geo, this.hq.geo) : null }));
+    // кластеры: больше трёх событий почти в одном месте — один кружок с числом, подсказка перечисляет события
+    this.clusters = [];
+    const used = new Set();
+    for (const a of list) {
+      if (used.has(a)) continue;
+      const near = list.filter((b) => !used.has(b) && Math.hypot(a.geo[0] - b.geo[0], (a.geo[1] - b.geo[1]) * Math.cos(a.geo[0] * RAD)) < 3.5);
+      if (near.length > 3) {
+        near.forEach((b) => used.add(b));
+        const lat = near.reduce((x, b) => x + b.geo[0], 0) / near.length, lon = near.reduce((x, b) => x + b.geo[1], 0) / near.length;
+        const eff = ["risk", "opportunity", "mixed", "watch"].map((e) => [e, near.filter((b) => b.effect === e).length]).sort((x, y) => y[1] - x[1])[0][0];
+        this.clusters.push({ id: "cl:" + a.id, cluster: near, geo: [lat, lon], effect: eff, weight: 1, phase: a.phase, born: a.born,
+          arc: this.hq ? this.arcPoints([lat, lon], this.hq.geo) : null, tipHtml: this.opts.clusterTip ? this.opts.clusterTip(near) : "" });
+      }
+    }
+    this.signals = [...list.filter((s) => !used.has(s)), ...this.clusters];
     const key = this.hq ? this.hq.geo.join(",") : "";
     if (this.hq && key !== this.hqKey) { this.lon = this.hq.geo[1] + 8; this.phase = 0; this.idleT = 3; this.hqKey = key; }
     this.kick();
@@ -148,12 +184,28 @@ class BizGlobe {
     const up = () => { this.dragging = false; c.classList.remove("grab"); };
     c.addEventListener("pointerup", up); c.addEventListener("pointercancel", up);
     c.addEventListener("pointerleave", () => { this.hover = null; this.showTip(null); });
-    c.addEventListener("click", (e) => { const s = this.hit(e); if (s && this.opts.onPick) this.opts.onPick(s); });
+    c.addEventListener("click", (e) => { const s = this.hit(e); if (s && this.opts.onPick) this.opts.onPick(s.cluster ? s.cluster[0] : s); });
+    // клавиатура: стрелки вращают глобус, Enter открывает ближайшее к центру событие
+    if (!this.opts.ambient) {
+      c.tabIndex = 0;
+      c.addEventListener("keydown", (e) => {
+        const step = e.shiftKey ? 20 : 8;
+        if (e.key === "ArrowLeft") this.lon += step; else if (e.key === "ArrowRight") this.lon -= step;
+        else if (e.key === "ArrowUp") this.tilt = Math.min(55, this.tilt + step / 2); else if (e.key === "ArrowDown") this.tilt = Math.max(-10, this.tilt - step / 2);
+        else if (e.key === "Enter" && this.opts.onPick) {
+          const front = this.signals.map((s) => [s, this.project(s.geo[0], s.geo[1])]).filter(([, p]) => p[2] > 0)
+            .sort((a, b) => Math.hypot(a[1][0] - this.cx, a[1][1] - this.cy) - Math.hypot(b[1][0] - this.cx, b[1][1] - this.cy));
+          if (front.length) { const s = front[0][0]; this.opts.onPick(s.cluster ? s.cluster[0] : s); }
+          return;
+        } else return;
+        e.preventDefault(); this.idleT = 0; this.vel = 0; this.kick();
+      });
+    }
   }
 
   hit(e) {
     const r = this.cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
-    let best = null, bd = 16;
+    let best = null, bd = 18;
     for (const s of this.signals) {
       const [sx, sy, z] = this.project(s.geo[0], s.geo[1]);
       const d = Math.hypot(sx - x, sy - y);
@@ -256,9 +308,12 @@ class BizGlobe {
     // сигналы: дуги «событие → компания» с бегущим импульсом
     for (const s of this.signals) {
       const rgb = EFFECT_RGB[s.effect] || EFFECT_RGB.watch, hot = this.hover === s;
+      const grow = this.reduce ? 1 : Math.max(0, Math.min(1, (now - s.born) / 900));
+      if (grow <= 0) continue;
       if (s.arc) {
         ctx.lineWidth = hot ? 2.4 : 1.4;
-        this.strokeArc(s.arc, `rgba(${rgb},${hot ? 0.95 : 0.5})`);
+        const part = grow < 1 ? s.arc.slice(0, Math.max(2, Math.round(s.arc.length * (1 - Math.pow(1 - grow, 3))))) : s.arc;
+        this.strokeArc(part, `rgba(${rgb},${hot ? 0.95 : 0.5})`);
         const p = ((t * 0.32 + s.phase) % 1), n = s.arc.length - 1;
         for (let k = 0; k < 7; k++) {
           const q = p - k * 0.018;
@@ -271,7 +326,16 @@ class BizGlobe {
       }
       const [x, y, z] = this.project(s.geo[0], s.geo[1]);
       if (z <= 0) continue;
-      const pulse = (t * 0.8 + s.phase) % 1, r0 = 3 + 3 * (s.weight || 0.5);
+      if (s.cluster) {  // кластер: кружок с числом событий
+        const r = 11 + Math.min(6, s.cluster.length);
+        ctx.fillStyle = `rgba(${rgb},${hot ? 1 : 0.88})`; ctx.shadowColor = `rgba(${rgb},0.9)`; ctx.shadowBlur = hot ? 18 : 10;
+        ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0;
+        ctx.strokeStyle = "rgba(255,255,255,0.85)"; ctx.lineWidth = 1.5; ctx.stroke();
+        ctx.fillStyle = "#fff"; ctx.font = "800 12px Inter, system-ui, sans-serif"; ctx.textAlign = "center";
+        ctx.fillText(String(s.cluster.length), x, y + 4); ctx.textAlign = "start";
+        continue;
+      }
+      const pulse = (t * 0.8 + s.phase) % 1, r0 = (3 + 3 * (s.weight || 0.5)) * (0.4 + 0.6 * grow);
       ctx.strokeStyle = `rgba(${rgb},${(1 - pulse) * 0.8})`; ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.arc(x, y, r0 + pulse * 16, 0, Math.PI * 2); ctx.stroke();
       ctx.fillStyle = `rgb(${rgb})`; ctx.shadowColor = `rgba(${rgb},0.9)`; ctx.shadowBlur = hot ? 18 : 10;

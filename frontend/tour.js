@@ -74,6 +74,8 @@ async function goStep(i) {
   o.querySelector("[data-t=next]").textContent = i === TOUR.length - 1 ? "Готово" : "Далее";
   o.querySelector(".tour-spot").style.display = "none";
   show(s.view);
+  // одна колонка (телефон, планшет): шаги про разбор показывают экран разбора, шаги про ленту — ленту
+  document.body.classList.toggle("m-detail", !!s.open && matchMedia("(max-width: 1100px)").matches);
   if (s.open) {
     if (!state.detail) { state.detail = true; if (state.insight) renderInsight("analysis"); }  // шаги про детали разбора
     if (!document.querySelector("#insightPanel .tabs") && state.feed.length) openInsight(state.feed[0].event_id);
