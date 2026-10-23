@@ -259,6 +259,7 @@ function show(view, sub) {
   if (view === "sources") loadSources();
   if (view === "digest") { loadDigest(); track("digest_view"); }
   if (view === "tasks") loadTasks();
+  if (view === "calendar") loadCalendar();
   if (view === "home") track("home_view");
   if (view === "radar") track("feed_view");
 }
@@ -1613,3 +1614,42 @@ async function loadBudget() {
 loadBudget();
 
 init().catch((e) => { document.body.insertAdjacentHTML("afterbegin", `<div class="notice">Ошибка запуска: ${esc(e.message)}</div>`); });
+
+
+// ---------------------------------------------------------------- календарь компании на 90 дней
+const CAL_KIND = { cbr: ["ЦБ", "watch"], norm: ["вступает в силу", "risk"], task: ["моё действие", "opportunity"] };
+function parseDue(t) {
+  const m = /(\d{1,2})\.(\d{1,2})(?:\.(\d{4}))?/.exec(t || "");
+  if (!m) return null;
+  const d = new Date(+(m[3] || new Date().getFullYear()), +m[2] - 1, +m[1]);
+  return isNaN(d) ? null : d.toISOString().slice(0, 10);
+}
+async function loadCalendar() {
+  const box = $("#calendarBox");
+  box.innerHTML = `<div class="skeleton"></div>`;
+  let c;
+  try { c = await api(`/api/calendar?${q({ company_id: state.company })}`); } catch (e) { box.innerHTML = `<div class="card bad">Не удалось загрузить календарь: ${esc(e.message)}</div>`; return; }
+  const items = c.items.map((x) => ({ ...x }));
+  (state.feed || []).filter((it) => it.effective && it.effective.date >= c.today && it.effective.date <= c.until)
+    .forEach((it) => items.push({ date: it.effective.date, kind: "norm", title: it.title, note: it.reasons[0]?.why || "", event_id: it.event_id }));
+  (c.tasks || []).forEach((t) => { const d = parseDue(t.due); if (d && d >= c.today && d <= c.until) items.push({ date: d, kind: "task", title: t.text, note: t.owner ? `исполнитель: ${t.owner}` : "", event_id: t.event_id, task: true }); });
+  items.sort((a, b) => a.date.localeCompare(b.date));
+  const today = new Date(c.today);
+  const days = (d) => Math.round((new Date(d) - today) / 864e5);
+  const month = (d) => new Date(d).toLocaleDateString("ru-RU", { month: "long", year: "numeric" });
+  let cur = "", html = "";
+  for (const x of items) {
+    const mth = month(x.date);
+    if (mth !== cur) { html += `${cur ? "</ul>" : ""}<h3 class="cal-month">${esc(mth[0].toUpperCase() + mth.slice(1))}</h3><ul class="cal">`; cur = mth; }
+    const d = new Date(x.date), n = days(x.date), [label, cls] = CAL_KIND[x.kind];
+    html += `<li class="cal-item ${x.event_id || x.task ? "link" : ""}" ${x.event_id ? `data-cev="${esc(x.event_id)}"` : x.task ? `data-ctask="1"` : ""} tabindex="${x.event_id || x.task ? 0 : -1}">
+      <div class="cal-date"><b>${d.getDate()}</b><span>${d.toLocaleDateString("ru-RU", { weekday: "short" })}</span></div>
+      <div class="cal-body"><span class="pill ${cls}">${label}</span><span class="muted small">${n === 0 ? "сегодня" : `через ${n} ${plural(n, "день", "дня", "дней")}`}</span>
+        <b>${esc(x.title)}</b>${x.note ? `<div class="muted small">${esc(x.note)}</div>` : ""}</div></li>`;
+  }
+  box.innerHTML = items.length ? `<div class="card cal-card">${html}</ul>
+      <p class="muted small">Даты заседаний — <a href="${esc(c.source_url)}" target="_blank" rel="noopener">календарь Банка России</a>. Сроки действий — из «Моих действий».</p></div>`
+    : `<div class="card"><p class="muted">В ближайшие ${c.horizon_days} дней ключевых дат нет.</p></div>`;
+  box.querySelectorAll("[data-cev]").forEach((el) => { const go = () => { show("radar"); openInsight(el.dataset.cev, false, "calendar"); }; el.onclick = go; el.onkeydown = (e) => { if (e.key === "Enter") go(); }; });
+  box.querySelectorAll("[data-ctask]").forEach((el) => { const go = () => show("tasks"); el.onclick = go; el.onkeydown = (e) => { if (e.key === "Enter") go(); }; });
+}

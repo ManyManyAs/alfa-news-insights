@@ -43,7 +43,9 @@ jobs:
         timeout-minutes: 12
         run: |
           pip install playwright==1.48.0
-          for i in 1 2 3; do timeout 240 python -m playwright install --with-deps chromium && break; echo "повтор установки браузера ($i)"; done
+          ok=""
+          for i in 1 2 3; do timeout 240 python -m playwright install --with-deps chromium && ok=1 && break; echo "повтор установки браузера ($i)"; done
+          [ -n "$ok" ] || { echo "::error title=Установка::браузер Playwright не установился за 3 попытки"; exit 1; }
           if [ "${{ inputs.video }}" = "true" ] && [ "${{ inputs.target }}" = "stand" ]; then
             for i in 1 2 3; do timeout 180 sudo apt-get install -y -qq ffmpeg >/dev/null && break; echo "повтор установки ffmpeg ($i)"; done
           fi

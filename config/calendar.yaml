@@ -1,0 +1,22 @@
+# Даты, которые важны любому бизнесу: заседания Совета директоров Банка России по ключевой ставке.
+# Источник: https://www.cbr.ru/DKP/cal_mp/ (проверено 24.10.2026). Новый год = новые строки, код не меняется.
+# core: true — опорное заседание (вместе с решением публикуется среднесрочный прогноз).
+cbr_meetings:
+  - {date: "2026-02-13", core: true}
+  - {date: "2026-03-20", core: false}
+  - {date: "2026-04-24", core: true}
+  - {date: "2026-06-19", core: false}
+  - {date: "2026-07-24", core: true}
+  - {date: "2026-09-11", core: false}
+  - {date: "2026-10-23", core: true}
+  - {date: "2026-12-18", core: false}
+  - {date: "2027-02-12", core: true}
+  - {date: "2027-03-19", core: false}
+  - {date: "2027-04-30", core: true}
+  - {date: "2027-06-11", core: false}
+  - {date: "2027-07-30", core: true}
+  - {date: "2027-09-10", core: false}
+  - {date: "2027-10-22", core: true}
+  - {date: "2027-12-17", core: false}
+source_url: https://www.cbr.ru/DKP/cal_mp/
+horizon_days: 90
