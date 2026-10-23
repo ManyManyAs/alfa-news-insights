@@ -361,7 +361,9 @@ def feed(company_id: str, role: str | None = None, limit: int = Query(20, le=50)
                                     for e in st["events"]]} if st and len(st["events"]) > 1 else None),
             "has_bank_view": bool(kb.theses_for([f.factor for f in cls.factors])),
             "demo": cls.trust == "demo", "shadowed": s.shadowed,
-            "ai_relevance": ({"level": mat[s.event.id][0], "why": mat[s.event.id][1]} if s.event.id in mat else None)}
+            "ai_relevance": ({"level": mat[s.event.id][0], "why": mat[s.event.id][1]} if s.event.id in mat else None),
+            # итоговая важность для компании: оценка профиля × поправка ИИ после разбора — по ней сортировка «По важности»
+            "importance_score": round(s.score * MATERIALITY_WEIGHT.get(mat.get(s.event.id, (2, ""))[0], 1.0), 3)}
 
     # «Тишина — тоже ответ»: за неделю ничего значимого — говорим прямо и показываем последнее важное
     week_ago = (datetime.now(UTC) - timedelta(days=QUIET_DAYS)).isoformat()

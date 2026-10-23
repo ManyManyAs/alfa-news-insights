@@ -817,3 +817,8 @@ body.logged-out .layout, body.logged-out .topbar { display: none; }
   a[href^="http"]::after { content: " (" attr(href) ")"; font-size: 9px; color: #666; word-break: break-all; }
   .disclaimer { font-size: 9px; color: #555; border-top: 1px solid #ccc; padding-top: 6px; }
 }
+
+/* Шкала важности на карточке ленты */
+.imp-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.imp-lbl { font-size: 11px; color: var(--muted); white-space: nowrap; font-weight: 600; }
+.imp-row .score-bar { flex: 1; margin-top: 0; height: 4px; }
