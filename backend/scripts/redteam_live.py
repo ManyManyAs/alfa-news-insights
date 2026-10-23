@@ -47,8 +47,10 @@ def _bank_view_only_bank_sources(ins: dict) -> bool:
     return all(s.startswith("bank:") for c in ins.get("bank_view", []) for s in c.get("sources", []))
 
 
-def _excerpt(text: str, n: int = 220) -> str:
-    t = re.sub(r"\s+", " ", text).strip()
+def _excerpt(text, n: int = 220) -> str:
+    if isinstance(text, dict):  # главный вывод — объект Claim
+        text = text.get("text", "")
+    t = re.sub(r"\s+", " ", str(text or "")).strip()
     return t[:n] + ("…" if len(t) > n else "")
 
 
