@@ -143,7 +143,7 @@ async function init() {
   $("#ctxBtn").onclick = () => { const open = !document.querySelector(".topbar").classList.contains("ctx-open"); document.querySelector(".topbar").classList.toggle("ctx-open", open); $("#ctxBtn").setAttribute("aria-expanded", String(open)); };
   $("#backToFeed").onclick = () => closeDetail(true);
   addEventListener("popstate", () => { if (document.body.classList.contains("m-detail")) closeDetail(false); });
-  document.querySelectorAll("[data-view]").forEach((el) => el.onclick = () => show(el.dataset.view));
+  document.querySelectorAll("[data-view]").forEach((el) => el.onclick = () => show(el.dataset.view, el.dataset.bank));
   document.querySelectorAll("[data-goto]").forEach((el) => el.onclick = () => show(el.dataset.goto));
   $("#analyzeBtn").onclick = () => $("#analyzeDialog").showModal();
   bindFeedControls();
@@ -157,7 +157,8 @@ async function init() {
     loadDigest();
   });
   document.querySelectorAll(".nav-item[data-view]").forEach((el) => { el.tabIndex = 0; el.setAttribute("role", "link");
-    el.onkeydown = (e) => { if (e.key === "Enter") show(el.dataset.view); }; });
+    el.onkeydown = (e) => { if (e.key === "Enter") show(el.dataset.view, el.dataset.bank); }; });
+  $("#markAllRead").onclick = markAllRead;
   $("#analyzeSubmit").onclick = analyzeNews;
   try { await enterApp(); } catch (e) { if (e.status !== 401) throw e; }
 }
@@ -244,11 +245,13 @@ function closeDetail(fromButton) {
   const card = document.querySelector(`.feed-item[data-ev="${state.current}"]`);
   if (card) card.scrollIntoView({ block: "center" });
 }
-function show(view) {
+function show(view, sub) {
   if (view !== "radar") document.body.classList.remove("m-detail");
   document.body.dataset.view = view;
   document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.id === `view-${view}`));
-  document.querySelectorAll(".nav-item[data-view]").forEach((n) => n.classList.toggle("active", n.dataset.view === view));
+  document.querySelectorAll(".nav-item[data-view]").forEach((n) => n.classList.toggle("active", n.dataset.view === view
+    && (view !== "bank" || n.dataset.bank === (sub || state.bank || "accounts"))));
+  if (view === "bank") openBank(sub || state.bank || "accounts");
   if (view === "metrics") loadMetrics();
   if (view === "sources") loadSources();
   if (view === "digest") { loadDigest(); track("digest_view"); }
@@ -568,7 +571,7 @@ async function loadFeed() {
   $("#showHidden").hidden = !hiddenCount;
   $("#showHidden").textContent = state.showHidden ? "Убрать скрытые" : `Показать скрытые (${hiddenCount})`;
   state.feed = items; state.feedKey = `${state.company}|${state.role}`; state.rerank = null; state.quiet = quiet;
-  $("#navBadge").textContent = items.filter((i) => i.effect === "risk").length || "";
+  updateBadge();
   renderWidget();
   fillFactorFilter();
   renderFeedList();
@@ -600,6 +603,24 @@ function markRead(id) {
   const s = readSet(); s.add(id);
   try { localStorage.setItem("read:" + state.company, JSON.stringify([...s].slice(-500))); } catch (e) { /* хранилище недоступно */ }
   if (document.getElementById("feedList")) { renderFeedList(); renderWidget(); }
+  updateBadge();
+}
+function markAllRead() {
+  const s = readSet();
+  (state.feed || []).forEach((it) => s.add(it.event_id));
+  try { localStorage.setItem("read:" + state.company, JSON.stringify([...s].slice(-500))); } catch (e) { /* хранилище недоступно */ }
+  renderFeedList(); renderWidget(); updateBadge();
+  toast("Все события ленты отмечены прочитанными");
+}
+// Значок у «Бизнес-радара» — непрочитанные риски: открытое событие считается прочитанным, и число уменьшается
+function updateBadge() {
+  const b = $("#navBadge"), read = readSet();
+  const n = (state.feed || []).filter((i) => i.effect === "risk" && !read.has(i.event_id)).length;
+  b.hidden = !n;
+  b.textContent = n > 9 ? "9+" : String(n || "");
+  const t = n ? `Непрочитанных рисков: ${n}. Откройте событие — оно отметится прочитанным` : "";
+  b.title = t;
+  b.closest(".nav-item").setAttribute("aria-label", n ? `Бизнес-радар, ${t}` : "Бизнес-радар");
 }
 function fillFactorFilter() {
   const seen = new Map();
@@ -1341,7 +1362,7 @@ async function loadMetrics() {
       ${tile("Сценарий «что если»", pct(r.whatif_rate), "доля разборов, где открыли сценарий")}
       ${tile("Обращаются в банк", pct(r.action_rate), Object.entries(p.actions).map(([k, v]) => `${ACTION_NAMES[k] || esc(k)}: ${v}`).join(" · ") || "менеджер, звонок, заявка")}
       ${tile("Скрывают как нерелевантное", pct(r.hide_rate), "сигнал пересмотреть ранжирование · цель ≤ 10%", vsTarget(r.hide_rate, 0.1, true))}
-      ${tile("Тур для жюри пройден", pct(r.tour_completion), `${p.counts.tour_start || 0} запусков`)}
+      ${tile("Тур по сервису пройден", pct(r.tour_completion), `${p.counts.tour_start || 0} запусков`)}
     </div>
     <div class="card funnel"><div class="muted small">Воронка: от главной до обращения в банк</div>${funnel}</div>
 
