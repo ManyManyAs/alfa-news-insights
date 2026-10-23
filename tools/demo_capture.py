@@ -52,6 +52,27 @@ async def login(pg, idx=0):
     await asyncio.sleep(2)
 
 
+async def wait_js(pg, expr: str, timeout: float = 60):
+    """Ожидание условия опросом через evaluate: CSP стенда запрещает eval, а ожидание функции-строкой его использует."""
+    t0 = time.monotonic()
+    while time.monotonic() - t0 < timeout:
+        if await pg.evaluate(f"() => !!({expr})"):
+            return
+        await asyncio.sleep(0.5)
+    raise TimeoutError(f"не дождались: {expr[:80]}")
+
+
+async def warm_first_insight(pg):
+    """Заранее строим разбор первого события ленты через API (вживую — до двух минут), дальше экраны берут его из кэша."""
+    await pg.evaluate("show('radar')")
+    await pg.wait_for_selector(".feed-item", timeout=30000)
+    ev = await pg.evaluate("() => document.querySelector('.feed-item').dataset.ev")
+    status = await pg.evaluate("""async (ev) => (await fetch(`/api/insights/${ev}?company_id=${encodeURIComponent(state.company)}`
+        + `&role=${encodeURIComponent(state.role || '')}`)).status""", ev)
+    if status != 200:
+        raise RuntimeError(f"разбор не построился: HTTP {status}")
+
+
 async def open_first_insight(pg):
     await pg.evaluate("show('radar')")
     await pg.wait_for_selector(".feed-item", timeout=30000)
@@ -83,6 +104,7 @@ async def shots(b):
         await pg.screenshot(path=OUT / "02_home.png")
 
     async def s_insight():
+        await warm_first_insight(pg)
         await open_first_insight(pg)
         await pg.screenshot(path=OUT / "03_radar_insight.png")
 
@@ -96,8 +118,7 @@ async def shots(b):
     async def s_chat():
         await pg.locator("#chatInput").scroll_into_view_if_needed()
         await pg.click(".chat .quick button >> text=Что говорит банк?")
-        await pg.wait_for_function("document.querySelector('#chatLog') && document.querySelector('#chatLog').innerText.length > 80",
-                                   timeout=90000)
+        await wait_js(pg, "document.querySelector('#chatLog') && document.querySelector('#chatLog').innerText.length > 80", 90)
         await asyncio.sleep(4)  # ответ дописывается потоком
         await pg.locator("#chatLog").scroll_into_view_if_needed()
         await pg.screenshot(path=OUT / "05_chat.png")
@@ -110,13 +131,13 @@ async def shots(b):
 
     async def s_digest():
         await pg.evaluate("show('digest')")
-        await pg.wait_for_function("document.querySelector('#digestBox').innerText.length > 100", timeout=60000)
+        await wait_js(pg, "document.querySelector('#digestBox').innerText.length > 100", 60)
         await asyncio.sleep(2)
         await pg.screenshot(path=OUT / "07_digest.png")
 
     async def s_quality():
         await pg.evaluate("show('metrics')")
-        await pg.wait_for_function("document.querySelector('#metricsBox').innerText.length > 100", timeout=60000)
+        await wait_js(pg, "document.querySelector('#metricsBox').innerText.length > 100", 60)
         await asyncio.sleep(2)
         await pg.screenshot(path=OUT / "08_quality.png")
 
