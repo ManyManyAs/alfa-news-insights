@@ -6,9 +6,9 @@ on:
   workflow_dispatch:
     inputs:
       task:
-        description: "check — проверка моделей; benchmark — сравнение моделей; warmup — предрасчёт + снапшот; judges — два судьи (GLM и Kimi) на готовых разборах; all — всё"
+        description: "check — проверка моделей; benchmark — сравнение моделей; warmup — предрасчёт + снапшот; judges — два судьи (GLM и Kimi) на готовых разборах; redteam — 10 атак через живые модели; all — всё"
         type: choice
-        options: [check, benchmark, warmup, judges, all]
+        options: [check, benchmark, warmup, judges, redteam, all]
         default: check
       max_rub:
         description: "Лимит расходов на прогон, ₽ (дневной лимит команды — 500 ₽)"
@@ -109,6 +109,14 @@ jobs:
         run: |
           python scripts/judges.py --limit 20 --max-rub ${{ inputs.max_rub }}
           cat ../docs/llm/judges.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Живой red-team
+        if: inputs.task == 'redteam' || inputs.task == 'all'
+        run: |
+          # отдельная копия БД: новости-атаки не должны попасть в снапшот и ленту жюри
+          python -c "import sqlite3; sqlite3.connect('/tmp/live.db').backup(sqlite3.connect('/tmp/redteam.db'))"
+          cp /tmp/live.demo_users.json /tmp/redteam.demo_users.json
+          DB_PATH=/tmp/redteam.db python scripts/redteam_live.py --max-rub ${{ inputs.max_rub }}
+          cat ../docs/llm/redteam_live.md >> "$GITHUB_STEP_SUMMARY"
       - name: Экспорт снапшота
         run: python scripts/manage.py snapshot-export
       - name: Итоги в summary

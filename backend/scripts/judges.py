@@ -48,7 +48,8 @@ def stored_llm_insights(limit: int) -> list[dict]:
     out = []
     for r in rows:
         p = json.loads(r["payload"])
-        if str(p.get("generated_by", "")).startswith("llm"):
+        by = str(p.get("generated_by", ""))
+        if by.startswith("llm") and not any(j in by for j in ("glm", "kimi")):  # судья не оценивает свой текст
             out.append({"key": r["key"], "event_id": r["event_id"], "uid": r["company_uid"], "role": r["role"], "payload": p})
     return out[:limit]
 
