@@ -966,6 +966,33 @@ def track_events(req: TrackRequest, user: str = Depends(current_user)):
     return {"stored": monitoring.track(user, req.events, set(companies_of_user(user)))}
 
 
+@app.get("/api/calendar")
+def calendar(company_id: str, days: int = Query(0, ge=0, le=365), user: str = Depends(current_user)):
+    """Календарь компании на горизонт: заседания Банка России по ставке (с прогнозом банка), даты вступления норм
+    в силу из ленты и сроки «Моих действий». Сроки событий и задач фронтенд берёт из ленты и задач, здесь — общий план."""
+    p = authorized_profile(company_id, user)
+    cfg = load_yaml("calendar.yaml")
+    horizon = days or int(cfg.get("horizon_days", 90))
+    today = datetime.now(MSK).date()
+    until = today + timedelta(days=horizon)
+    kb = get_knowledge()
+    items = []
+    for m in cfg.get("cbr_meetings", []):
+        d = date.fromisoformat(m["date"])
+        if today <= d <= until:
+            fc = kb.forecast("key_rate_end", str(d.year)) or {}
+            note = (f"Прогноз Альфа-Банка: ключевая ставка на конец {d.year} г. — {fmt_pct(fc['value'])}" if fc else "")
+            items.append({"date": d.isoformat(), "kind": "cbr", "title": "Решение Банка России по ключевой ставке"
+                          + (" и среднесрочный прогноз" if m.get("core") else ""), "note": note, "ref": fc.get("ref")})
+    tasks = [dict(r) for r in db.query("SELECT id, text, owner, due, event_id FROM tasks WHERE company_uid=? AND status='open'", (p.uid,))]
+    return {"today": today.isoformat(), "until": until.isoformat(), "horizon_days": horizon, "items": items, "tasks": tasks,
+            "source_url": cfg.get("source_url")}
+
+
+def fmt_pct(v) -> str:
+    return f"{float(v):.1f}".replace(".", ",").replace(",0", "") + "%"
+
+
 @app.get("/api/bank/forecasts")
 def bank_forecasts():
     """Макропрогноз Альфа-Банка (последние значения + пересмотры) и траектория ключевой ставки."""
