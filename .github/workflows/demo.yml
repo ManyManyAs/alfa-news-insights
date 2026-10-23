@@ -43,9 +43,14 @@ jobs:
         timeout-minutes: 12
         run: |
           pip install playwright==1.48.0
-          ok=""
-          for i in 1 2 3; do timeout 240 python -m playwright install --with-deps chromium && ok=1 && break; echo "повтор установки браузера ($i)"; done
-          [ -n "$ok" ] || { echo "::error title=Установка::браузер Playwright не установился за 3 попытки"; exit 1; }
+          # на образе раннера уже есть Google Chrome — берём его: установка браузера через apt иногда зависает
+          if command -v google-chrome >/dev/null; then
+            echo "PW_CHANNEL=chrome" >> "$GITHUB_ENV"; echo "CHROME_BIN=$(command -v google-chrome)" >> "$GITHUB_ENV"
+          else
+            ok=""
+            for i in 1 2 3; do timeout 240 python -m playwright install --with-deps chromium && ok=1 && break; echo "повтор установки браузера ($i)"; done
+            [ -n "$ok" ] || { echo "::error title=Установка::браузер Playwright не установился за 3 попытки"; exit 1; }
+          fi
           if [ "${{ inputs.video }}" = "true" ] && [ "${{ inputs.target }}" = "stand" ]; then
             for i in 1 2 3; do timeout 180 sudo apt-get install -y -qq ffmpeg >/dev/null && break; echo "повтор установки ffmpeg ($i)"; done
           fi
@@ -90,17 +95,16 @@ jobs:
           ffmpeg -y -loglevel error -i "$V" -vf "setpts=PTS/3,fps=4,scale=720:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=64:stats_mode=diff[p];[b][p]paletteuse=dither=none:diff_mode=rectangle" /tmp/shots/scenario.gif
           ls -la /tmp/shots
       - name: Lighthouse (страница входа)
-        if: inputs.target == 'local'
         continue-on-error: true
         run: |
-          CHROME="$(python -c 'from playwright.sync_api import sync_playwright as s; p=s().start(); print(p.chromium.executable_path); p.stop()')"
-          CHROME_PATH="$CHROME" npx -y lighthouse@12 http://localhost:8000/ --quiet --chrome-flags="--headless=new --no-sandbox" \
+          CHROME="${CHROME_BIN:-$(python -c 'from playwright.sync_api import sync_playwright as s; p=s().start(); print(p.chromium.executable_path); p.stop()')}"
+          CHROME_PATH="$CHROME" npx -y lighthouse@12 "$URL/" --quiet --chrome-flags="--headless=new --no-sandbox" \
             --only-categories=performance,accessibility,best-practices,seo --output=json --output-path=/tmp/shots/lighthouse.json
           python3 - <<'EOF2'
           import json
           r = json.load(open("/tmp/shots/lighthouse.json"))
           sc = {k: round(v["score"] * 100) for k, v in r["categories"].items() if v.get("score") is not None}
-          print("::notice title=Lighthouse::" + ", ".join(f"{k}: {v}" for k, v in sc.items()))
+          print("::notice title=Lighthouse ${{ inputs.target }}::" + ", ".join(f"{k}: {v}" for k, v in sc.items()))
           EOF2
       - name: Логи сервиса
         if: always() && inputs.target == 'local'

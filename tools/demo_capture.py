@@ -248,7 +248,8 @@ async def video(b):
 
 async def main():
     async with async_playwright() as p:
-        b = await p.chromium.launch()
+        # PW_CHANNEL=chrome — Google Chrome с образа раннера (без скачивания браузера)
+        b = await p.chromium.launch(channel=os.environ.get("PW_CHANNEL") or None)
         await shots(b)
         if VIDEO:
             await video(b)
