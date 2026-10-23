@@ -160,6 +160,12 @@ async def shots(b):
         await asyncio.sleep(0.5)
         await pg.screenshot(path=OUT / "14_calendar.png")
 
+    async def s_forecasts():
+        await pg.click(".nav-item[data-view=forecasts]")
+        await pg.wait_for_selector("#forecastsBox .fc-card", timeout=20000)
+        await asyncio.sleep(0.5)
+        await pg.screenshot(path=OUT / "15_forecasts.png")
+
     async def s_bank():
         for key, shot in (("accounts", None), ("credits", "11_bank_credits.png"), ("ved", None), ("salary", None)):
             await pg.click(f".nav-item[data-bank={key}]")
@@ -176,7 +182,7 @@ async def shots(b):
         await pg.keyboard.press("Escape")
 
     for name, fn in [("вход", s_login), ("главная", s_home), ("лента и разбор", s_insight), ("сценарии", s_scen),
-                     ("чат", s_chat), ("трассировка", s_trace), ("мои действия", s_tasks), ("календарь", s_calendar), ("дайджест", s_digest), ("качество и бюджет", s_quality),
+                     ("чат", s_chat), ("трассировка", s_trace), ("мои действия", s_tasks), ("календарь", s_calendar), ("прогнозы банка", s_forecasts), ("дайджест", s_digest), ("качество и бюджет", s_quality),
                      ("разделы банка", s_bank), ("уведомления", s_bell)]:
         await step(name, fn())
     await ctx.close()
