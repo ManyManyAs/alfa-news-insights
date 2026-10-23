@@ -144,8 +144,24 @@ async def shots(b):
         await asyncio.sleep(2)
         await pg.screenshot(path=OUT / "08_quality.png")
 
+    async def s_bank():
+        for key, shot in (("accounts", None), ("credits", "11_bank_credits.png"), ("ved", None), ("salary", None)):
+            await pg.click(f".nav-item[data-bank={key}]")
+            await pg.wait_for_selector("#bankBox .bk-hero", timeout=30000)
+            await asyncio.sleep(1)
+            if shot:
+                await pg.screenshot(path=OUT / shot)
+
+    async def s_bell():
+        await pg.click("#bellBtn")
+        await pg.wait_for_selector("#bellPop:not([hidden])", timeout=10000)
+        await asyncio.sleep(0.5)
+        await pg.screenshot(path=OUT / "12_notifications.png")
+        await pg.keyboard.press("Escape")
+
     for name, fn in [("вход", s_login), ("главная", s_home), ("лента и разбор", s_insight), ("сценарии", s_scen),
-                     ("чат", s_chat), ("трассировка", s_trace), ("дайджест", s_digest), ("качество и бюджет", s_quality)]:
+                     ("чат", s_chat), ("трассировка", s_trace), ("дайджест", s_digest), ("качество и бюджет", s_quality),
+                     ("разделы банка", s_bank), ("уведомления", s_bell)]:
         await step(name, fn())
     await ctx.close()
 
