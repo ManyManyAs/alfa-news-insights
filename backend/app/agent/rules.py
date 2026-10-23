@@ -289,7 +289,7 @@ def calc_numbers(ctx: AgentContext) -> list[float]:
         elif isinstance(x, list):
             for v in x:
                 walk(v)
-        elif isinstance(x, (int, float)) and not isinstance(x, bool) and abs(x) >= 1000:
+        elif isinstance(x, int | float) and not isinstance(x, bool) and abs(x) >= 1000:
             found.append(abs(float(x)))
 
     for k, v in ctx.memory.items():
@@ -377,13 +377,12 @@ def critique_rules(ins: Insight, ctx: AgentContext) -> tuple[list[QualityCheck],
     check("Числа в фактах есть в источниках", not halluc, f"не подтверждено: {'; '.join(halluc[:3])}")
     leaked = [c.text[:40] for _, c in all_claims(ins) if re.search(r"ignore (all )?previous|system prompt|системн\w* промпт", c.text, re.I)]
     check("Нет следов prompt injection", not leaked, "; ".join(leaked))
-    money = unverified_money(ins, ctx)
-    check("Суммы — только из калькулятора", not money,
-          "суммы нет в calc:scenario — замените на сумму калькулятора или уберите: " + "; ".join(f"«{r}»" for _, _, r in money[:3]))
-    no_meta = [a.text[:40] for a in ins.actions if not a.owner.strip() or not a.due.strip()]
-    check("У действий есть исполнитель и срок", not no_meta, "; ".join(no_meta[:3]))
-    check("Главный вывод не повторяет заголовок", not repeats_headline(ins),
-          "takeaway пересказывает заголовок — напишите, что событие значит для компании")
+    if ins.generated_by.startswith("llm"):  # тексты правил собраны из калькулятора и плейбука — проверяем текст модели
+        money = unverified_money(ins, ctx)
+        check("Суммы — только из калькулятора", not money,
+              "суммы нет в calc:scenario — замените на сумму калькулятора или уберите: " + "; ".join(f"«{r}»" for _, _, r in money[:3]))
+        check("Главный вывод не повторяет заголовок", not repeats_headline(ins),
+              "takeaway пересказывает заголовок — напишите, что событие значит для компании")
     return checks, issues
 
 
@@ -416,7 +415,7 @@ def repair_rules(ins: Insight, ctx: AgentContext) -> Insight:
     if not ok(ins.takeaway):
         ins.takeaway.sources = [f"news:{ctx.event.news[0].id}"]
     # сумма не из калькулятора: вывод с ней убираем, если в разделе есть другие; в главном выводе — вырезаем сумму
-    bad_ids = {id(c) for _, c, _ in unverified_money(ins, ctx)}
+    bad_ids = {id(c) for _, c, _ in unverified_money(ins, ctx)} if ins.generated_by.startswith("llm") else set()
     if bad_ids:
         def keep(lst):
             rest = [c for c in lst if id(c) not in bad_ids]

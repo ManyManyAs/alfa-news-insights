@@ -157,6 +157,8 @@ def _context_for_llm(ctx: AgentContext) -> str:
     mem["today"] = datetime.now(MSK).date().isoformat()
     mem["allowed_sources"] = allowed_sources(ctx)
     mem["calc_baseline_forecasts"] = baseline_forecasts(mem)
+    if extra := brief_theses(mem):  # тезисы, на которые ссылается общий разбор события, — с текстом
+        mem["brief_bank_theses"] = extra
     return "<context>\n" + json.dumps(mem, ensure_ascii=False, default=str)[:24000] + "\n</context>"
 
 
@@ -175,6 +177,15 @@ def baseline_forecasts(mem: dict) -> list[dict]:
         if f:
             out.append({k: f.get(k) for k in ("ref", "title", "period", "value", "unit", "text", "date")})
     return out
+
+
+def brief_theses(mem: dict) -> list[dict]:
+    """Тезисы банка из сверки общего разбора события (bank_alignment), которых нет среди найденных агентом."""
+    have = {t["id"] for k, v in mem.items() if k.startswith("get_bank_theses") for t in v.get("theses", [])}
+    ids = [a.get("thesis_id") for a in (mem.get("get_event_brief") or {}).get("bank_alignment", [])]
+    by_id = {t["id"]: t for t in get_knowledge().theses}
+    return [{"ref": f"bank:{i}", **{k: by_id[i].get(k) for k in ("thesis", "type", "factor", "direction", "horizon", "quote")}}
+            for i in dict.fromkeys(ids) if i and i not in have and i in by_id]
 
 
 def allowed_sources(ctx: AgentContext) -> list[str]:
@@ -200,6 +211,7 @@ def allowed_sources(ctx: AgentContext) -> list[str]:
 
     ids += [r for r in bank_baseline()["refs"].values() if r]
     ids += [f"profile:{p}" for p in ctx.profile.products] + [f"profile:OKVED={ctx.profile.okved[:2]}"]
+    ids += [t["ref"] for t in brief_theses(ctx.memory)]
     return list(dict.fromkeys(ids))
 
 
