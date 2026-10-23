@@ -71,12 +71,13 @@ def test_scenarios_carry_company_sensitivity():
     from app.bootstrap import load_demo_users
     from app.data.profiles import get_profile
 
+    rates = []
     for u in load_demo_users():
         p = get_profile(u["primary_company"])
         sc = scenarios(p, ["key_rate"])
         sens = sc[0]["sensitivity"]
         assert sc[0]["version"] == CALC_VERSION and all(s["sensitivity"] == sens for s in sc)
         assert all(x["lever"] in ("rate", "fx", "wages") and abs(x["effect_rub"]) >= 1000 for x in sens)
-        if ("CL_PRODUCT_LOA_MARK" in p.products or "CL_PRODUCT_LEA_MARK" in p.products) and p.revenue and not p.revenue_suspicious:
-            rate = next(x for x in sens if x["lever"] == "rate")
-            assert rate["effect_rub"] < 0 and rate["event_lever"]  # ставка выше прогноза — расходы по долгу растут
+        rates += [x for x in sens if x["lever"] == "rate"]
+    # у компаний с кредитом ставка выше прогноза — это рост расходов по долгу; событие о ставке двигает этот рычаг
+    assert rates and all(x["effect_rub"] < 0 and x["event_lever"] for x in rates)
