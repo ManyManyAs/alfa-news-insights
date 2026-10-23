@@ -80,8 +80,8 @@ jobs:
           V=/tmp/shots/video/tour.webm
           [ -f "$V" ] || { echo "Видео не записалось"; exit 0; }
           ffmpeg -y -loglevel error -i "$V" -c:v libx264 -preset slow -crf 30 -pix_fmt yuv420p -movflags +faststart /tmp/shots/tour.mp4
-          # gif для README: ускорение ×2, 6 кадров/с, 800 px
-          ffmpeg -y -loglevel error -i "$V" -vf "setpts=0.5*PTS,fps=6,scale=800:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=96[p];[b][p]paletteuse=dither=bayer" /tmp/shots/scenario.gif
+          # gif для README: ускорение ×3, 4 кадра/с, 720 px, палитра 64 цвета — укладывается в несколько МБ
+          ffmpeg -y -loglevel error -i "$V" -vf "setpts=PTS/3,fps=4,scale=720:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=64:stats_mode=diff[p];[b][p]paletteuse=dither=none:diff_mode=rectangle" /tmp/shots/scenario.gif
           ls -la /tmp/shots
       - name: Логи сервиса
         if: always() && inputs.target == 'local'
