@@ -163,6 +163,10 @@ async def shots(b):
     async def s_forecasts():
         await pg.click(".nav-item[data-view=forecasts]")
         await pg.wait_for_selector("#forecastsBox .fc-card", timeout=20000)
+        # карточки не вылезают за края: ширина содержимого не больше ширины карточки
+        over = await pg.evaluate("() => [...document.querySelectorAll('#forecastsBox .fc-card')].filter((c) => c.scrollWidth > c.clientWidth + 1).length")
+        if over:
+            raise AssertionError(f"текст вылезает из карточек прогнозов: {over}")
         await asyncio.sleep(0.5)
         await pg.screenshot(path=OUT / "15_forecasts.png")
 
