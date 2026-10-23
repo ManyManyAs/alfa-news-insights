@@ -90,17 +90,16 @@ jobs:
           ffmpeg -y -loglevel error -i "$V" -vf "setpts=PTS/3,fps=4,scale=720:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=64:stats_mode=diff[p];[b][p]paletteuse=dither=none:diff_mode=rectangle" /tmp/shots/scenario.gif
           ls -la /tmp/shots
       - name: Lighthouse (страница входа)
-        if: inputs.target == 'local'
         continue-on-error: true
         run: |
           CHROME="$(python -c 'from playwright.sync_api import sync_playwright as s; p=s().start(); print(p.chromium.executable_path); p.stop()')"
-          CHROME_PATH="$CHROME" npx -y lighthouse@12 http://localhost:8000/ --quiet --chrome-flags="--headless=new --no-sandbox" \
+          CHROME_PATH="$CHROME" npx -y lighthouse@12 "$URL/" --quiet --chrome-flags="--headless=new --no-sandbox" \
             --only-categories=performance,accessibility,best-practices,seo --output=json --output-path=/tmp/shots/lighthouse.json
           python3 - <<'EOF2'
           import json
           r = json.load(open("/tmp/shots/lighthouse.json"))
           sc = {k: round(v["score"] * 100) for k, v in r["categories"].items() if v.get("score") is not None}
-          print("::notice title=Lighthouse::" + ", ".join(f"{k}: {v}" for k, v in sc.items()))
+          print("::notice title=Lighthouse ${{ inputs.target }}::" + ", ".join(f"{k}: {v}" for k, v in sc.items()))
           EOF2
       - name: Логи сервиса
         if: always() && inputs.target == 'local'

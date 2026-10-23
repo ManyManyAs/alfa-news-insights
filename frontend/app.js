@@ -170,7 +170,8 @@ async function init() {
 function showLogin() {
   $("#loginView").hidden = false;
   document.body.classList.add("logged-out");
-  initLoginGlobe();
+  // глобус на обложке — после первой отрисовки формы входа: он декоративный и не должен задерживать страницу
+  (window.requestIdleCallback || ((f) => setTimeout(f, 300)))(initLoginGlobe, { timeout: 1200 });
   $("#demoPassHint").textContent = state.demoPass ? `· пароль для всех: ${state.demoPass}` : "";
   $("#demoList").innerHTML = state.users.map((u) => `<button type="button" class="demo-acc" data-login="${esc(u.user_id)}">
     <b>${esc(u.label)}</b><span class="muted small">${esc(state.roles[u.role] || "")} · логин ${esc(u.user_id)}</span></button>`).join("");

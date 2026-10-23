@@ -119,6 +119,9 @@ async def security_headers(request: Request, call_next):
     resp.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
     if request.url.path.startswith("/api/"):
         resp.headers.setdefault("Cache-Control", "no-store")
+    elif request.url.path.startswith("/static/") and request.query_params.get("v"):
+        # версия файла — хэш содержимого (подставляется в index.html): такой адрес никогда не меняет содержимое
+        resp.headers.setdefault("Cache-Control", "public, max-age=31536000, immutable")
     return resp
 
 
