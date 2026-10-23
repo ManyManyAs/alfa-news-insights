@@ -256,7 +256,7 @@ function show(view, sub) {
   document.querySelectorAll(".nav-item[data-view]").forEach((n) => n.classList.toggle("active", n.dataset.view === view
     && (view !== "bank" || n.dataset.bank === (sub || state.bank || "accounts"))));
   if (view === "bank") openBank(sub || state.bank || "accounts");
-  if (view === "metrics") loadMetrics();
+  if (view === "metrics") { loadMetrics(); renderProof($("#proofBox")); }
   if (view === "sources") loadSources();
   if (view === "digest") { loadDigest(); track("digest_view"); }
   if (view === "forecasts") loadForecasts();

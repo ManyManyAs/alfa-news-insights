@@ -947,3 +947,9 @@ body.logged-out .layout, body.logged-out .topbar { display: none; }
 .fc-src { color: var(--muted); }
 .fc-alert ul { margin: 6px 0; padding-left: 18px; }
 .fc-more { margin-top: 18px; } .fc-more summary { cursor: pointer; font-weight: 600; margin-bottom: 10px; }
+/* «Как мы проверяли» */
+.proof { margin-bottom: 20px; }
+.pf-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; margin-top: 12px; }
+.pf-card { background: var(--soft); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 4px; }
+.pf-card b { font-size: 26px; color: var(--red-ink); }
+.pf-t { font-weight: 650; }
