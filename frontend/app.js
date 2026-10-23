@@ -163,6 +163,7 @@ async function init() {
   addEventListener("popstate", () => { if (document.body.classList.contains("m-detail")) closeDetail(false); });
   document.querySelectorAll("[data-view]").forEach((el) => el.onclick = () => show(el.dataset.view, el.dataset.bank));
   document.querySelectorAll("[data-goto]").forEach((el) => el.onclick = () => show(el.dataset.goto));
+  document.querySelectorAll("[data-strip]").forEach((el) => el.onclick = () => show(el.dataset.strip));
   $("#analyzeBtn").onclick = () => $("#analyzeDialog").showModal();
   bindFeedControls();
   $("#showHidden").onclick = () => { state.showHidden = !state.showHidden; loadFeed(); };
@@ -324,8 +325,40 @@ async function reload() {
   loadMoney();
   loadTaskCount();
   updateRevBadge();
+  loadNextDate();
   if ($("#view-digest").classList.contains("active")) loadDigest();
   if ($("#view-tasks").classList.contains("active")) loadTasks();
+}
+
+// ---------------------------------------------------------------- «Дела по радару»: счётчики на главной, как сводка в интернет-банке
+function setStrip(id, v) { const el = document.getElementById(id); if (el) el.textContent = v; }
+function renderStrip() {
+  const read = readSet();
+  const risks = (state.feed || []).filter((i) => i.effect === "risk" && !read.has(i.event_id)).length;
+  setStrip("stripRisks", state.feed ? String(risks) : "—");
+  if (state.tasks) {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const open = state.tasks.filter((t) => t.status === "open");
+    const late = open.filter((t) => { const d = /\d{1,2}\.\d{1,2}/.test(t.due || "") ? dueDate(t.due) : null; return d && d < today; }).length;
+    setStrip("stripTasks", String(open.length));
+    setStrip("stripTasksSub", late ? `открытых, ${late} ${plural(late, "просрочено", "просрочено", "просрочено")}` : `${plural(open.length, "открытое действие", "открытых действия", "открытых действий")}`);
+  }
+  if (state.freshRevs) setStrip("stripRevs", String(state.freshRevs.length));
+  const tile = (k) => document.querySelector(`[data-strip=${k}]`);
+  if (tile("radar")) tile("radar").classList.toggle("alert", risks > 0);
+}
+async function loadNextDate() {
+  try {
+    const c = await api(`/api/calendar?${q({ company_id: state.company })}`);
+    const items = [...c.items];
+    (state.feed || []).filter((it) => it.effective && it.effective.date >= c.today).forEach((it) => items.push({ date: it.effective.date, kind: "norm", title: it.title }));
+    items.sort((a, b) => a.date.localeCompare(b.date));
+    const x = items[0];
+    if (!x) { setStrip("stripDate", "нет"); setStrip("stripDateSub", "ключевых дат в ближайшие месяцы"); return; }
+    const n = Math.round((new Date(x.date) - new Date(c.today)) / 864e5);
+    setStrip("stripDate", new Date(x.date).toLocaleDateString("ru-RU", { day: "numeric", month: "long" }));
+    setStrip("stripDateSub", `${x.kind === "cbr" ? "заседание ЦБ по ставке" : "вступает в силу норма"} · ${n === 0 ? "сегодня" : `через ${n} ${plural(n, "день", "дня", "дней")}`}`);
+  } catch (e) { setStrip("stripDateSub", "календарь недоступен"); }
 }
 
 // ---------------------------------------------------------------- позиция банка (макропрогноз)
@@ -711,6 +744,7 @@ function updateBadge() {
   const nr = (state.freshRevs || []).length, total = n + nr;
   if (bn) { bn.hidden = !total; bn.textContent = total > 9 ? "9+" : String(total || ""); $("#bellBtn").title = total ? [t, nr ? `новых пересмотров прогноза банка: ${nr}` : ""].filter(Boolean).join("; ") : "Новых уведомлений нет"; }
   if (!$("#bellPop").hidden) renderBell();
+  renderStrip();
 }
 // Колокольчик: непрочитанные риски списком; открыть событие или прочитать все — число уменьшается
 function renderBell() {
@@ -1252,6 +1286,7 @@ async function loadTaskCount() {
     state.tasks = tasks;
     const n = tasks.filter((t) => t.status === "open").length, b = $("#tasksBadge");
     b.hidden = !n; b.textContent = String(n || "");
+    renderStrip();
   } catch (e) { /* не критично */ }
 }
 async function loadTasks() {

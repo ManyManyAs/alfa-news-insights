@@ -112,6 +112,13 @@
           <div class="ticker" id="ticker" aria-label="Макропрогноз Альфа-Банка"><div class="ticker-track" id="tickerTrack"></div></div>
         </div>
 
+        <nav class="home-strip" id="homeStrip" aria-label="Дела по радару">
+          <button class="hs-tile" data-strip="radar"><span class="hs-ico risk"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17v.5"/></svg></span><span class="hs-txt"><b id="stripRisks">—</b><span>новых рисков в ленте</span></span></button>
+          <button class="hs-tile" data-strip="tasks"><span class="hs-ico task"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"/><path d="m3.5 6 1.5 1.5L7.5 5M3.5 12l1.5 1.5L7.5 11M3.5 18l1.5 1.5L7.5 17"/></svg></span><span class="hs-txt"><b id="stripTasks">—</b><span id="stripTasksSub">открытых действий</span></span></button>
+          <button class="hs-tile" data-strip="calendar"><span class="hs-ico cal"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></span><span class="hs-txt"><b id="stripDate">—</b><span id="stripDateSub">ближайшая дата</span></span></button>
+          <button class="hs-tile" data-strip="forecasts"><span class="hs-ico fc"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20h18M5 16l4-4 3 2 6-7"/><path d="M15 7h3v3"/></svg></span><span class="hs-txt"><b id="stripRevs">—</b><span>пересмотров прогноза банка</span></span></button>
+        </nav>
+
         <div class="home-grid">
           <div class="home-col">
           <div class="card focus-card" id="focusCard" aria-live="polite"><div class="skeleton"></div></div>
