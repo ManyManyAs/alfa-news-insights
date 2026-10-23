@@ -55,7 +55,7 @@ jobs:
         run: |
           rm -f .env
           docker compose up -d --build
-          for i in $(seq 1 60); do
+          for _ in $(seq 1 60); do
             curl -sf http://localhost:8000/api/health >/dev/null && break
             sleep 5
           done
@@ -69,6 +69,7 @@ jobs:
           if [ "${{ inputs.video }}" = "true" ] && [ "${{ inputs.target }}" = "stand" ]; then ARGS="$ARGS --video"; fi
           mkdir -p /tmp/shots
           set +e
+          # shellcheck disable=SC2086  # ARGS — список флагов, разбиение на слова нужно
           python tools/demo_capture.py "$URL" /tmp/shots $ARGS | tee /tmp/shots/capture.log
           RC="${PIPESTATUS[0]}"
           { echo "### Съёмка: ${{ inputs.target }}"; echo '```'; cat /tmp/shots/capture.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
