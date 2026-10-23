@@ -996,6 +996,29 @@ def fmt_pct(v) -> str:
     return f"{float(v):.1f}".replace(".", ",").replace(",0", "") + "%"
 
 
+@app.get("/api/proof")
+def proof():
+    """«Как мы проверяли»: сводка независимых проверок из отчётов в репозитории (судьи, red-team, офлайн-метрики)."""
+    def read(rel: str) -> dict:
+        try:
+            return json.loads((REPO_ROOT / rel).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+
+    judges, red, base = read("docs/llm/judges.json"), read("docs/llm/redteam_live.json"), read("docs/quality/baseline.json")
+    ov = (judges.get("agreement") or {}).get("overall") or {}
+    rows = red.get("results") or []
+    return {
+        "judges": {"glm": ov.get("glm"), "kimi": ov.get("kimi"), "n": (judges.get("agreement") or {}).get("n"),
+                   "run_at": (judges.get("run_at") or "")[:10]},
+        "redteam": {"passed": sum(1 for r in rows if r.get("passed")), "total": len(rows), "run_at": (red.get("run_at") or "")[:10]},
+        "offline": {"p3": (base.get("relevance") or {}).get("p3"), "recall5": base.get("retrieval_recall5"),
+                    "f1": (base.get("classification") or {}).get("f1"),
+                    "critical10": (base.get("relevance") or {}).get("critical_recall10")},
+        "repo": "https://github.com/ManyManyAs/alfa-news-insights",
+    }
+
+
 @app.get("/api/bank/forecasts")
 def bank_forecasts():
     """Макропрогноз Альфа-Банка (последние значения + пересмотры) и траектория ключевой ставки."""

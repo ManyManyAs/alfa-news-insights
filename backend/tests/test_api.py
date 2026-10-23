@@ -147,3 +147,10 @@ def test_calendar_within_horizon(client, demo):
     assert c["horizon_days"] == 365 and c["source_url"].startswith("https://www.cbr.ru")
     assert c["items"] and all(c["today"] <= x["date"] <= c["until"] and x["kind"] == "cbr" for x in c["items"])
     assert client.get("/api/calendar?company_id=U_NOBODY", headers=h).status_code in (403, 404)
+
+
+def test_proof_summary(client):
+    """«Как мы проверяли»: цифры из отчётов в репозитории, без входа (это открытые данные проекта)."""
+    p = client.get("/api/proof").json()
+    assert p["offline"]["p3"] and p["repo"].startswith("https://github.com/")
+    assert p["redteam"]["total"] >= p["redteam"]["passed"] >= 0
