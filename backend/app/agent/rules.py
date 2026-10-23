@@ -257,8 +257,87 @@ def valid_source(sid: str, ctx: AgentContext) -> bool:
         return any(n.id == ref for n in ctx.event.news)
     if kind == "bank":
         kb = get_knowledge()
-        return any(c.id == ref for c in kb.chunks)
+        if not any(c.id == ref for c in kb.chunks):
+            return False
+        # материал банка есть в базе, но в контексте агента его не было — читатель и судья не смогут проверить ссылку
+        allowed = ctx.memory.get("_allowed_bank")
+        return allowed is None or sid in allowed
     return kind in ("profile", "graph", "peers") or sid == "calc:scenario"
+
+
+# --- суммы в рублях: только из калькулятора (правило владельца — деньги считает калькулятор, а не модель)
+MONEY_RE = re.compile(r"(?<![\d,.])(\d{1,3}(?:[ \u00a0]\d{3})+|\d+(?:[.,]\d+)?)\s*(млрд|млн|тыс\.?)?\s*(?:₽|руб)", re.I)
+_MULT = {"млрд": 1e9, "млн": 1e6, "тыс": 1e3, "тыс.": 1e3}
+
+
+def money_values(text: str) -> list[tuple[str, float]]:
+    out = []
+    for m in MONEY_RE.finditer(text or ""):
+        num = float(re.sub(r"[ \u00a0]", "", m.group(1)).replace(",", "."))
+        out.append((m.group(0), num * _MULT.get((m.group(2) or "").lower(), 1)))
+    return out
+
+
+def calc_numbers(ctx: AgentContext) -> list[float]:
+    """Все суммы, которые посчитал калькулятор сервиса (эффекты, итоги, оценки долга, импорта, ФОТ)."""
+    found: list[float] = []
+
+    def walk(x) -> None:
+        if isinstance(x, dict):
+            for v in x.values():
+                walk(v)
+        elif isinstance(x, list):
+            for v in x:
+                walk(v)
+        elif isinstance(x, (int, float)) and not isinstance(x, bool) and abs(x) >= 1000:
+            found.append(abs(float(x)))
+
+    for k, v in ctx.memory.items():
+        if k.startswith("scenario_calc"):
+            walk(v)
+    return found
+
+
+def unverified_money(ins: Insight, ctx: AgentContext) -> list[tuple[str, Claim, str]]:
+    """Суммы в выводах, которых нет в расчёте калькулятора (допуск — округление до 2 значащих цифр, 6%)."""
+    nums = calc_numbers(ctx)
+    corpus = " ".join(n.title + " " + n.text for n in ctx.event.news)
+    news_vals = [v for _, v in money_values(corpus)]
+    bad = []
+    for sec, c in all_claims(ins):
+        if c.kind in ("fact", "assumption", "bank_view"):
+            continue  # суммы из новости и материалов банка проверяет правило «числа в фактах»
+        for raw, v in money_values(c.text):
+            if v < 1000:
+                continue
+            if not any(abs(v - n) <= 0.06 * max(n, 1) for n in nums + news_vals):
+                bad.append((sec, c, raw))
+    return bad
+
+
+def _tokens(s: str) -> set[str]:
+    return {w for w in re.findall(r"[а-яёa-z0-9]{4,}", (s or "").lower())}
+
+
+def repeats_headline(ins: Insight) -> bool:
+    a, b = _tokens(ins.headline), _tokens(ins.takeaway.text)
+    return bool(a and b) and len(a & b) / max(1, min(len(a), len(b))) >= 0.6
+
+
+ROLE_OWNER = {"owner": "собственник", "ceo": "гендиректор", "cfo": "финдиректор", "treasurer": "казначей", "accountant": "главбух"}
+
+
+def fill_action_meta(ins: Insight, ctx: AgentContext, today: date | None = None) -> Insight:
+    """У каждого действия — исполнитель и конкретный срок: пустое поле заполняется ролью пользователя и датой через месяц."""
+    from datetime import timedelta
+
+    today = today or datetime.now(UTC).date()
+    for a in ins.actions:
+        if not a.owner.strip():
+            a.owner = ROLE_OWNER.get(ctx.role or "", "финдиректор")
+        if not a.due.strip():
+            a.due = f"до {(today + timedelta(days=30)).strftime('%d.%m.%Y')}"
+    return ins
 
 
 def critique_rules(ins: Insight, ctx: AgentContext) -> tuple[list[QualityCheck], list[str]]:
@@ -298,6 +377,13 @@ def critique_rules(ins: Insight, ctx: AgentContext) -> tuple[list[QualityCheck],
     check("Числа в фактах есть в источниках", not halluc, f"не подтверждено: {'; '.join(halluc[:3])}")
     leaked = [c.text[:40] for _, c in all_claims(ins) if re.search(r"ignore (all )?previous|system prompt|системн\w* промпт", c.text, re.I)]
     check("Нет следов prompt injection", not leaked, "; ".join(leaked))
+    money = unverified_money(ins, ctx)
+    check("Суммы — только из калькулятора", not money,
+          "суммы нет в calc:scenario — замените на сумму калькулятора или уберите: " + "; ".join(f"«{r}»" for _, _, r in money[:3]))
+    no_meta = [a.text[:40] for a in ins.actions if not a.owner.strip() or not a.due.strip()]
+    check("У действий есть исполнитель и срок", not no_meta, "; ".join(no_meta[:3]))
+    check("Главный вывод не повторяет заголовок", not repeats_headline(ins),
+          "takeaway пересказывает заголовок — напишите, что событие значит для компании")
     return checks, issues
 
 
@@ -329,6 +415,22 @@ def repair_rules(ins: Insight, ctx: AgentContext) -> Insight:
         ins.bank_view = [Claim(text=NO_BANK_VIEW, kind="ai_inference", sources=[f"news:{ctx.event.news[0].id}"], confidence="low")]
     if not ok(ins.takeaway):
         ins.takeaway.sources = [f"news:{ctx.event.news[0].id}"]
+    # сумма не из калькулятора: вывод с ней убираем, если в разделе есть другие; в главном выводе — вырезаем сумму
+    bad_ids = {id(c) for _, c, _ in unverified_money(ins, ctx)}
+    if bad_ids:
+        def keep(lst):
+            rest = [c for c in lst if id(c) not in bad_ids]
+            return rest if rest else lst
+        ins.why_it_matters = keep(ins.why_it_matters)
+        ins.consequences.risks = keep(ins.consequences.risks)
+        ins.consequences.opportunities = keep(ins.consequences.opportunities)
+        ins.consequences.drivers = keep(ins.consequences.drivers)
+        ins.actions = keep(ins.actions)
+        ins.what_could_change = keep(ins.what_could_change)
+        if id(ins.takeaway) in bad_ids:
+            for raw, _ in money_values(ins.takeaway.text):
+                ins.takeaway.text = re.sub(r"\s*[(—–-]?\s*" + re.escape(raw) + r"[^.;)]*[);]?", "", ins.takeaway.text).strip()
+    fill_action_meta(ins, ctx)
     return fix_headline(ins, ctx)
 
 

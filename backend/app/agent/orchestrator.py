@@ -14,11 +14,13 @@ import json
 import logging
 import time
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from app.agent import prompts
 from app.agent.humanize import humanize, humanize_insight, humanize_text
 from app.agent.llm_schemas import CriticOut, InsightDraftOut, PlanOut
-from app.agent.rules import critique_rules, draft_rules, fix_headline, repair_rules
+from app.agent.rules import critique_rules, draft_rules, fill_action_meta, fix_headline, repair_rules
 from app.agent.schemas import Insight, SourceRef
 from app.agent.tools import TOOLS, AgentContext, ToolNotAllowed, call_tool
 from app.agent.trace import Tracer
@@ -33,6 +35,7 @@ from app.security.guard import UNTRUSTED_NOTICE, sanitize_untrusted
 from app.storage import db
 
 log = logging.getLogger(__name__)
+MSK = ZoneInfo("Europe/Moscow")
 MAX_ITERATIONS = 2  # черновик + одна правка (решение о правке — decide_revise)
 MANDATORY = ["get_event_brief", "get_company_profile", "get_bank_theses", "scenario_calc"]
 # Ограничители на один запрос: по исчерпании оставшиеся шаги идут без LLM (правила), отказ виден в трассировке.
@@ -151,8 +154,27 @@ def _context_for_llm(ctx: AgentContext) -> str:
                 r["ref"] = f"bank:{r['id']}"
     mem["relevance_reasons"] = ctx.scored.reasons
     mem["role"] = ctx.role
+    mem["today"] = datetime.now(MSK).date().isoformat()
     mem["allowed_sources"] = allowed_sources(ctx)
+    mem["calc_baseline_forecasts"] = baseline_forecasts(mem)
     return "<context>\n" + json.dumps(mem, ensure_ascii=False, default=str)[:24000] + "\n</context>"
+
+
+def baseline_forecasts(mem: dict) -> list[dict]:
+    """Прогнозы банка, на которые опирается база калькулятора: их id есть в allowed_sources — нужен и текст,
+    иначе ссылку на них нельзя проверить (судьи отмечали «такого ref нет в контексте»)."""
+    from app.agent.scenario import bank_baseline
+
+    seen = {f.get("ref") for k, v in mem.items() if k.startswith("get_bank_forecast") for f in v.get("forecasts", [])}
+    kb, out = get_knowledge(), []
+    for ref in dict.fromkeys(r for r in bank_baseline()["refs"].values() if r):
+        if ref in seen or not ref.startswith("bank:fc-"):
+            continue
+        indicator, _, period = ref[len("bank:fc-"):].rpartition("-")
+        f = kb.forecast(indicator, period)
+        if f:
+            out.append({k: f.get(k) for k in ("ref", "title", "period", "value", "unit", "text", "date")})
+    return out
 
 
 def allowed_sources(ctx: AgentContext) -> list[str]:
@@ -344,7 +366,8 @@ def _profile_label(sid: str, p: CompanyProfile) -> str:
 
 def decide_revise(ins: Insight, ctx: AgentContext, issues: list[str], tracer: Tracer) -> bool:
     """Нужна ли правка моделью и хватает ли на неё времени и денег. Решение и причина — в трассировке."""
-    llm_issues = [i for i in issues if i.startswith("LLM-критик")]
+    # суммы не из калькулятора и пересказ заголовка правилами не исправить — нужна правка моделью
+    llm_issues = [i for i in issues if i.startswith(("LLM-критик", "Суммы — только из калькулятора", "Главный вывод не повторяет"))]
     no_bank = any("аналитику банка" in i or "Позиция банка" in i for i in issues)
     elapsed = time.perf_counter() - ctx.memory["_t0"]
     spent = sum(s.get("cost_rub") or 0 for s in tracer.steps)
@@ -412,7 +435,8 @@ def run_agent(event: Event, profile: CompanyProfile, role: str | None = None, li
         p = plan(ctx, tracer)
         execute(ctx, p, tracer)
         pool.shutdown(wait=False)
-        ins = draft(ctx, tracer)
+        ctx.memory["_allowed_bank"] = {s for s in allowed_sources(ctx) if s.startswith("bank:")}
+        ins = fill_action_meta(draft(ctx, tracer), ctx)
         if listener and ins.generated_by.startswith("llm"):
             emit_draft(ins, ctx, tracer)
         iterations = 1
