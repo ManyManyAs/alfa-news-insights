@@ -925,3 +925,14 @@ body.logged-out .layout, body.logged-out .topbar { display: none; }
 .task.late { box-shadow: inset 3px 0 0 var(--risk); }
 .task .bad { color: var(--risk); font-weight: 600; }
 .task .icon-btn.small { width: 30px; height: 28px; font-size: 16px; }
+/* Календарь компании */
+.cal-card { max-width: 900px; }
+.cal-month { margin: 18px 0 6px; font-size: 18px; }
+.cal-month:first-child { margin-top: 0; }
+.cal { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.cal-item { display: grid; grid-template-columns: 56px 1fr; gap: 12px; padding: 10px 8px; border-radius: 12px; }
+.cal-item.link { cursor: pointer; }
+.cal-item.link:hover, .cal-item.link:focus-visible { background: var(--soft); }
+.cal-date { display: flex; flex-direction: column; align-items: center; background: var(--soft2); border-radius: 12px; padding: 6px 0; }
+.cal-date b { font-size: 22px; line-height: 1; } .cal-date span { font-size: 12px; color: var(--muted); }
+.cal-body { display: flex; flex-direction: column; gap: 3px; } .cal-body .pill { align-self: flex-start; }

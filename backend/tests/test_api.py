@@ -140,3 +140,10 @@ def test_tasks_lifecycle(client, demo):
     assert next(x for x in client.get(f"/api/tasks?company_id={cid}", headers=h).json()["tasks"] if x["id"] == t["id"])["status"] == "done"
     assert client.delete(f"/api/tasks/{t['id']}?company_id={cid}", headers=h).status_code == 200
     assert client.delete(f"/api/tasks/{t['id']}?company_id={cid}", headers=h).status_code == 404
+def test_calendar_within_horizon(client, demo):
+    """Календарь: заседания ЦБ из config/calendar.yaml только в горизонте, с прогнозом банка; чужая компания — 403."""
+    h, cid = {"X-User-Id": demo["user_id"]}, demo["primary_company"]
+    c = client.get(f"/api/calendar?company_id={cid}&days=365", headers=h).json()
+    assert c["horizon_days"] == 365 and c["source_url"].startswith("https://www.cbr.ru")
+    assert c["items"] and all(c["today"] <= x["date"] <= c["until"] and x["kind"] == "cbr" for x in c["items"])
+    assert client.get("/api/calendar?company_id=U_NOBODY", headers=h).status_code in (403, 404)
