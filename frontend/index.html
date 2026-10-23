@@ -70,6 +70,7 @@
       <a class="nav-item active" data-view="home"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg><span>Главная</span></a>
       <a class="nav-item" data-view="radar"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><path d="M12 12 18 6"/></svg><span>Бизнес-радар</span><span class="badge" id="navBadge" hidden></span></a>
       <a class="nav-item" data-view="digest"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg><span>Дайджест</span></a>
+      <a class="nav-item" data-view="forecasts"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20h18M5 16l4-4 3 2 6-7"/><path d="M15 7h3v3"/></svg><span>Прогнозы банка</span><span class="badge soft" id="revBadge" hidden title="Пересмотры прогнозов по темам, важным для компании"></span></a>
       <a class="nav-item" data-view="tasks"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"/><path d="m3.5 6 1.5 1.5L7.5 5M3.5 12l1.5 1.5L7.5 11M3.5 18l1.5 1.5L7.5 17"/></svg><span>Мои действия</span><span class="badge soft" id="tasksBadge" hidden></span></a>
       <a class="nav-item" data-view="calendar"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span>Календарь</span></a>
       <div class="nav-sep">Банк</div>
@@ -188,6 +189,12 @@
         <div class="page-head"><div><div class="eyebrow">Ближайшие 90 дней</div><h2>Календарь компании</h2></div></div>
         <p class="muted small">Решения Банка России по ставке, даты вступления в силу норм из ленты и сроки ваших действий — в одном месте.</p>
         <div id="calendarBox"><div class="skeleton"></div></div>
+      </section>
+
+      <section id="view-forecasts" class="view">
+        <div class="page-head"><div><div class="eyebrow">Позиция Альфа-Банка</div><h2>Прогнозы банка для вашей компании</h2></div></div>
+        <p class="muted small">Макропрогноз Альфа-Банка по темам, к которым чувствительна компания, — с историей пересмотров и ссылкой на документ и страницу. Это позиция банка, а не вывод сервиса.</p>
+        <div id="forecastsBox"><div class="skeleton"></div></div>
       </section>
 
       <section id="view-bank" class="view">

@@ -259,6 +259,7 @@ function show(view, sub) {
   if (view === "metrics") loadMetrics();
   if (view === "sources") loadSources();
   if (view === "digest") { loadDigest(); track("digest_view"); }
+  if (view === "forecasts") loadForecasts();
   if (view === "tasks") loadTasks();
   if (view === "calendar") loadCalendar();
   if (view === "home") track("home_view");
@@ -299,6 +300,7 @@ async function reload() {
   await Promise.all([loadProfile(), loadFeed(), state.bankLoaded ? null : loadBank()]);
   loadMoney();
   loadTaskCount();
+  updateRevBadge();
   if ($("#view-digest").classList.contains("active")) loadDigest();
   if ($("#view-tasks").classList.contains("active")) loadTasks();
 }
@@ -1653,4 +1655,56 @@ async function loadCalendar() {
     : `<div class="card"><p class="muted">В ближайшие ${c.horizon_days} дней ключевых дат нет.</p></div>`;
   box.querySelectorAll("[data-cev]").forEach((el) => { const go = () => { show("radar"); openInsight(el.dataset.cev, false, "calendar"); }; el.onclick = go; el.onkeydown = (e) => { if (e.key === "Enter") go(); }; });
   box.querySelectorAll("[data-ctask]").forEach((el) => { const go = () => show("tasks"); el.onclick = go; el.onkeydown = (e) => { if (e.key === "Enter") go(); }; });
+}
+
+// ---------------------------------------------------------------- прогнозы Альфа-Банка по темам компании
+async function bankForecasts() {
+  if (!state.bankFc) { try { state.bankFc = await api("/api/bank/forecasts"); } catch (e) { state.bankFc = { forecasts: [], documents: [] }; } }
+  return state.bankFc;
+}
+function companyFactors() {
+  const ex = (state.exposures || []).filter((e) => e.weight > 0);
+  return new Map(ex.map((e) => [e.factor, e]));
+}
+// Пересмотры прогноза по темам компании — для значка и блока «банк изменил взгляд»
+async function updateRevBadge() {
+  const d = await bankForecasts(), fx = companyFactors();
+  const n = d.forecasts.filter((f) => f.revision && fx.has(f.factor)).length, b = $("#revBadge");
+  if (b) { b.hidden = !n; b.textContent = String(n || ""); }
+}
+function stepChart(f) {
+  const h = f.history || [];
+  if (h.length < 2) return "";
+  const vals = h.map((x) => x.value), lo = Math.min(...vals), hi = Math.max(...vals), W = 220, H = 54, pad = 10;
+  const sx = (i) => pad + i * (W - 2 * pad) / (h.length - 1), sy = (v) => hi === lo ? H / 2 : H - pad - (v - lo) / (hi - lo) * (H - 2 * pad);
+  const pts = h.map((x, i) => `${sx(i)},${sy(x.value)}`).join(" ");
+  return `<svg viewBox="0 0 ${W} ${H}" class="fc-spark" role="img" aria-label="История прогноза: ${h.map((x) => fmtVal(x.value, f.unit) + " (" + fmtDate(x.date) + ")").join(", ")}">
+    <polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2"/>
+    ${h.map((x, i) => `<circle cx="${sx(i)}" cy="${sy(x.value)}" r="3" fill="var(--accent)"><title>${fmtDate(x.date)}: ${fmtVal(x.value, f.unit)}</title></circle>`).join("")}</svg>`;
+}
+async function loadForecasts() {
+  const box = $("#forecastsBox");
+  box.innerHTML = `<div class="skeleton"></div>`;
+  const d = await bankForecasts(), fx = companyFactors();
+  const docs = Object.fromEntries((d.documents || []).map((x) => [x.doc_id, x]));
+  const rel = d.forecasts.filter((f) => fx.has(f.factor) && f.period >= "2026");
+  const other = d.forecasts.filter((f) => !fx.has(f.factor) && f.period >= "2026");
+  const card = (f) => {
+    const r = f.revision, doc = docs[f.doc_id] || {}, e = fx.get(f.factor);
+    return `<div class="fc-card ${r ? "rev" : ""}">
+      <div class="fc-top"><span>${esc(f.title)}, ${esc(f.period)}</span><b>${fmtVal(f.value, f.unit)}</b></div>
+      ${r ? `<div class="rev ${r.direction}">${r.direction === "up" ? "▲ повысил" : "▼ понизил"} с ${fmtVal(r.from, f.unit)} (${fmtDate(r.from_date)}) до ${fmtVal(r.to, f.unit)} (${fmtDate(r.to_date)})</div>` : ""}
+      ${stepChart(f)}
+      ${e ? `<div class="muted small">Касается вас: ${esc((e.reasons && e.reasons[0] && (e.reasons[0].why || e.reasons[0])) || e.title)}</div>` : ""}
+      <div class="fc-src small">📄 ${esc(doc.title || f.doc_id)}${f.page ? `, стр. ${f.page}` : ""} · ${fmtDate(f.date)}</div></div>`;
+  };
+  const revs = rel.filter((f) => f.revision);
+  box.innerHTML = `
+    ${revs.length ? `<div class="card fc-alert"><div class="eyebrow">Банк изменил взгляд</div><h3>${revs.length} ${plural(revs.length, "пересмотр", "пересмотра", "пересмотров")} прогноза по темам вашей компании</h3>
+      <ul>${revs.map((f) => `<li><b>${esc(f.title)}, ${esc(f.period)}</b>: ${fmtVal(f.revision.from, f.unit)} → ${fmtVal(f.revision.to, f.unit)}</li>`).join("")}</ul>
+      <p class="muted small">Сценарии в разборах строятся от последнего прогноза банка: «база» — это он.</p></div>` : ""}
+    <h3 class="fc-h">Темы, к которым чувствительна компания</h3>
+    <div class="fc-grid">${rel.map(card).join("") || `<p class="muted">Нет прогнозов банка по темам компании.</p>`}</div>
+    <details class="fc-more"><summary>Остальные прогнозы банка (${other.length})</summary><div class="fc-grid">${other.map(card).join("")}</div></details>
+    <p class="muted small">${d.theses_count} тезисов и ${d.forecasts.length} прогнозов из ${(d.documents || []).length} аналитических материалов Альфа-Банка.</p>`;
 }
