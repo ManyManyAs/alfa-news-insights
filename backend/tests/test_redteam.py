@@ -99,6 +99,8 @@ def test_chat_output_guard_redacts():
     # короткий чужой идентификатор тоже скрывается; свой заменяется словами (живой red-team, атака C3)
     out = guard_output("Про U_1 нет данных, ваши данные — U_777", {"U_777"}, "ваша компания")
     assert "U_1" not in out and "U_777" not in out and "ваша компания" in out
+    # «о компании U_777» — без «о компании ваша компания»
+    assert guard_output("Контекст есть только о компании `U_777`.", {"U_777"}, "ваша компания") == "Контекст есть только о компании."
 
 
 def test_bank_view_cites_only_bank_materials(client, demo):

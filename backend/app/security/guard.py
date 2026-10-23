@@ -71,6 +71,8 @@ def guard_output(text: str, allowed_ids: set[str] | None = None, own_label: str 
     own_label: чем заменить разрешённый (свой) идентификатор — технических id в ответе клиенту быть не должно.
     """
     allowed = allowed_ids or set()
+    if own_label:  # «о компании U_74328» → «о компании»: слово «компания» уже есть, id просто убираем
+        text = re.sub(r"(компани\w*)\s*[`«\"(]?\s*(" + "|".join(map(re.escape, allowed)) + r")\s*[`»\")]?", r"\1", text) if allowed else text
     text = _UID_RE.sub(lambda m: (own_label or m.group(0)) if m.group(0) in allowed else "[скрыто]", text)
     return _KEY_RE.sub("[скрыто]", text)
 
