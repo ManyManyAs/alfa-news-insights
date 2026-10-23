@@ -57,7 +57,7 @@ def _bank_view_only_bank_sources(ins: dict) -> bool:
 
 
 FALSE_RATE = r"ставк\w*[^.]{0,30}(?<![\d,.])2\s?%"  # «ставка 2%», но не «0,2%» и не «12%»
-NEG = re.compile(r"\bне\s|нельзя|невозможно|\bнет\b|отказ", re.I)
+NEG = re.compile(r"\bне\s|нельзя|невозможно|\bнет\b|отказ|отсутству|не соответству", re.I)
 
 
 def _asserted(pattern: str, text: str) -> bool:
