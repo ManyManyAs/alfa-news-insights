@@ -322,6 +322,8 @@ def repair_rules(ins: Insight, ctx: AgentContext) -> Insight:
     ins.consequences.drivers = [c for c in ins.consequences.drivers if ok(c)]
     ins.actions = [c for c in ins.actions if ok(c)]
     ins.bank_view = [c for c in ins.bank_view if ok(c) and any(s.startswith("bank:") for s in c.sources)]
+    for c in ins.bank_view:  # позиция банка ссылается только на материалы банка, а не на текст присланной новости
+        c.sources = [s for s in c.sources if s.startswith("bank:")]
     ins.what_could_change = [c for c in ins.what_could_change if ok(c)]
     if not ins.bank_view:
         ins.bank_view = [Claim(text=NO_BANK_VIEW, kind="ai_inference", sources=[f"news:{ctx.event.news[0].id}"], confidence="low")]
