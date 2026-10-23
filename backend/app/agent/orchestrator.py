@@ -369,6 +369,22 @@ def decide_revise(ins: Insight, ctx: AgentContext, issues: list[str], tracer: Tr
     return verdict
 
 
+def emit_draft(ins: Insight, ctx: AgentContext, tracer: Tracer) -> None:
+    """Черновик модели — пользователю сразу (≈20 с), пока критик и правка работают: разбор читается, а не ждётся.
+
+    Отдаётся копия с проверками правилами и источниками; итоговый разбор после критика приходит событием done.
+    """
+    try:
+        d = fix_headline(ins.model_copy(deep=True), ctx)
+        d.quality, _ = critique_rules(d, ctx)
+        d.sources = build_sources(d, ctx)
+        d.trace_id = tracer.trace_id
+        d.relevance = {"score": ctx.scored.score, "reasons": ctx.scored.reasons}
+        tracer._emit({"type": "draft", "insight": humanize_insight(ensure_scenarios(d)).model_dump()})
+    except Exception:  # черновик — удобство, он не должен ломать разбор
+        log.exception("Не удалось отдать черновик разбора")
+
+
 def run_agent(event: Event, profile: CompanyProfile, role: str | None = None, listener=None) -> Insight:
     tracer = Tracer(listener=listener)
     exposures = compute_exposures(profile, role)
@@ -397,6 +413,8 @@ def run_agent(event: Event, profile: CompanyProfile, role: str | None = None, li
         execute(ctx, p, tracer)
         pool.shutdown(wait=False)
         ins = draft(ctx, tracer)
+        if listener and ins.generated_by.startswith("llm"):
+            emit_draft(ins, ctx, tracer)
         iterations = 1
         issues = critique(ins, ctx, tracer, 1)
         if issues:

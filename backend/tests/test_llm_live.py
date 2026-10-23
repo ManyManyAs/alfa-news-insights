@@ -129,6 +129,10 @@ def test_sse_streams_agent_steps_and_chat(live):
             events = [json.loads(line[5:]) for line in r.iter_lines() if line.startswith("data:")]
         types = [e["type"] for e in events]
         assert "step_start" in types and "step_end" in types and types[-1] == "done"
+        # черновик модели приходит до итогового разбора — его можно читать, пока работают критик и правка
+        assert "draft" in types and types.index("draft") < types.index("done")
+        draft = events[types.index("draft")]["insight"]
+        assert draft["headline"] and draft["generated_by"].startswith("llm:") and draft["sources"]
         assert events[-1]["insight"]["generated_by"].startswith("llm:")
         with c.stream("POST", "/api/chat/stream", headers=h,
                       json={"event_id": ev.id, "company_id": p.uid, "role": "owner", "question": "Что говорит банк?"}) as r:

@@ -14,7 +14,7 @@ from app.config import REPO_ROOT
 from app.storage import db
 
 ALLOWED = {
-    "home_view", "widget_click", "feed_view", "card_open", "preview_ready", "insight_ready", "source_click",
+    "home_view", "widget_click", "feed_view", "card_open", "preview_ready", "draft_ready", "insight_ready", "source_click",
     "action_open", "chat_question", "whatif_open", "digest_view", "tour_start", "tour_finish", "map_hover",
     "detail_open", "detail_close",
     "js_error",  # ошибка в браузере: только текст ошибки и файл:строка, без данных пользователя
@@ -100,6 +100,7 @@ def product_metrics(days: int = 7) -> dict:
         "feedback": {"pos": fb["pos"], "neg": fb["neg"], "neg_reasons": reasons},
         "actions": actions,
         "speed_ms": {"preview_p50": _pct(preview, 50), "preview_p95": _pct(preview, 95),
+                     "draft_p50": _pct(vals("draft_ready"), 50), "draft_p95": _pct(vals("draft_ready"), 95),
                      "full_fresh_p50": _pct(full_fresh, 50), "full_fresh_p95": _pct(full_fresh, 95),
                      "full_cached_p50": _pct(vals("insight_ready", cached=True), 50)},
     }

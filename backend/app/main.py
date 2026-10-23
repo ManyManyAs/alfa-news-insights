@@ -102,7 +102,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Alfa News Insights", version="0.1.0", lifespan=lifespan,
-              description="Персонализированная новостная аналитика для клиентов КИБ (прототип хакатона).")
+              description="Персонализированная новостная аналитика для клиентов Альфа-Бизнеса.")
 
 # Заголовки безопасности: скрипты и стили только свои (без inline-скриптов), страница не встраивается в чужие фреймы
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "

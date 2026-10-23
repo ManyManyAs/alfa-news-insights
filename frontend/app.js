@@ -143,7 +143,7 @@ async function init() {
   $("#ctxBtn").onclick = () => { const open = !document.querySelector(".topbar").classList.contains("ctx-open"); document.querySelector(".topbar").classList.toggle("ctx-open", open); $("#ctxBtn").setAttribute("aria-expanded", String(open)); };
   $("#backToFeed").onclick = () => closeDetail(true);
   addEventListener("popstate", () => { if (document.body.classList.contains("m-detail")) closeDetail(false); });
-  document.querySelectorAll("[data-view]").forEach((el) => el.onclick = () => show(el.dataset.view));
+  document.querySelectorAll("[data-view]").forEach((el) => el.onclick = () => show(el.dataset.view, el.dataset.bank));
   document.querySelectorAll("[data-goto]").forEach((el) => el.onclick = () => show(el.dataset.goto));
   $("#analyzeBtn").onclick = () => $("#analyzeDialog").showModal();
   bindFeedControls();
@@ -157,7 +157,11 @@ async function init() {
     loadDigest();
   });
   document.querySelectorAll(".nav-item[data-view]").forEach((el) => { el.tabIndex = 0; el.setAttribute("role", "link");
-    el.onkeydown = (e) => { if (e.key === "Enter") show(el.dataset.view); }; });
+    el.onkeydown = (e) => { if (e.key === "Enter") show(el.dataset.view, el.dataset.bank); }; });
+  $("#markAllRead").onclick = markAllRead;
+  $("#bellBtn").onclick = (e) => { e.stopPropagation(); toggleBell(); };
+  document.addEventListener("click", (e) => { if (!e.target.closest(".bell-wrap")) toggleBell(false); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#bellPop").hidden) { toggleBell(false); $("#bellBtn").focus(); } });
   $("#analyzeSubmit").onclick = analyzeNews;
   try { await enterApp(); } catch (e) { if (e.status !== 401) throw e; }
 }
@@ -244,11 +248,13 @@ function closeDetail(fromButton) {
   const card = document.querySelector(`.feed-item[data-ev="${state.current}"]`);
   if (card) card.scrollIntoView({ block: "center" });
 }
-function show(view) {
+function show(view, sub) {
   if (view !== "radar") document.body.classList.remove("m-detail");
   document.body.dataset.view = view;
   document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.id === `view-${view}`));
-  document.querySelectorAll(".nav-item[data-view]").forEach((n) => n.classList.toggle("active", n.dataset.view === view));
+  document.querySelectorAll(".nav-item[data-view]").forEach((n) => n.classList.toggle("active", n.dataset.view === view
+    && (view !== "bank" || n.dataset.bank === (sub || state.bank || "accounts"))));
+  if (view === "bank") openBank(sub || state.bank || "accounts");
   if (view === "metrics") loadMetrics();
   if (view === "sources") loadSources();
   if (view === "digest") { loadDigest(); track("digest_view"); }
@@ -568,7 +574,7 @@ async function loadFeed() {
   $("#showHidden").hidden = !hiddenCount;
   $("#showHidden").textContent = state.showHidden ? "Убрать скрытые" : `Показать скрытые (${hiddenCount})`;
   state.feed = items; state.feedKey = `${state.company}|${state.role}`; state.rerank = null; state.quiet = quiet;
-  $("#navBadge").textContent = items.filter((i) => i.effect === "risk").length || "";
+  updateBadge();
   renderWidget();
   fillFactorFilter();
   renderFeedList();
@@ -600,6 +606,46 @@ function markRead(id) {
   const s = readSet(); s.add(id);
   try { localStorage.setItem("read:" + state.company, JSON.stringify([...s].slice(-500))); } catch (e) { /* хранилище недоступно */ }
   if (document.getElementById("feedList")) { renderFeedList(); renderWidget(); }
+  updateBadge();
+}
+function markAllRead() {
+  const s = readSet();
+  (state.feed || []).forEach((it) => s.add(it.event_id));
+  try { localStorage.setItem("read:" + state.company, JSON.stringify([...s].slice(-500))); } catch (e) { /* хранилище недоступно */ }
+  renderFeedList(); renderWidget(); updateBadge();
+  toast("Все события ленты отмечены прочитанными");
+}
+// Значок у «Бизнес-радара» — непрочитанные риски: открытое событие считается прочитанным, и число уменьшается
+function updateBadge() {
+  const b = $("#navBadge"), read = readSet();
+  const n = (state.feed || []).filter((i) => i.effect === "risk" && !read.has(i.event_id)).length;
+  b.hidden = !n;
+  b.textContent = n > 9 ? "9+" : String(n || "");
+  const t = n ? `Непрочитанных рисков: ${n}. Откройте событие — оно отметится прочитанным` : "";
+  b.title = t;
+  b.closest(".nav-item").setAttribute("aria-label", n ? `Бизнес-радар, ${t}` : "Бизнес-радар");
+  const bn = $("#bellN");
+  if (bn) { bn.hidden = !n; bn.textContent = n > 9 ? "9+" : String(n || ""); $("#bellBtn").title = n ? t : "Новых рисков нет"; }
+  if (!$("#bellPop").hidden) renderBell();
+}
+// Колокольчик: непрочитанные риски списком; открыть событие или прочитать все — число уменьшается
+function renderBell() {
+  const read = readSet(), list = (state.feed || []).filter((i) => i.effect === "risk" && !read.has(i.event_id)).slice(0, 8);
+  $("#bellPop").innerHTML = `<div class="bell-head"><b>Новые риски для компании</b>${list.length ? `<button class="link-btn" id="bellAll">прочитать все</button>` : ""}</div>
+    ${list.length ? `<ul>${list.map((i) => `<li data-ev="${i.event_id}" tabindex="0" role="button"><b>${esc(i.title)}</b>
+      <span class="muted small">${fmtDate(i.published_at)} · ${esc((i.reasons[0] || {}).why || "")}</span></li>`).join("")}</ul>
+      <p class="muted small">Событие отмечается прочитанным, когда вы его открываете.</p>`
+    : `<p class="muted">Новых рисков нет — всё прочитано. Новые появятся после следующего сбора новостей.</p>`}`;
+  $("#bellPop").querySelectorAll("li[data-ev]").forEach((li) => {
+    const go = () => { toggleBell(false); show("radar"); openInsight(li.dataset.ev, false, "bell"); };
+    li.onclick = go; li.onkeydown = (e) => { if (e.key === "Enter") go(); };
+  });
+  const all = $("#bellAll"); if (all) all.onclick = () => { markAllRead(); renderBell(); };
+}
+function toggleBell(open) {
+  const pop = $("#bellPop"); open = open ?? pop.hidden;
+  pop.hidden = !open; $("#bellBtn").setAttribute("aria-expanded", String(open));
+  if (open) renderBell();
 }
 function fillFactorFilter() {
   const seen = new Map();
@@ -764,7 +810,9 @@ async function openInsight(eventId, refresh = false, from = "feed") {
   }, 1000);
   try {
     await sse(`/api/insights/${eventId}/stream?${q({ company_id: state.company, role: state.role, refresh })}`, {}, (e) => {
-      if (state.current !== eventId || !prog()) return;
+      if (state.current !== eventId) return;
+      // после черновика экран прогресса заменён разбором — шаги дальше не рисуем, ждём итог
+      if (!prog() && !["done", "error"].includes(e.type)) return;
       if (e.type === "step_start") {
         const now = document.getElementById("thinkNow");
         if (now && now.textContent !== thinkText(e.name)) { now.classList.remove("swap"); void now.offsetWidth; now.textContent = thinkText(e.name); now.classList.add("swap"); }
@@ -782,10 +830,18 @@ async function openInsight(eventId, refresh = false, from = "feed") {
           <h2 style="margin-top:8px">${esc(p.headline)}</h2>
           <div class="takeaway"><span class="claim-kind small" style="color:var(--ai)">ВЫВОД СЕРВИСА · </span>${esc(p.takeaway.text)}</div>
           ${scenarioCards(p.scenarios, true)}`;
+      } else if (e.type === "draft") {
+        // черновик модели готов: показываем разбор сразу, критик и правка доделывают своё в фоне
+        clearInterval(state.thinkTimer);
+        track("draft_ready", { event_id: eventId, value: Math.round(performance.now() - t0) });
+        state.insight = e.insight; state.pending = eventId; renderInsight("analysis");
       } else if (e.type === "done") {
         clearInterval(state.thinkTimer);
         track("insight_ready", { event_id: eventId, value: Math.round(performance.now() - t0), meta: { cached: !!e.cached } });
-        state.insight = e.insight; renderInsight("analysis");
+        const col = $("#insightCol"), top = col ? col.scrollTop : 0, wasDraft = state.pending === eventId;
+        state.pending = null; state.insight = e.insight; renderInsight(state.tab || "analysis");
+        if (wasDraft && col) { col.scrollTop = top; toast("Разбор проверен и уточнён"); }
+        if (wasDraft && typeof schedulePlace === "function") schedulePlace();  // тур: подсветка — на обновлённый блок
       } else if (e.type === "error") { throw new Error(e.detail); }
     });
   } catch (e) { $("#insightPanel").innerHTML = `<div class="insight bad">Ошибка: ${esc(e.message)}</div>`; }
@@ -1012,7 +1068,7 @@ function renderInsight(tab) {
   }
   $("#insightPanel").innerHTML = `<div class="insight">
     <div><span class="pill ${i.effect}">${EFFECT[i.effect]}</span>
-      <span class="muted small">${i.generated_by.startsWith("llm") ? "Разбор подготовлен ИИ и проверен на ошибки" : "Быстрый разбор по профилю компании"} · ${allOk ? "<span class='ok'>✓ самопроверка пройдена</span>" : "<span title='Подробности — в блоке «На чём основан вывод»'>самопроверка: есть замечания</span>"}</span>
+      <span class="muted small">${state.pending === state.current ? "<span class='pending-dot' aria-hidden='true'></span>Черновик ИИ готов · агент проверяет факты и уточняет разбор" : i.generated_by.startsWith("llm") ? "Разбор подготовлен ИИ и проверен на ошибки" : "Быстрый разбор по профилю компании"} · ${allOk ? "<span class='ok'>✓ самопроверка пройдена</span>" : "<span title='Подробности — в блоке «На чём основан вывод»'>самопроверка: есть замечания</span>"}</span>
       <span class="ins-actions"><button class="btn ghost small" id="pdfBtn" title="Сохранить разбор в PDF через печать браузера">Скачать PDF</button><button class="btn ghost small" id="refreshBtn">Пересчитать</button></span></div>
     <h2 style="margin-top:8px">${esc(i.headline)}</h2>
     ${shortBlock(i)}
@@ -1341,13 +1397,14 @@ async function loadMetrics() {
       ${tile("Сценарий «что если»", pct(r.whatif_rate), "доля разборов, где открыли сценарий")}
       ${tile("Обращаются в банк", pct(r.action_rate), Object.entries(p.actions).map(([k, v]) => `${ACTION_NAMES[k] || esc(k)}: ${v}`).join(" · ") || "менеджер, звонок, заявка")}
       ${tile("Скрывают как нерелевантное", pct(r.hide_rate), "сигнал пересмотреть ранжирование · цель ≤ 10%", vsTarget(r.hide_rate, 0.1, true))}
-      ${tile("Тур для жюри пройден", pct(r.tour_completion), `${p.counts.tour_start || 0} запусков`)}
+      ${tile("Тур по сервису пройден", pct(r.tour_completion), `${p.counts.tour_start || 0} запусков`)}
     </div>
     <div class="card funnel"><div class="muted small">Воронка: от главной до обращения в банк</div>${funnel}</div>
 
     <h3 class="mon-h">Скорость и стоимость разбора</h3>
     <div class="metrics">
       ${tile("Первый вывод, p50 / p95", `${secs(sp.preview_p50)} / ${secs(sp.preview_p95)}`, "предпросмотр без модели · цель p95 ≤ 2 с", vsTarget(sp.preview_p95, 2000, true))}
+      ${tile("Разбор моделью на экране, p50 / p95", `${secs(sp.draft_p50)} / ${secs(sp.draft_p95)}`, "черновик модели показывается сразу, проверка критиком идёт в фоне · цель p95 ≤ 30 с", vsTarget(sp.draft_p95, 30000, true))}
       ${tile("Полный разбор моделью, p50 / p95", `${secs(sp.full_fresh_p50)} / ${secs(sp.full_fresh_p95)}`, "план и разбор события параллельно → черновик → критик → правка при необходимости · цель p95 ≤ 60 с", vsTarget(sp.full_fresh_p95, 60000, true))}
       ${tile("Повторное открытие, p50", secs(sp.full_cached_p50), "из кэша разборов")}
       ${tile("Стоимость разбора", c.avg_rub != null ? `${num(c.avg_rub)} ₽` : "—", c.avg_rub != null ? `p95 ${num(c.p95_rub)} ₽ · ${num(c.avg_llm_calls, 1)} вызовов модели · ${num(c.avg_build_s, 1)} с · цель в среднем ≤ 2 ₽, потолок 4 ₽` : "появится после разборов моделью", vsTarget(c.avg_rub, 2, true))}

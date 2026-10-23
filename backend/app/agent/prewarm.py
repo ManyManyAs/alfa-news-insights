@@ -24,6 +24,7 @@ def prewarm_top(top: int | None = None, max_rub: float | None = None, max_second
     from app.agent.orchestrator import cached_insight, get_or_create_insight
     from app.bootstrap import load_demo_users
     from app.data.profiles import get_profile
+    from app.data.sensitivity import role_titles
     from app.llm.client import LLMUnavailable, get_llm, llm_priority
     from app.news.ingest import list_events
     from app.ranking.scorer import rank_feed
@@ -32,6 +33,7 @@ def prewarm_top(top: int | None = None, max_rub: float | None = None, max_second
     if not cfg.get("prewarm_enabled", True):
         return {"skipped": "выключено в конфиге"}
     top = int(top if top is not None else cfg.get("prewarm_top", 3))
+    roles_top = int(cfg.get("prewarm_roles_top", 0))
     max_rub = float(max_rub if max_rub is not None else cfg.get("prewarm_max_rub", 20))
     max_seconds = float(max_seconds if max_seconds is not None else cfg.get("prewarm_max_minutes", 10) * 60)
 
@@ -45,12 +47,14 @@ def prewarm_top(top: int | None = None, max_rub: float | None = None, max_second
     with llm_priority("background"):
         try:
             llm.model_for("interpret", "background")  # бюджет: фоновый лимит ещё не исчерпан
-            for u in load_demo_users():
-                p = get_profile(u["primary_company"])
-                if p is None:
-                    continue
-                role = u.get("role")
-                for s in rank_feed(events, p, role, limit=top):
+            users = [(u, get_profile(u["primary_company"])) for u in load_demo_users()]
+            users = [(u, p) for u, p in users if p is not None]
+            # сначала основная роль каждой персоны (её видят первой), потом верх ленты для остальных ролей
+            plan = [(p, u.get("role"), top) for u, p in users]
+            if roles_top:
+                plan += [(p, r, roles_top) for u, p in users for r in role_titles() if r != u.get("role")]
+            for p, role, n in plan:
+                for s in rank_feed(events, p, role, limit=n):
                     hit = cached_insight(s.event.id, p.uid, role)
                     if hit and hit.generated_by != "rules":
                         stats["ready"] += 1
