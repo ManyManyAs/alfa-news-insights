@@ -43,7 +43,8 @@ def test_money_from_calculator_passes_invented_sum_is_caught():
 
 
 def test_money_quoted_from_news_is_not_flagged():
-    ins = _ins(why_it_matters=[Claim(text="Программа на 3 млрд ₽ поддержит застройщиков региона")])
+    ins = _ins(takeaway=Claim(text="Для компании это возможность при выходе в регион"),
+               why_it_matters=[Claim(text="Программа на 3 млрд ₽ поддержит застройщиков региона")])
     assert unverified_money(ins, _ctx({}, news="Регион направит 3 млрд ₽ на субсидии")) == []
 
 
