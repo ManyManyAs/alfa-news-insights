@@ -1,0 +1,112 @@
+name: Demo capture
+
+# Скриншоты для README и видео-тур по стенду (Playwright), а также проверка «с нуля».
+#   target=stand — снимает живой стенд; скриншоты, scenario.gif и видео приходят PR-ом из ветки demo-media.
+#   target=local — чистый клон → docker compose up без ключа (режим replay) → полный сценарий в браузере.
+#                  Это проверка, которую делает жюри; если шаг сценария не прошёл, job падает.
+# Всё, что снято, в любом случае лежит в артефакте запуска.
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "stand — снять живой стенд; local — проверка с нуля через docker compose без ключа"
+        type: choice
+        options: [stand, local]
+        default: stand
+      video:
+        description: "Записать видео-тур (около 3 минут)"
+        type: boolean
+        default: true
+
+concurrency:
+  group: demo-capture
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      HOST: ${{ secrets.DEPLOY_HOST }}
+      DOMAIN: ${{ vars.DEPLOY_DOMAIN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Playwright и ffmpeg
+        run: |
+          pip install playwright==1.48.0
+          python -m playwright install --with-deps chromium
+          sudo apt-get install -y -qq ffmpeg >/dev/null
+      - name: Адрес стенда
+        if: inputs.target == 'stand'
+        run: |
+          if [ -z "$DOMAIN" ] && [[ "$HOST" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then DOMAIN="${HOST//./-}.sslip.io"; fi
+          URL="https://${DOMAIN:-77-221-139-69.sslip.io}"
+          echo "URL=$URL" >> "$GITHUB_ENV"
+          curl -sf --max-time 20 "$URL/api/health" || { echo "::error::Стенд $URL не отвечает"; exit 1; }
+      - name: Чистый запуск без ключа (docker compose up)
+        if: inputs.target == 'local'
+        run: |
+          rm -f .env
+          docker compose up -d --build
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:8000/api/health >/dev/null && break
+            sleep 5
+          done
+          curl -sf http://localhost:8000/api/health || { docker compose logs --tail 80; exit 1; }
+          curl -sf http://localhost:8000/api/llm/status | python3 -c 'import json,sys; s=json.load(sys.stdin); print("Режим LLM:", s.get("mode"))'
+          echo "URL=http://localhost:8000" >> "$GITHUB_ENV"
+      - name: Съёмка
+        run: |
+          ARGS=""
+          if [ "${{ inputs.target }}" = "local" ]; then ARGS="--smoke"; fi
+          if [ "${{ inputs.video }}" = "true" ] && [ "${{ inputs.target }}" = "stand" ]; then ARGS="$ARGS --video"; fi
+          mkdir -p /tmp/shots
+          set +e
+          python tools/demo_capture.py "$URL" /tmp/shots $ARGS | tee /tmp/shots/capture.log
+          RC="${PIPESTATUS[0]}"
+          { echo "### Съёмка: ${{ inputs.target }}"; echo '```'; cat /tmp/shots/capture.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          exit "$RC"
+      - name: Видео в mp4 и gif
+        if: inputs.target == 'stand' && inputs.video
+        run: |
+          V=/tmp/shots/video/tour.webm
+          [ -f "$V" ] || { echo "Видео не записалось"; exit 0; }
+          ffmpeg -y -loglevel error -i "$V" -c:v libx264 -preset slow -crf 30 -pix_fmt yuv420p -movflags +faststart /tmp/shots/tour.mp4
+          # gif для README: ускорение ×2, 6 кадров/с, 800 px
+          ffmpeg -y -loglevel error -i "$V" -vf "setpts=0.5*PTS,fps=6,scale=800:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=96[p];[b][p]paletteuse=dither=bayer" /tmp/shots/scenario.gif
+          ls -la /tmp/shots
+      - name: Логи сервиса
+        if: always() && inputs.target == 'local'
+        run: docker compose logs --tail 120 > /tmp/shots/service.log 2>&1 || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: demo-${{ inputs.target }}-${{ github.run_id }}
+          path: /tmp/shots
+          retention-days: 14
+      - name: PR со скриншотами и видео
+        if: inputs.target == 'stand'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B demo-media
+          for f in /tmp/shots/*.png; do cp "$f" docs/img/; done
+          if [ -f /tmp/shots/scenario.gif ] && [ "$(stat -c%s /tmp/shots/scenario.gif)" -lt 15000000 ]; then cp /tmp/shots/scenario.gif docs/img/; fi
+          if [ -f /tmp/shots/tour.mp4 ]; then mkdir -p docs/demo && cp /tmp/shots/tour.mp4 docs/demo/; fi
+          git add docs/img docs/demo 2>/dev/null || true
+          if git diff --cached --quiet; then echo "Нет изменений"; exit 0; fi
+          git commit -m "demo: скриншоты и видео-тур со стенда (run ${{ github.run_id }})"
+          git push -f origin demo-media
+          if [ -z "$(gh pr list --head demo-media --state open --json number -q '.[0].number')" ]; then
+            gh pr create --head demo-media --base main --title "Демо: свежие скриншоты и видео-тур" \
+              --body "Снято workflow «Demo capture» со стенда. Проверьте скриншоты в docs/img и видео docs/demo/tour.mp4."
+          fi
