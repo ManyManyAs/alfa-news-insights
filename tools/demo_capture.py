@@ -58,8 +58,9 @@ async def open_first_insight(pg):
     await asyncio.sleep(1)
     await pg.click(".feed-item >> nth=0")
     # полный разбор: в replay приходит из снапшота сразу, вживую — до минуты
-    await pg.wait_for_selector("#insightPanel .tabs", timeout=120000)
-    await pg.wait_for_selector("#insightPanel .effect-block", timeout=120000)
+    # вживую разбор может строиться до двух минут (p95 ≈ 100 с), из кэша — мгновенно
+    await pg.wait_for_selector("#insightPanel .tabs", timeout=180000)
+    await pg.wait_for_selector("#insightPanel .effect-block", timeout=180000)
     await asyncio.sleep(1.5)
 
 
@@ -175,7 +176,7 @@ async def video(b):
         await asyncio.sleep(1)
         await pg.fill("#chatInput", "Покажи разрез по контрагентам")
         await pg.click("#chatSend")
-        await asyncio.sleep(15)
+        await asyncio.sleep(25)  # ответ модели приходит потоком
         await pg.click("#insightPanel .tab[data-tab=trace]")
         await pg.locator("#insightPanel .tabs").scroll_into_view_if_needed()
         await asyncio.sleep(8)
