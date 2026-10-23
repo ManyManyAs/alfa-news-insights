@@ -11,6 +11,7 @@
 """
 import asyncio
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -21,6 +22,7 @@ URL, OUT = sys.argv[1].rstrip("/"), Path(sys.argv[2])
 VIDEO, SMOKE = "--video" in sys.argv, "--smoke" in sys.argv
 OUT.mkdir(parents=True, exist_ok=True)
 report: dict[str, str] = {}
+GHA = bool(os.environ.get("GITHUB_ACTIONS"))
 
 
 async def step(name, coro):
@@ -31,6 +33,8 @@ async def step(name, coro):
     except Exception as e:  # шаг не прошёл — фиксируем и идём дальше
         report[name] = f"ОШИБКА: {type(e).__name__}: {str(e)[:160]}"
     print(f"{name:28s} {report[name]}", flush=True)
+    if GHA and report[name].startswith("ОШИБКА"):  # аннотация видна на странице запуска и в API без доступа к логам
+        print(f"::error title=Съёмка: {name}::{report[name]}", flush=True)
 
 
 async def login(pg, idx=0):
@@ -195,6 +199,8 @@ async def main():
     (OUT / "capture_report.json").write_text(json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8")
     failed = [k for k, v in report.items() if v.startswith("ОШИБКА")]
     print("Итог:", "все шаги прошли" if not failed else f"не прошли: {', '.join(failed)}")
+    if GHA:
+        print("::notice title=Съёмка::" + "; ".join(f"{k}: {v.split(' ')[0]}" for k, v in report.items()))
     if SMOKE and failed:
         sys.exit(1)
 
