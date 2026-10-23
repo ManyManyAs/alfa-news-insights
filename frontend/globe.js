@@ -152,7 +152,7 @@ class BizGlobe {
     }
     this.signals = [...list.filter((s) => !used.has(s)), ...this.clusters];
     const key = this.hq ? this.hq.geo.join(",") : "";
-    if (this.hq && key !== this.hqKey) { this.lon = this.hq.geo[1] + 8; this.phase = 0; this.idleT = 3; this.hqKey = key; }
+    if (this.hq && key !== this.hqKey) { this.lon = this.hq.geo[1] + 8; this.phase = 0; this.idleT = 3; this.hqKey = key; this.userMoved = false; }
     this.kick();
   }
 
@@ -180,7 +180,7 @@ class BizGlobe {
         const dx = e.clientX - px, dy = e.clientY - py, now = performance.now();
         this.lon -= dx * 0.35; this.tilt = Math.max(-10, Math.min(55, this.tilt + dy * 0.25));
         this.vel = -dx * 0.35 / Math.max(8, now - lastT) * 1000 * 0.25;
-        px = e.clientX; py = e.clientY; lastT = now; this.idleT = 0; this.kick();
+        px = e.clientX; py = e.clientY; lastT = now; this.idleT = 0; this.userMoved = true; this.kick();
       } else this.pick(e);
     });
     const up = () => { this.dragging = false; c.classList.remove("grab"); };
@@ -200,7 +200,7 @@ class BizGlobe {
           if (front.length) { const s = front[0][0]; this.opts.onPick(s.cluster ? s.cluster[0] : s); }
           return;
         } else return;
-        e.preventDefault(); this.idleT = 0; this.vel = 0; this.kick();
+        e.preventDefault(); this.idleT = 0; this.vel = 0; this.userMoved = true; this.kick();
       });
     }
   }
@@ -243,8 +243,12 @@ class BizGlobe {
       const dt = Math.min(0.05, (now - this.last) / 1000); this.last = now;
       if (!this.dragging && !this.reduce) {
         this.idleT += dt;
-        if (this.hq && !this.opts.ambient) {
-          // компания всегда в кадре: глобус плавно покачивается вокруг неё; после перетаскивания — мягко возвращается
+        if (this.userMoved) {
+          // пользователь сам повернул глобус — оставляем как есть: только мягкая инерция после броска, без возврата
+          this.vel *= Math.pow(0.04, dt);
+          if (Math.abs(this.vel) > 0.05) this.lon += this.vel * dt;
+        } else if (this.hq && !this.opts.ambient) {
+          // компания всегда в кадре: пока глобус не трогали, он плавно покачивается вокруг неё
           this.phase = (this.phase || 0) + (this.hover ? 0 : dt * 0.12);
           const target = this.hq.geo[1] + 8 + 32 * Math.sin(this.phase);
           const k = Math.min(1, dt * (this.idleT > 2.5 ? 0.8 : 0));

@@ -210,7 +210,7 @@ def draft_rules(ctx: AgentContext) -> Insight:
 
     factors = [r["factor"] for r in reasons] + scored.matched_factors
     scen = [Scenario(**s) for s in scenarios(ctx.profile, factors, reasons=scored.reasons, effective_dates=cls.effective_dates,
-                                               regions=cls.regions)]
+                                               regions=cls.regions, countries=cls.countries)]
     change = [Claim(text=t["text"], kind="ai_inference", confidence="medium",
                     sources=news_src[:1] if t["source"] in (None, "news") else [t["source"]])
               for t in triggers(ctx.profile, factors, cls.effective_dates)]

@@ -186,7 +186,8 @@ def t_scenario_calc(ctx: AgentContext) -> dict:
     factors = ctx.scored.matched_factors
     return {"source_id": "calc:scenario", "scenarios": scenarios(ctx.profile, factors, reasons=ctx.scored.reasons,
                                                                        effective_dates=ctx.event.classification.effective_dates,
-                                                                       regions=ctx.event.classification.regions),
+                                                                       regions=ctx.event.classification.regions,
+                                                                       countries=ctx.event.classification.countries),
             "what_could_change": [t["text"] for t in triggers(ctx.profile, factors, ctx.event.classification.effective_dates)]}
 
 
