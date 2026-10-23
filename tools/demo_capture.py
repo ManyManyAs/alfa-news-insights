@@ -102,6 +102,7 @@ async def shots(b):
         await login(pg)
         await asyncio.sleep(2)
         await pg.screenshot(path=OUT / "00_globe.png")
+        await pg.wait_for_selector("#focusCard .focus-main", timeout=30000)
         await pg.locator("#radarWidget").scroll_into_view_if_needed()
         await asyncio.sleep(1)
         await pg.screenshot(path=OUT / "02_home.png")

@@ -268,6 +268,8 @@ async function loadMoney() {
   if (!box) return;
   let m;
   try { m = await api(`/api/money?${q({ company_id: state.company, role: state.role })}`); } catch (e) { box.innerHTML = ""; return; }
+  state.money = m;
+  if (state.feed) { renderWidget(); renderFocus(); }
   const pr = (x) => (x == null ? "" : ` · ${pctRev(x)} выручки`);
   if (!m.levers.length) {
     box.innerHTML = `<div class="eyebrow">Деньги на кону · 12 месяцев</div><h3>Заметного влияния на прибыль не видно</h3>
@@ -289,7 +291,7 @@ async function loadMoney() {
 }
 
 async function reload() {
-  state.insight = null; state.current = null;
+  state.insight = null; state.current = null; state.money = null; state.visitMark = null;
   $("#insightPanel").innerHTML = `<div class="empty">Выберите событие — сервис объяснит, что оно значит именно для вашей компании.</div>`;
   await Promise.all([loadProfile(), loadFeed(), state.bankLoaded ? null : loadBank()]);
   loadMoney();
@@ -576,11 +578,61 @@ async function loadFeed() {
   state.feed = items; state.feedKey = `${state.company}|${state.role}`; state.rerank = null; state.quiet = quiet;
   updateBadge();
   renderWidget();
+  renderFocus();
   fillFactorFilter();
   renderFeedList();
   renderRadar();
   renderHero();
   applyRerank(state.feedKey);
+}
+
+// Денежный эффект события по «Деньгам на кону»: самый сильный минус и плюс рычагов, где событие — причина
+function eventMoney(id) {
+  const lv = ((state.money && state.money.levers) || []).filter((v) => v.events.some((e) => e.event_id === id));
+  if (!lv.length) return null;
+  return { down: Math.min(0, ...lv.map((v) => v.down || 0)), up: Math.max(0, ...lv.map((v) => v.up || 0)), title: lv[0].title };
+}
+function moneyText(m) {
+  return [m.down ? `<span class="bad">${rub(m.down)}</span>` : "", m.up ? `<span class="ok">${rub(m.up)}</span>` : ""].filter(Boolean).join(" … ") + " за год";
+}
+
+// «Главное сейчас»: одно событие, которое стоит открыть первым, ближайший срок и что нового с прошлого визита
+function renderFocus() {
+  const box = $("#focusCard");
+  if (!box || !state.feed) return;
+  const read = readSet(), feed = state.feed;
+  const strong = (it) => it.effect !== "watch" && impLevel(it).level >= 2;
+  const main = feed.find((it) => !read.has(it.event_id) && strong(it)) || feed.find((it) => !read.has(it.event_id)) || feed[0];
+  if (!main) { box.hidden = true; return; }
+  box.hidden = false;
+  const key = "visit:" + state.company;
+  let last = null;
+  try { last = localStorage.getItem(key); } catch (e) { /* хранилище недоступно */ }
+  if (!state.visitMark) {
+    state.visitMark = last || "";
+    try { localStorage.setItem(key, new Date().toISOString()); } catch (e) { /* хранилище недоступно */ }
+  }
+  const fresh = state.visitMark ? feed.filter((it) => (it.published_at || "") > state.visitMark).length : 0;
+  const due = feed.filter((it) => it.effective && it.effective.days >= 0).sort((a, b) => a.effective.days - b.effective.days)[0];
+  const m = eventMoney(main.event_id);
+  const unreadRisks = feed.filter((i) => i.effect === "risk" && !read.has(i.event_id)).length;
+  box.innerHTML = `<div class="eyebrow">Главное сейчас</div>
+    <div class="focus-main" data-ev="${main.event_id}" tabindex="0" role="button">
+      <span class="pill ${main.effect}">${EFFECT[main.effect]}</span><span class="muted small">${fmtDate(main.published_at)} · важность: ${esc(impLevel(main).label || IMP_RU[impLevel(main).level] || "")}</span>
+      <h3>${esc(main.title)}</h3>
+      <div class="why">Почему вам: ${esc(main.reasons[0]?.why || "")}</div>
+      <div class="focus-chips">${m ? `<span class="fchip">💰 ${moneyText(m)} · ${esc(m.title.toLowerCase())}</span>` : ""}${main.effective ? effectiveTag(main.effective) : ""}</div>
+    </div>
+    <div class="focus-foot">
+      <button class="btn btn-red small" data-focus-open>Открыть разбор</button>
+      ${due && due.event_id !== main.event_id ? `<button class="link-btn" data-focus-ev="${due.event_id}">Ближайший срок: ${esc(due.title.slice(0, 70))}${due.title.length > 70 ? "…" : ""} — ${due.effective.days ? `через ${due.effective.days} ${plural(due.effective.days, "день", "дня", "дней")}` : "сегодня"}</button>` : ""}
+      <span class="muted small">${fresh ? `${fresh} ${plural(fresh, "новое событие", "новых события", "новых событий")} с прошлого визита · ` : ""}${unreadRisks ? `${unreadRisks} ${plural(unreadRisks, "непрочитанный риск", "непрочитанных риска", "непрочитанных рисков")}` : "все риски прочитаны"}</span>
+    </div>`;
+  const open = (id) => { show("radar"); openInsight(id, false, "focus"); };
+  box.querySelector("[data-focus-open]").onclick = () => open(main.event_id);
+  const fm = box.querySelector(".focus-main");
+  fm.onclick = () => open(main.event_id); fm.onkeydown = (e) => { if (e.key === "Enter") open(main.event_id); };
+  box.querySelectorAll("[data-focus-ev]").forEach((b) => b.onclick = () => open(b.dataset.focusEv));
 }
 
 function renderWidget() {
@@ -592,6 +644,7 @@ function renderWidget() {
       <div class="title"><b>${esc(it.title)}</b></div>
       <div class="why">Почему вам: ${esc(it.reasons[0]?.why || "")}</div>
       ${it.effective ? `<div>${effectiveTag(it.effective)}</div>` : ""}
+      ${(() => { const m = eventMoney(it.event_id); return m ? `<div class="w-money">💰 ${moneyText(m)}</div>` : ""; })()}
     </div>`).join("") || `<div class="muted">Значимых событий для компании нет.</div>`;
   if (quiet) {
     $("#widgetList").insertAdjacentHTML("afterbegin", `<div class="quiet">За последние ${quiet.days} дней значимых для вашей компании событий не было — это тоже ответ: менять планы не нужно.${quiet.last ? ` Последнее важное — ниже.` : ""}</div>`);
@@ -605,14 +658,14 @@ function readSet() { try { return new Set(JSON.parse(localStorage.getItem("read:
 function markRead(id) {
   const s = readSet(); s.add(id);
   try { localStorage.setItem("read:" + state.company, JSON.stringify([...s].slice(-500))); } catch (e) { /* хранилище недоступно */ }
-  if (document.getElementById("feedList")) { renderFeedList(); renderWidget(); }
+  if (document.getElementById("feedList")) { renderFeedList(); renderWidget(); renderFocus(); }
   updateBadge();
 }
 function markAllRead() {
   const s = readSet();
   (state.feed || []).forEach((it) => s.add(it.event_id));
   try { localStorage.setItem("read:" + state.company, JSON.stringify([...s].slice(-500))); } catch (e) { /* хранилище недоступно */ }
-  renderFeedList(); renderWidget(); updateBadge();
+  renderFeedList(); renderWidget(); renderFocus(); updateBadge();
   toast("Все события ленты отмечены прочитанными");
 }
 // Значок у «Бизнес-радара» — непрочитанные риски: открытое событие считается прочитанным, и число уменьшается

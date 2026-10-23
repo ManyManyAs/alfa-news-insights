@@ -903,3 +903,13 @@ body.logged-out .layout, body.logged-out .topbar { display: none; }
 .sens li span { flex: 1 1 260px; }
 .sens li b.bad { color: var(--risk); } .sens li b.ok { color: var(--opp); }
 .sens-tag { font-style: normal; font-size: 12px; background: var(--watch-bg); color: var(--watch); border-radius: 999px; padding: 1px 8px; }
+/* «Главное сейчас» на главной */
+.focus-card { border: 1.5px solid var(--red); }
+.focus-main { cursor: pointer; border-radius: 14px; margin: 8px -10px 0; padding: 10px; }
+.focus-main:hover, .focus-main:focus-visible { background: var(--soft); }
+.focus-main h3 { margin: 8px 0 6px; font-size: 21px; line-height: 1.25; }
+.focus-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.fchip { font-size: 13px; font-weight: 600; background: var(--soft2); border-radius: 999px; padding: 3px 10px; }
+.fchip .bad, .w-money .bad { color: var(--risk); } .fchip .ok, .w-money .ok { color: var(--opp); }
+.focus-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-top: 12px; }
+.w-money { font-size: 13px; font-weight: 600; margin-top: 4px; }
