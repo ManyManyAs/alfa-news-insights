@@ -1,7 +1,9 @@
 """Чат по готовой аналитике (критерий 10): уточняющие вопросы, другой разрез, переход к первоисточнику."""
 from __future__ import annotations
 
+import itertools
 import json
+import re
 from collections.abc import Iterator
 
 from app.agent import prompts
@@ -77,6 +79,7 @@ def _messages(q_clean: str, ins: Insight, profile: CompanyProfile) -> list[dict]
 
 CHAT_PARAMS = {"max_tokens": 600, "temperature": 0.2}
 OWN = "ваша компания"  # свой идентификатор в ответе клиенту заменяется словами
+_TAIL_RE = re.compile(r"\b[UF](?:_\d*)?$")  # конец фрагмента, похожий на начало идентификатора
 
 
 def answer_stream(q: str, ins: Insight, profile: CompanyProfile) -> Iterator[dict]:
@@ -88,10 +91,18 @@ def answer_stream(q: str, ins: Insight, profile: CompanyProfile) -> Iterator[dic
             gen = llm.stream("chat", _messages(q_clean, ins, profile), **CHAT_PARAMS)
             first = next(gen)  # если ответа нет (replay-промах) — исключение до отправки meta
             yield {"type": "meta", "mode": f"llm:{llm.mode}", "security_flags": flags}
-            allowed = {profile.uid}
-            yield {"type": "delta", "text": guard_output(first, allowed, OWN)}
-            for chunk in gen:
-                yield {"type": "delta", "text": guard_output(chunk, allowed, OWN)}
+            allowed, carry = {profile.uid}, ""
+            for chunk in itertools.chain([first], gen):
+                # идентификатор может прийти разбитым на два фрагмента («U_7» + «4328»): незаконченный хвост
+                # придерживаем до следующего фрагмента, иначе фильтр увидит обрывок
+                buf = carry + chunk
+                m = _TAIL_RE.search(buf)
+                cut = m.start() if m else len(buf)
+                buf, carry = buf[:cut], buf[cut:]
+                if buf:
+                    yield {"type": "delta", "text": guard_output(buf, allowed, OWN)}
+            if carry:
+                yield {"type": "delta", "text": guard_output(carry, allowed, OWN)}
             yield {"type": "done"}
             return
         except (LLMUnavailable, StopIteration):
