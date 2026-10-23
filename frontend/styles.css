@@ -831,7 +831,7 @@ body.logged-out .layout, body.logged-out .topbar { display: none; }
 
 /* Деньги на кону */
 .money-card h3 { margin: 4px 0 12px; }
-.money-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+.money-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
 .mt { border-radius: 16px; padding: 12px 14px; background: var(--soft); display: grid; gap: 2px; }
 .mt span { font-size: 12px; color: var(--muted); font-weight: 600; }
 .mt b { font-family: var(--display); font-size: 24px; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }

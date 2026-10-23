@@ -273,7 +273,6 @@ async function loadMoney() {
     <div class="money-tiles">
       <div class="mt up"><span>Возможный плюс</span><b>${rub(m.up)}</b><i>${pr(m.share_up).slice(3)}</i></div>
       <div class="mt down"><span>Возможный минус</span><b>${rub(m.down)}</b><i>${pr(m.share_down).slice(3)}</i></div>
-      <div class="mt protect"><span>Минус, который можно ограничить</span><b>${rub(m.protect)}</b><i>есть инструменты банка</i></div>
     </div>
     <ul class="money-list">${m.levers.map((v) => `<li>
       <div class="ml-head"><b>${esc(v.title)}</b><span class="ml-range">${v.down ? `<span class="bad">${rub(v.down)}</span>` : ""}${v.down && v.up ? " … " : ""}${v.up ? `<span class="ok">${rub(v.up)}</span>` : ""}</span></div>

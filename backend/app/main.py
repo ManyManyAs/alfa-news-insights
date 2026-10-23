@@ -493,7 +493,8 @@ def scenario(req: ScenarioRequest, user: str = Depends(current_user)):
     spec = business_levers(p, reasons, regions)
     start = start_month(dates) if spec else 0
     defaults, estimated = scenario_defaults(p)
-    sc = scenario_set(p, factors, req.inputs, reasons=reasons, effective_dates=dates, regions=regions)
+    sc = scenario_set(p, factors, req.inputs, reasons=reasons, effective_dates=dates, regions=regions,
+                      countries=ev.classification.countries if req.event_id and ev else None)
     res = scenario_calc(p, req.inputs, spec, start)
     res["monthly"] = scenario_timeline(res["rows"], sc[0]["months"], start)
     return {"result": res, "defaults": {**defaults, "margin": MARGIN}, "estimated": estimated,
@@ -575,7 +576,8 @@ def money_at_stake(company_id: str, role: str | None = None, user: str = Depends
             continue
         cls = s.event.classification
         sc = ([x.model_dump() for x in ins.scenarios] if ins and ins.scenarios else
-              scenario_set(p, s.matched_factors, reasons=s.reasons, effective_dates=cls.effective_dates, regions=cls.regions))
+              scenario_set(p, s.matched_factors, reasons=s.reasons, effective_dates=cls.effective_dates, regions=cls.regions,
+                           countries=cls.countries))
         if not sc or sc[0].get("negligible"):
             continue
         by = {x["name"]: x for x in sc}

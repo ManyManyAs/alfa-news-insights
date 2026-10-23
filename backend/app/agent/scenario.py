@@ -27,7 +27,7 @@ from app.knowledge.bank import get_knowledge
 
 AVG_MONTHLY_WAGE = 95_000  # ₽, оценка средней зарплаты для ФОТ по численности (явно помечается как оценка)
 PAYROLL_TAXES = 1.3  # страховые взносы
-CALC_VERSION = 3  # меняется вместе с формулами: разборы в кэше и снапшоте пересчитываются при чтении
+CALC_VERSION = 4  # меняется вместе с формулами: разборы в кэше и снапшоте пересчитываются при чтении
 MARGIN = 0.25  # маржинальный доход с рубля выручки (оценка: какая часть изменения выручки доходит до прибыли)
 PURCHASES_SHARE = 0.6  # закупки ≈ 60% выручки (оценка)
 RATE_FACTORS = {"key_rate", "credit_conditions", "bond_market"}
@@ -41,7 +41,9 @@ TAX_FACTORS = {"tax_regulation"}
 TAX_SHOCK_PP = 0.5  # п.п. выручки: стресс налоговой нагрузки
 SHOCK_RE = re.compile(r"(?:на|[+−–-])\s?(\d{1,2}(?:[.,]\d)?)\s?%")
 FX_FACTORS = {"fx_rub", "china_trade", "sanctions_trade", "commodity_oil"}
-FX_FACTORS_STRICT = {"fx_rub", "china_trade"}  # курс в сценарии — только если новость про курс или расчёты в валюте
+FX_FACTORS_STRICT = {"fx_rub"}  # курс в сценарии — только если новость про сам курс рубля (не про торговлю с Китаем вообще)
+# Ставка ЦБ и зарплаты в России: новости только о других странах (ЕЦБ, зарплаты в Skoda) эти рычаги не двигают
+DOMESTIC_LEVERS = {"rate", "wages"}
 # Отклонения от прогноза банка в негативном и позитивном сценариях: умеренные, без «катастроф»
 RATE_DEV = (1.0, -1.0)    # п.п. ключевой ставки: снижение не началось / пошло быстрее прогноза
 FX_DEV = (10.0, -5.0)     # % курса: рубль слабее / крепче прогноза
@@ -321,7 +323,8 @@ def timeline(rows: list[dict], months: list[str], start: int) -> list[int]:
 
 
 def scenarios(p: CompanyProfile, factors: list[str], user: Inputs | None = None, reasons: list[dict] | None = None,
-              effective_dates: list[str] | None = None, regions: list[str] | None = None) -> list[dict]:
+              effective_dates: list[str] | None = None, regions: list[str] | None = None,
+              countries: list[str] | None = None) -> list[dict]:
     """Три сценария на 12 месяцев относительно плана компании.
 
     База — прогноз Альфа-Банка и текущая динамика рынков: считаем, что они уже заложены в план, поэтому в базе 0.
@@ -333,6 +336,8 @@ def scenarios(p: CompanyProfile, factors: list[str], user: Inputs | None = None,
     base = bank_baseline()
     spec = business_levers(p, reasons, regions)
     levers = relevant_levers(primary_factors(reasons, factors), spec)
+    if countries and not any(c.upper() in ("РОССИЯ", "РФ") for c in countries) and not regions:
+        levers = [lv for lv in levers if lv not in DOMESTIC_LEVERS]  # событие о другой стране
     start = start_month(effective_dates) if spec else 0
     months = horizon_months()
     u = (user or Inputs()).model_dump()
