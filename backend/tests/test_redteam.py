@@ -204,7 +204,8 @@ def test_chat_stream_masks_ids_split_across_chunks(monkeypatch):
     from app.bootstrap import load_demo_users
     from app.data.profiles import get_profile
 
-    p = get_profile(load_demo_users()[0]["primary_company"])
+    # в синтетике id вида U_S0001, в данных кейса — U_74328: берём формат реальных данных
+    p = get_profile(load_demo_users()[0]["primary_company"]).model_copy(update={"uid": "U_74328"})
     own = p.uid
     parts = ["Данные ", own[:3], own[3:] + " и про U_", "1 ничего нет. F", "_2 тоже."]
 
