@@ -202,6 +202,22 @@ CREATE TABLE IF NOT EXISTS action_requests (
     ts TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
+-- «Мои действия»: шаги из разборов, которые пользователь взял в работу (исполнитель, срок, статус)
+CREATE TABLE IF NOT EXISTS tasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT,
+    company_uid TEXT,
+    event_id TEXT,
+    event_title TEXT,
+    text TEXT,
+    owner TEXT,
+    due TEXT,
+    status TEXT DEFAULT 'open',
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS tasks_company ON tasks(company_uid, status);
+
 -- Скрытые пользователем карточки ленты
 CREATE TABLE IF NOT EXISTS hidden_events (
     user_id TEXT,

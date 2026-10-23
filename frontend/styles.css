@@ -913,3 +913,15 @@ body.logged-out .layout, body.logged-out .topbar { display: none; }
 .fchip .bad, .w-money .bad { color: var(--risk); } .fchip .ok, .w-money .ok { color: var(--opp); }
 .focus-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-top: 12px; }
 .w-money { font-size: 13px; font-weight: 600; margin-top: 4px; }
+/* «Мои действия» */
+.act-btns { display: flex; flex-wrap: wrap; gap: 6px; margin: -2px 0 12px 2px; }
+.badge.soft { background: var(--soft2); color: var(--ink); }
+.badge[hidden] { display: none; }
+.tasks-grid { display: flex; flex-direction: column; gap: 16px; max-width: 900px; }
+.tasks { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.task { display: grid; grid-template-columns: 28px 1fr 36px; gap: 8px; align-items: start; padding: 10px 6px; border-radius: 12px; }
+.task:hover { background: var(--soft); }
+.task.done .task-body b { text-decoration: line-through; color: var(--muted); font-weight: 500; }
+.task.late { box-shadow: inset 3px 0 0 var(--risk); }
+.task .bad { color: var(--risk); font-weight: 600; }
+.task .icon-btn.small { width: 30px; height: 28px; font-size: 16px; }

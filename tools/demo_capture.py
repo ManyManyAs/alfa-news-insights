@@ -145,6 +145,16 @@ async def shots(b):
         await asyncio.sleep(2)
         await pg.screenshot(path=OUT / "08_quality.png")
 
+    async def s_tasks():
+        await pg.click("#insightPanel .tab[data-tab=analysis]")
+        await pg.wait_for_selector("#insightPanel [data-task]", timeout=20000)
+        await pg.click("#insightPanel [data-task] >> nth=0")
+        await asyncio.sleep(1)
+        await pg.click(".nav-item[data-view=tasks]")
+        await pg.wait_for_selector("#tasksBox li.task", timeout=20000)
+        await asyncio.sleep(0.5)
+        await pg.screenshot(path=OUT / "13_tasks.png")
+
     async def s_bank():
         for key, shot in (("accounts", None), ("credits", "11_bank_credits.png"), ("ved", None), ("salary", None)):
             await pg.click(f".nav-item[data-bank={key}]")
@@ -161,7 +171,7 @@ async def shots(b):
         await pg.keyboard.press("Escape")
 
     for name, fn in [("вход", s_login), ("главная", s_home), ("лента и разбор", s_insight), ("сценарии", s_scen),
-                     ("чат", s_chat), ("трассировка", s_trace), ("дайджест", s_digest), ("качество и бюджет", s_quality),
+                     ("чат", s_chat), ("трассировка", s_trace), ("мои действия", s_tasks), ("дайджест", s_digest), ("качество и бюджет", s_quality),
                      ("разделы банка", s_bank), ("уведомления", s_bell)]:
         await step(name, fn())
     await ctx.close()

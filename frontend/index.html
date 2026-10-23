@@ -70,6 +70,7 @@
       <a class="nav-item active" data-view="home"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg><span>Главная</span></a>
       <a class="nav-item" data-view="radar"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><path d="M12 12 18 6"/></svg><span>Бизнес-радар</span><span class="badge" id="navBadge" hidden></span></a>
       <a class="nav-item" data-view="digest"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg><span>Дайджест</span></a>
+      <a class="nav-item" data-view="tasks"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"/><path d="m3.5 6 1.5 1.5L7.5 5M3.5 12l1.5 1.5L7.5 11M3.5 18l1.5 1.5L7.5 17"/></svg><span>Мои действия</span><span class="badge soft" id="tasksBadge" hidden></span></a>
       <div class="nav-sep">Банк</div>
       <a class="nav-item" data-view="bank" data-bank="accounts"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/></svg><span>Счета и платежи</span></a>
       <a class="nav-item" data-view="bank" data-bank="credits"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span>Кредиты</span></a>
@@ -174,6 +175,12 @@
           <div class="ph-actions"><button class="btn ghost small" id="digestPdf">Скачать PDF</button>
           <div class="seg" role="group" aria-label="Период дайджеста"><button class="on" data-dper="week">Неделя</button><button data-dper="day">День</button></div></div></div>
         <div id="digestBox" class="digest-grid"><div class="skeleton"></div></div>
+      </section>
+
+      <section id="view-tasks" class="view">
+        <div class="page-head"><div><div class="eyebrow">Из разборов — в работу</div><h2>Мои действия</h2></div></div>
+        <p class="muted small">Шаги из разборов событий, которые взяли в работу: кто делает и к какому сроку. Отметьте выполненное — список обновится у всех пользователей компании.</p>
+        <div id="tasksBox" class="tasks-grid"><div class="skeleton"></div></div>
       </section>
 
       <section id="view-bank" class="view">
