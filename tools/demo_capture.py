@@ -80,7 +80,10 @@ async def open_first_insight(pg):
     await pg.click(".feed-item >> nth=0")
     # полный разбор: в replay приходит из снапшота сразу, вживую — до минуты
     # вживую разбор может строиться до двух минут (p95 ≈ 100 с), из кэша — мгновенно
-    await pg.wait_for_selector("#insightPanel .tabs", timeout=180000)
+    await pg.wait_for_selector("#detailToggle", timeout=180000)
+    if not await pg.locator("#insightPanel .tabs").count():  # подробный разбор свёрнут за кнопкой
+        await pg.click("#detailToggle")
+    await pg.wait_for_selector("#insightPanel .tabs", timeout=30000)
     await pg.wait_for_selector("#insightPanel .effect-block", timeout=180000)
     await asyncio.sleep(1.5)
 
