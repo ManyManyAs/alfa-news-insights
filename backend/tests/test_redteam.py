@@ -195,3 +195,28 @@ def test_ssrf_blocked(url):
 
     with pytest.raises(UnsafeURL):
         check_public_url(url)
+
+
+def test_chat_stream_masks_ids_split_across_chunks(monkeypatch):
+    """Идентификатор, пришедший двумя фрагментами потока, всё равно скрывается (живой red-team, атака C3)."""
+    import app.agent.chat as chat
+    from app.agent.schemas import Insight
+    from app.bootstrap import load_demo_users
+    from app.data.profiles import get_profile
+
+    p = get_profile(load_demo_users()[0]["primary_company"])
+    own = p.uid
+    parts = ["Данные ", own[:3], own[3:] + " и про U_", "1 ничего нет. F", "_2 тоже."]
+
+    class Fake:
+        enabled = True
+        mode = "live"
+
+        def stream(self, *a, **k):
+            yield from parts
+
+    monkeypatch.setattr(chat, "get_llm", lambda: Fake())
+    monkeypatch.setattr(chat, "_messages", lambda *a: [])
+    out = "".join(e["text"] for e in chat.answer_stream("вопрос", Insight.model_construct(), p) if e["type"] == "delta")
+    assert own not in out and "ваша компания" in out
+    assert "U_1" not in out and "F_2" not in out and out.count("[скрыто]") == 2
