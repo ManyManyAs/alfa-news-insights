@@ -76,6 +76,7 @@ def _messages(q_clean: str, ins: Insight, profile: CompanyProfile) -> list[dict]
 
 
 CHAT_PARAMS = {"max_tokens": 600, "temperature": 0.2}
+OWN = "ваша компания"  # свой идентификатор в ответе клиенту заменяется словами
 
 
 def answer_stream(q: str, ins: Insight, profile: CompanyProfile) -> Iterator[dict]:
@@ -88,9 +89,9 @@ def answer_stream(q: str, ins: Insight, profile: CompanyProfile) -> Iterator[dic
             first = next(gen)  # если ответа нет (replay-промах) — исключение до отправки meta
             yield {"type": "meta", "mode": f"llm:{llm.mode}", "security_flags": flags}
             allowed = {profile.uid}
-            yield {"type": "delta", "text": guard_output(first, allowed)}
+            yield {"type": "delta", "text": guard_output(first, allowed, OWN)}
             for chunk in gen:
-                yield {"type": "delta", "text": guard_output(chunk, allowed)}
+                yield {"type": "delta", "text": guard_output(chunk, allowed, OWN)}
             yield {"type": "done"}
             return
         except (LLMUnavailable, StopIteration):
@@ -108,4 +109,6 @@ def answer(q: str, ins: Insight, profile: CompanyProfile) -> dict:
             meta = ev
         elif ev["type"] == "delta":
             parts.append(ev["text"])
-    return {"answer": "".join(parts), "mode": meta.get("mode", "rules"), "security_flags": meta.get("security_flags", [])}
+    # повторный фильтр по целому тексту: идентификатор мог прийти разбитым на два фрагмента потока
+    text = guard_output("".join(parts), {profile.uid}, OWN)
+    return {"answer": text, "mode": meta.get("mode", "rules"), "security_flags": meta.get("security_flags", [])}

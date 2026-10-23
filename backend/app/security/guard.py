@@ -61,14 +61,17 @@ def sanitize_untrusted(text: str) -> tuple[str, list[str]]:
     return text, flags
 
 
-_UID_RE = re.compile(r"\b[UF]_\d{2,}\b")
+_UID_RE = re.compile(r"\b[UF]_\d+\b")
 _KEY_RE = re.compile(r"\bsk-[A-Za-z0-9_-]{8,}")
 
 
-def guard_output(text: str, allowed_ids: set[str] | None = None) -> str:
-    """Фильтр ответа модели: идентификаторы чужих компаний и физлиц, похожие на ключи строки — вырезаются."""
+def guard_output(text: str, allowed_ids: set[str] | None = None, own_label: str | None = None) -> str:
+    """Фильтр ответа модели: идентификаторы чужих компаний и физлиц, похожие на ключи строки — вырезаются.
+
+    own_label: чем заменить разрешённый (свой) идентификатор — технических id в ответе клиенту быть не должно.
+    """
     allowed = allowed_ids or set()
-    text = _UID_RE.sub(lambda m: m.group(0) if m.group(0) in allowed else "[скрыто]", text)
+    text = _UID_RE.sub(lambda m: (own_label or m.group(0)) if m.group(0) in allowed else "[скрыто]", text)
     return _KEY_RE.sub("[скрыто]", text)
 
 
