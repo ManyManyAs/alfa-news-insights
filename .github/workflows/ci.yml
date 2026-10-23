@@ -35,7 +35,14 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements.lock
       - run: pip install -r requirements.lock
-      - run: python -m pytest -q
+      - name: Тесты
+        run: |
+          set +e
+          python -m pytest -q -rf --tb=line 2>&1 | tee /tmp/pytest.log
+          RC="${PIPESTATUS[0]}"
+          # упавшие тесты — аннотациями: их видно на странице PR и в API без доступа к логам
+          grep -E "^FAILED|^ERROR|^E  |^/.*:[0-9]+: " /tmp/pytest.log | head -15 | while IFS= read -r l; do echo "::error title=pytest::${l:0:900}"; done
+          exit "$RC"
       - name: Офлайн-метрики и проверка качества против main
         env:
           DATA_SOURCE_DIR: ../data/sample
