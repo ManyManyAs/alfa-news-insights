@@ -63,12 +63,18 @@ logging.getLogger("uvicorn.access").addFilter(MaskIdsFilter())  # в адрес�
 
 
 def ingest_and_notify(**kw) -> dict:
-    """Сбор новостей по расписанию, затем push о новых рисках подписанным компаниям."""
+    """Сбор новостей по расписанию, затем push о новых рисках подписанным компаниям и прогрев разборов."""
     stats = run_ingest(**kw)
     try:
         stats["push_sent"] = push.notify_new_risks()
     except Exception:  # уведомления не должны ломать сбор
         log.exception("Ошибка отправки push")
+    try:  # готовые разборы верха ленты демо-персон, чтобы разбор открывался сразу
+        from app.agent.prewarm import prewarm_top
+
+        stats["prewarm"] = prewarm_top()
+    except Exception:  # прогрев не должен ломать сбор
+        log.exception("Ошибка прогрева разборов")
     return stats
 
 
