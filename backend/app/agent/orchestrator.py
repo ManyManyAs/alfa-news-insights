@@ -159,6 +159,9 @@ def _context_for_llm(ctx: AgentContext) -> str:
     mem["calc_baseline_forecasts"] = baseline_forecasts(mem)
     if extra := brief_theses(mem):  # тезисы, на которые ссылается общий разбор события, — с текстом
         mem["brief_bank_theses"] = extra
+    # служебные поля — в начало: при обрезке длинного контекста теряются хвостовые данные, а не список допустимых ссылок
+    head = ("allowed_sources", "today", "role", "calc_baseline_forecasts", "brief_bank_theses")
+    mem = {**{k: mem[k] for k in head if k in mem}, **{k: v for k, v in mem.items() if k not in head}}
     return "<context>\n" + json.dumps(mem, ensure_ascii=False, default=str)[:24000] + "\n</context>"
 
 

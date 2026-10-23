@@ -898,3 +898,8 @@ body.logged-out .layout, body.logged-out .topbar { display: none; }
 .bell-pop li { padding: 9px 10px; border-radius: 10px; cursor: pointer; display: flex; flex-direction: column; gap: 2px; }
 .bell-pop li:hover, .bell-pop li:focus-visible { background: var(--soft); }
 .bell-pop li b { font-weight: 600; font-size: 14px; }
+.sens ul { list-style: none; margin: 6px 0 8px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.sens li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; }
+.sens li span { flex: 1 1 260px; }
+.sens li b.bad { color: var(--risk); } .sens li b.ok { color: var(--opp); }
+.sens-tag { font-style: normal; font-size: 12px; background: var(--watch-bg); color: var(--watch); border-radius: 999px; padding: 1px 8px; }

@@ -75,6 +75,9 @@ class Scenario(BaseModel):
     start_month: int = 0  # с какого месяца горизонта действует отраслевой эффект
     version: int = 0  # версия калькулятора: старые расчёты в кэше пересчитываются
     negligible: bool = False  # заметного денежного эффекта нет — суммы не показываем
+    # чувствительность компании к типовым отклонениям от прогноза банка (не прогноз по событию)
+    sensitivity: list[dict] = Field(default_factory=list)
+    event_levers: list[str] = Field(default_factory=list)  # какие рычаги двигает само событие
 
 
 class QualityCheck(BaseModel):
