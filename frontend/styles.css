@@ -1491,7 +1491,7 @@ abbr.gl:focus-visible { outline: 2px solid var(--red); outline-offset: 2px; bord
 .rm-row { display: grid; grid-template-columns: minmax(150px, 1.2fr) 1fr 56px; gap: 10px; align-items: center; font-size: 13px; margin: 5px 0; }
 .rm-bar { height: 10px; border-radius: 99px; background: color-mix(in srgb, var(--line) 60%, transparent); overflow: hidden; }
 .rm-bar i { display: block; height: 100%; border-radius: inherit; background: var(--muted); }
-.rm-row.bank .rm-bar i { background: var(--red); }
+.rm-row.rk-bank .rm-bar i { background: var(--red); }
 .rm-row b { text-align: right; font-family: var(--display); }
 .rt { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; }
 .rt li { display: grid; grid-template-columns: 64px 1fr auto; gap: 10px; align-items: baseline; font-size: 13px; padding-left: 10px; border-left: 3px solid var(--line); }
