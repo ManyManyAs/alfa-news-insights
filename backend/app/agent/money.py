@@ -45,11 +45,12 @@ MONEY_SYSTEM = """Ты — аналитик Альфа-Банка. Для ком
   ниже спрос, дороже закупки), "better" — в пользу компании, "unclear" — неясно;
 - strength: 1 — слабый сигнал, 2 — заметный, 3 — сильный и прямой;
 - why: одна фраза по-русски для клиента, до 140 символов, без технических кодов и без сумм.
-Верни ТОЛЬКО JSON: {{"items": [{{"key": "...", "relevant": true, "direction": "worse|better|unclear", "strength": 1, "why": "..."}}]}}"""
+Ответь по КАЖДОМУ пункту, n — номер пункта из списка. Верни ТОЛЬКО JSON:
+{{"items": [{{"n": 1, "relevant": true, "direction": "worse|better|unclear", "strength": 1, "why": "..."}}]}}"""
 
 
 class MoneyItem(BaseModel):
-    key: str
+    n: int
     relevant: bool = False
     direction: str = "unclear"
     strength: int = Field(1, ge=1, le=3)
@@ -110,21 +111,21 @@ def ai_check(p, role, cands: list[dict]) -> tuple[dict[str, dict] | None, dict]:
     if not cands:
         return {}, {"used": False, "why": "нет кандидатов"}
     llm = get_llm()
-    lines = [f"{i + 1}. key={c['key']} · рычаг: {LEVER_TITLE.get(c['lever'], c['lever_title'])} · событие: "
+    lines = [f"{i + 1}. рычаг: {LEVER_TITLE.get(c['lever'], c['lever_title'])} · событие: "
              f"{sanitize_untrusted(c['title'])[0][:160]} — {sanitize_untrusted(c['lead'])[0][:220]}" for i, c in enumerate(cands)]
     msg = [{"role": "system", "content": MONEY_SYSTEM.format(notice=UNTRUSTED_NOTICE)},
            {"role": "user", "content": f"<company>{_company_line(p)}; роль пользователя: {role or 'не указана'}</company>\n"
                                        "<items>\n" + "\n".join(lines) + "\n</items>"}]
     try:
-        data, res = llm.complete_json("money_check", msg, MoneyOut, max_tokens=1800)
+        data, res = llm.complete_json("money_check", msg, MoneyOut, max_tokens=3200)
     except (LLMUnavailable, ValueError) as e:
         return None, {"used": False, "why": str(e)[:160]}
-    keys = {c["key"] for c in cands}
     out = {}
     for it in data.get("items", []):
-        if it["key"] in keys:
+        k = int(it.get("n") or 0) - 1  # номер пункта надёжнее ключа: модели иногда переписывают идентификаторы
+        if 0 <= k < len(cands):
             why = guard_output(humanize_text(it.get("why") or ""), set(), "ваша компания")[:200]
-            out[it["key"]] = {**it, "why": why}
+            out[cands[k]["key"]] = {**it, "key": cands[k]["key"], "why": why}
     return out, {"used": True, "model": res.model, "cost_rub": round(res.cost_rub, 3), "cached": res.cached}
 
 
@@ -175,9 +176,11 @@ def money_view(p, role, ranked: list, mat: dict, importance_level, cached_insigh
     for c in cands:
         if verdict is None:  # без модели — прежний отбор правилами: только средняя и высокая важность
             ok, info = c["level"] >= 2, {"direction": "unclear", "strength": 1, "why": c["reason"]}
-        else:
-            info = verdict.get(c["key"]) or {}
+        elif c["key"] in verdict:
+            info = verdict[c["key"]]
             ok = bool(info.get("relevant"))
+        else:  # модель пропустила пункт — решают правила (средняя и высокая важность), а не молчаливый отсев
+            ok, info = c["level"] >= 2, {"direction": "unclear", "strength": 1, "why": c["reason"]}
         if not ok:
             if verdict is not None and len(rejected) < 8 and c["event_id"] not in {x["event_id"] for x in rejected}:
                 rejected.append({"event_id": c["event_id"], "title": c["title"], "lever": LEVER_TITLE.get(c["lever"], c["lever_title"]),

@@ -1353,3 +1353,4 @@ body.m-detail .insight { padding-bottom: 84px; }
 .rm-change { font: 700 15px var(--display); }
 .rm-eff { text-align: right; display: flex; flex-direction: column; flex: none; }
 .rm-eff b { font: 700 17px var(--display); white-space: nowrap; }
+.rej { margin: 4px 0 0; padding-left: 18px; font-size: 13px; } .rej li { margin: 3px 0; }
