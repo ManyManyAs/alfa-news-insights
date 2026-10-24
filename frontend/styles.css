@@ -1162,3 +1162,18 @@ h2 { font-size: 22px; font-weight: 750; }
 .hero-globe canvas { top: 56px; height: calc(100% - 56px - 46px); }
 .ticker { align-self: end; flex: none; }
 @media (max-width: 1200px) { .hero { min-height: 0; } .hero-globe canvas { top: 48px; height: calc(100% - 48px - 40px); } }
+
+/* Знак Альфа-Банка (официальный файл, frontend/brand): без тени и подложки; на светлом — красный, на тёмном — белый */
+.brand-mark.alfa { background: none; box-shadow: none; border-radius: 0; width: 26px; height: 38px; color: var(--red-2); }
+.brand-mark.alfa svg { width: 100%; height: 100%; }
+.brand { gap: 12px; }
+:root[data-theme="dark"] .topbar .brand-mark.alfa, .brand-light .brand-mark.alfa { color: #fff; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .topbar .brand-mark.alfa { color: #fff; } }
+/* фирменные серые из брендбука */
+:root { --muted: #505759; }
+/* «фундамент» — фирменная красная черта как акцент у заголовков разделов */
+.page-head h2::after { content: ""; display: block; width: 36px; height: 4px; background: var(--red-2); margin-top: 10px; }
+/* подписи легенды — под глобусом, а не поверх него */
+.hero-globe canvas { height: calc(100% - 56px - 46px - 34px); }
+.globe-legend { bottom: 54px; }
+@media (max-width: 1200px) { .hero-globe canvas { height: calc(100% - 48px - 40px - 34px); } .globe-legend { bottom: 48px; } }
