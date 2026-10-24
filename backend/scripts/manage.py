@@ -98,6 +98,18 @@ def warmup(top: int = 5, max_rub: float | None = None, background: bool = False,
                 if over():
                     break
                 rev = p.revenue if not p.revenue_suspicious else None
+                # ИИ-сито ленты (реранк + проверка второй моделью): неважное убирается заранее, на стенде лента уже чистая
+                from app.ranking.rerank import rerank
+
+                rr = rerank(cached_rank(p, role, 40), p, role)
+                print(f"screen | {u['label'][:28]:28s} | {role:10s} | убрано {len(rr.get('hidden') or [])}")
+                # неочевидные последствия для уже построенных разборов верха ленты (две модели, ~0,3 ₽ на разбор)
+                from app.agent.orchestrator import upgrade_hidden
+
+                for sc in cached_rank(p, role, 6):
+                    if over():
+                        break
+                    upgrade_hidden(sc.event, p, role)
                 m = money_view(p, role, cached_rank(p, role, 30), ai_materiality(p.uid, role), importance_level, cached_insight, rev)
                 print(f"money  | {u['label'][:28]:28s} | {role:10s} | рычагов {len(m['levers'])} | событий {m['events_used']}"
                       f" из {m['candidates']} | ИИ: {m['ai'].get('used')}")

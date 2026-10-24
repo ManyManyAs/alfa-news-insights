@@ -1186,7 +1186,7 @@ async function loadFiltered() {
     box.className = "";
     box.innerHTML = `<p class="muted small">За ${r.days} дней сервис разобрал ${r.pool} деловых ${plural(r.pool, "событие", "события", "событий")}, в ленте — ${r.shown}. Ещё ${r.noise} ${plural(r.noise, "новость", "новости", "новостей")} отсеяно при сборе как не деловые (происшествия, спорт, культура).</p>
       ${r.groups.map((g) => `<div class="fl-g"><div class="fl-h"><b>${g.n}</b><span>${esc(g.title)}</span><span class="fl-bar"><i style="width:${(g.n / Math.max(1, total) * 100).toFixed(1)}%"></i></span></div>
-        <ul>${g.examples.map((e) => `<li><span class="muted">${fmtDate(e.published_at)}</span> ${esc(e.title)}</li>`).join("")}</ul></div>`).join("")}`;
+        <ul>${g.examples.map((e) => `<li><span class="muted">${fmtDate(e.published_at)}</span> ${esc(e.title)}${e.why ? `<div class="muted small">ИИ: ${esc(e.why)}</div>` : ""}</li>`).join("")}</ul></div>`).join("")}`;
   } catch (e) { box.textContent = "Не удалось загрузить: " + e.message; }
 }
 function dayTitle(d) {
@@ -1260,12 +1260,18 @@ async function applyRerank(key) {
   if (key !== state.feedKey) return;  // пользователь уже сменил компанию или роль
   if (!r.applied) { $("#rerankNote").textContent = ""; return; }
   state.rerank = r;
+  // ИИ-сито: две модели согласились, что событие компании не касается, — убираем из ленты (оно в «что не показали»)
+  const aiHidden = new Set((r.hidden || []).map((x) => x.event_id));
+  const before = state.feed.length;
+  if (aiHidden.size) state.feed = state.feed.filter((x) => !aiHidden.has(x.event_id));
+  const removed = before - state.feed.length;
   const pos = new Map(r.order.map((id, i) => [id, i]));
   state.feed.sort((a, b) => (pos.get(a.event_id) ?? 1e9) - (pos.get(b.event_id) ?? 1e9));
   state.feed = capThemes(state.feed);
   renderFeedList(true);
   renderWidget();
-  $("#rerankNote").innerHTML = `${ico("spark")} Порядок уточнён ИИ под ваш профиль`;
+  $("#rerankNote").innerHTML = `${ico("spark")} Порядок уточнён ИИ под ваш профиль${removed ? ` · убрано ${removed} ${plural(removed, "событие", "события", "событий")} не про вас (проверено двумя моделями)` : ""}`;
+  if (removed) { updateBadge(); renderFocus(); renderHero(); }
 }
 
 // Радар на главной: чувствительность компании и сигналы ленты
@@ -1581,6 +1587,35 @@ function moneyLine(i, sc, lo, hi) {
     <span class="sh-note">если всё пойдёт по прогнозу Альфа-Банка — без изменений к плану${main ? " · главный рычаг — " + esc(main.title.replace(/^./, (c) => c.toLowerCase())) : ""}${sc.base.start_month ? " · начнётся с " + esc((sc.base.months || [])[sc.base.start_month] || "") : ""} · расчёт — в подробном разборе</span></div>`;
 }
 // Новость и позиция банка расходятся — показываем наверху оба взгляда, без выбора «кто прав»
+// Неочевидные последствия: нашла одна модель, подтвердила другая; цепочка «событие → … → деньги компании»
+function hiddenBlock(i) {
+  const list = i.hidden_effects;
+  if (list === null || list === undefined) return i.generated_by && i.generated_by.startsWith("llm") && state.llmMode !== "mock"
+    ? `<div class="hid-wait muted small" id="hidWait">${ico("spark")} ИИ ищет неочевидные последствия для компании и перепроверяет их второй моделью…</div>` : "";
+  if (!list.length) return "";
+  return `<div class="q hid-block"><h4><span class="n">${ico("spark")}</span>Неочевидное для вашей компании</h4>
+    ${list.map((h) => `<div class="hid-item ${h.effect}"><div class="hid-top"><span class="pill ${h.effect}">${EFFECT[h.effect]}</span><b>${esc(h.text)}</b></div>
+      <ol class="hid-chain">${h.chain.map((c) => `<li>${esc(c)}</li>`).join("")}</ol>
+      <div class="hid-meta muted small">${h.plausibility >= 3 ? "вероятно" : "возможно"} · через: ${h.sources.map((sid) => `<button class="link-btn" data-src="${esc(sid)}">${esc(((i.sources || []).find((x) => x.id === sid) || {}).title || "данные компании")}</button>`).join(", ")}
+        · ${ico("like")} проверено второй моделью${h.verified_by ? ` (${esc(h.verified_by.replace(/-flash|-instruct/g, ""))})` : ""}${h.check_why ? `: ${esc(h.check_why)}` : ""}</div></div>`).join("")}
+    <p class="muted small">Вывод сервиса (AI), не позиция банка. Суммы не называем: их считает калькулятор в блоке «Эффект за 12 месяцев». Натянутые связи вторая модель отсекает — если правдоподобного нет, блока нет.</p></div>`;
+}
+// старый разбор: неочевидное досчитывается в фоне — через ~20 с забираем обновлённый разбор и дорисовываем блок
+function pollHidden(eventId) {
+  clearTimeout(state.hidTimer);
+  let tries = 0;
+  const tick = async () => {
+    if (state.current !== eventId || !document.getElementById("hidWait")) return;
+    try {
+      const fresh = await api(`/api/insights/${eventId}?${q({ company_id: state.company, role: state.role })}`);
+      if (state.current !== eventId) return;
+      if (fresh.hidden_effects != null) { state.insight.hidden_effects = fresh.hidden_effects; state.insight.sources = fresh.sources; renderInsight(state.tab || "analysis"); return; }
+    } catch (e) { /* не страшно — попробуем позже */ }
+    if (++tries < 4) state.hidTimer = setTimeout(tick, 15000);
+    else { const w = document.getElementById("hidWait"); if (w) w.remove(); }
+  };
+  state.hidTimer = setTimeout(tick, 18000);
+}
 function divergenceBlock(i) {
   const issues = (i.relevance && i.relevance.consistency_issues) || [];
   if (!issues.length) return "";
@@ -1649,6 +1684,7 @@ function renderInsight(tab) {
         ${(i.scenarios || []).length ? `<div class="effect-block"><div class="sub-h">Эффект для компании за 12 месяцев</div>${scenarioCards(i.scenarios, false, moneyOff(i))}</div>` : ""}
         ${(i.what_could_change || []).length ? `<div class="sub-h">Что может изменить вывод</div>${claimsShort(i.what_could_change, 1)}` : ""}
         ${whatIfBlock()}</div>
+      ${hiddenBlock(i)}
       <div class="q"><h4><span class="n">4</span>Что можно сделать</h4>${actionsBlock(i.actions)}<div id="evHistory" class="ev-history"></div>
         ${i.products.map((p) => `<div class="product"><span class="lbl">${esc(p.label)}</span><br><b>${esc(PRODUCT_RU[p.product] || p.product)}</b> — ${esc(p.why)}
           <div><button class="btn small" data-act="application" data-product="${esc(PRODUCT_RU[p.product] || p.product)}">Оставить заявку</button></div></div>`).join("")}
@@ -1728,6 +1764,7 @@ function renderInsight(tab) {
   document.querySelectorAll("[data-ics]").forEach((el) => el.onclick = () => downloadIcs(i.actions[+el.dataset.ics], i.headline));
   bindChat();
   renderEventHistory();
+  if (document.getElementById("hidWait")) pollHidden(state.current);
 }
 
 // ---------------------------------------------------------------- «Мои действия»: шаги из разборов в работе

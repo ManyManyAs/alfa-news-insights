@@ -28,6 +28,17 @@ class Claim(BaseModel):
     used: int | None = None  # позиция банка: сколько разборов опираются на этот материал
 
 
+class HiddenEffect(BaseModel):
+    """Неочевидное последствие (второго порядка): найдено одной моделью, подтверждено другой (app/agent/hidden.py)."""
+    text: str
+    effect: Literal["risk", "opportunity"] = "risk"
+    chain: list[str] = Field(default_factory=list)  # шаги «событие → … → деньги компании»
+    sources: list[str] = Field(default_factory=list)  # через какую связь компании (граф платежей, продукт банка)
+    plausibility: int = 2  # 3 — вероятно, 2 — возможно; натянутое не сохраняется
+    verified_by: str = ""  # модель-проверяющий
+    check_why: str = ""
+
+
 class Action(Claim):
     action_type: Literal["analysis", "hedge", "finance", "operations", "monitor", "question"] = "analysis"
     owner: str = ""  # кто делает: финдиректор, казначей, главбух…
@@ -126,3 +137,5 @@ class Insight(BaseModel):
     # публикации события на момент разбора; что добавилось после — показываем и предлагаем пересчитать
     news_seen: list[str] | None = None
     news_added: list[dict] = Field(default_factory=list)
+    # неочевидные последствия: None — ещё не искали (старый разбор), [] — искали и не нашли правдоподобных
+    hidden_effects: list[HiddenEffect] | None = None

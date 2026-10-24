@@ -365,8 +365,12 @@ def feed(company_id: str, role: str | None = None, limit: int = Query(20, le=50)
     p = authorized_profile(company_id, user)
     hidden = {r["event_id"] for r in db.query("SELECT event_id FROM hidden_events WHERE user_id=? AND company_uid=?",
                                               (user, p.uid))}
+    from app.ranking.screen import screened
+
+    ai_hidden = screened(p.uid, role)  # ИИ-сито: две модели согласились, что компании не касается
     # Сюжет сворачивается в одну карточку (rank_feed): самое релевантное событие, остальные — в таймлайне
-    items = [s for s in cached_rank(p, role, limit + len(hidden)) if show_hidden or s.event.id not in hidden][:limit]
+    items = [s for s in cached_rank(p, role, limit + len(hidden) + len(ai_hidden))
+             if (show_hidden or s.event.id not in hidden) and s.event.id not in ai_hidden][:limit]
     # Оценка важности моделью из уже построенных разборов: «не касается / слабо» опускает карточку в ленте
     mat = ai_materiality(p.uid, role)
     if mat:
@@ -402,7 +406,7 @@ def feed(company_id: str, role: str | None = None, limit: int = Query(20, le=50)
     fresh = [s for s in items if (s.event.published_at or "") >= week_ago[:10]]
     quiet = None if fresh else {"days": QUIET_DAYS, "last": ({"event_id": items[0].event.id, "title": items[0].event.title,
                                                               "published_at": items[0].event.published_at} if items else None)}
-    return {"company_id": company_id, "role": role, "quiet": quiet, "hidden_count": len(hidden),
+    return {"company_id": company_id, "role": role, "quiet": quiet, "hidden_count": len(hidden), "ai_hidden_count": len(ai_hidden),
             "items": [{**card(s), "hidden": s.event.id in hidden} for s in items]}
 
 
@@ -422,9 +426,12 @@ def feed_filtered(company_id: str, role: str | None = None, user: str = Depends(
 
     p = authorized_profile(company_id, user)
     hidden = {r["event_id"] for r in db.query("SELECT event_id FROM hidden_events WHERE user_id=? AND company_uid=?", (user, p.uid))}
+    from app.ranking.screen import screened
+
+    ai_hidden = screened(p.uid, role)
     events = list_events(FEED_POOL, business_days=FEED_DAYS)
     shown = cached_rank(p, role, 40)
-    key = (p.uid, role, _events_cache.get("sig"), tuple(sorted(hidden)), datetime.now(UTC).strftime("%Y%m%d%H"),
+    key = (p.uid, role, _events_cache.get("sig"), tuple(sorted(hidden)), tuple(sorted(ai_hidden)), datetime.now(UTC).strftime("%Y%m%d%H"),
            tuple(sorted((f, o["multiplier"]) for f, o in get_overrides(p.uid).items())))
     if (hit := _filtered_cache.get(key)) is not None:
         return hit
@@ -439,8 +446,15 @@ def feed_filtered(company_id: str, role: str | None = None, user: str = Depends(
         "region": "Мера в другом регионе: ни компании, ни её контрагентов там нет",
         "industry": "Новость о другой отрасли: отраслевой эффект для компании слабый",
         "weak": "Слабая связь: оценка ниже порога ленты", "below": "Связь есть, но ниже по важности — не вошло в 40 карточек",
+        "ai": "ИИ счёл не относящимся к компании — решение подтвердила вторая модель",
     }
     for ev in events:
+        if ev.id in ai_hidden:
+            g = groups.setdefault("ai", {"key": "ai", "title": titles["ai"], "n": 0, "examples": []})
+            g["n"] += 1
+            if len(g["examples"]) < 3:
+                g["examples"].append({"event_id": ev.id, "title": ev.title, "published_at": ev.published_at, "why": ai_hidden[ev.id]})
+            continue
         if ev.id in shown_ids:
             continue
         s = score_event(ev, p, exposures, None, watch)
@@ -464,7 +478,7 @@ def feed_filtered(company_id: str, role: str | None = None, user: str = Depends(
     since = (datetime.now(UTC) - timedelta(days=FEED_DAYS)).isoformat()
     noise = db.query_one(f"SELECT COUNT(*) n FROM events WHERE classification IS NOT NULL AND published_at >= ? AND NOT {BUSINESS_SQL}",
                          (since,))["n"]
-    order = ["none", "weak", "industry", "region", "story", "below", "hidden"]
+    order = ["ai", "none", "weak", "industry", "region", "story", "below", "hidden"]
     out = {"pool": len(events), "shown": len(shown), "noise": noise, "days": FEED_DAYS,
            "groups": [groups[k] for k in order if k in groups]}
     if len(_filtered_cache) > 256:
@@ -809,7 +823,17 @@ def insight(event_id: str, company_id: str, role: str | None = None, refresh: bo
         raise HTTPException(404, "Событие не найдено")
     if refresh or not cached_insight(ev.id, p.uid, role):
         throttle(user, "insight", 12)
-    return served(get_or_create_insight(ev, p, role, force=refresh), ev)
+    ins = served(get_or_create_insight(ev, p, role, force=refresh), ev)
+    maybe_upgrade_hidden(ins, ev, p, role)
+    return ins
+
+
+def maybe_upgrade_hidden(ins, ev, p, role) -> None:
+    """Старый разбор: неочевидные последствия досчитываются в фоне двумя моделями, открытие разбора не ждёт."""
+    if ins.hidden_effects is None and ins.generated_by.startswith("llm") and get_llm().enabled:
+        from app.agent.orchestrator import upgrade_hidden
+
+        threading.Thread(target=upgrade_hidden, args=(ev, p, role), daemon=True).start()
 
 
 def served(ins: Insight, ev) -> Insight:
@@ -844,6 +868,7 @@ def insight_stream(event_id: str, company_id: str, request: Request, role: str |
 
     def gen() -> Iterator[str]:
         if not refresh and (hit := cached_insight(ev.id, p.uid, role)):
+            maybe_upgrade_hidden(hit, ev, p, role)
             yield _sse({"type": "done", "cached": True, "insight": served(hit, ev).model_dump()})
             return
         q: queue.Queue = queue.Queue()

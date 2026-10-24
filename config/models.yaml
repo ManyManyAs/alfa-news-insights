@@ -59,6 +59,9 @@ models:
 tasks:
   classify_news:      {model: gemma,    fallback: gemma}
   rerank:             {model: gemma,    fallback: gemma}
+  screen_check:       {model: qwen,     fallback: glm}       # вторая модель подтверждает «не про компанию»
+  hidden_effects:     {model: deepseek, fallback: qwen}      # неочевидные последствия для компании
+  hidden_check:       {model: glm,      fallback: qwen}      # независимая проверка неочевидных последствий
   dedup_arbiter:      {model: gemma,    fallback: glm}
   summarize_doc:      {model: kimi,     fallback: qwen}
   ocr_page:           {model: qwen_vl,  fallback: qwen_vl}
