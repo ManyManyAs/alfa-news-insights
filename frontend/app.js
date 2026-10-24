@@ -2246,7 +2246,7 @@ async function runBankSearch(qs) {
 function rateMarketCard(rm) {
   if (!rm || !(rm.bank || []).length) return "";
   const all = [...rm.bank, ...rm.market], max = Math.max(...all.map((x) => x.value)) * 1.08;
-  const row = (x) => `<div class="rm-row ${x.kind}" title="${esc(x.ref || "")}"><span>${esc(x.label)}</span><span class="rm-bar"><i style="width:${(x.value / max * 100).toFixed(1)}%"></i></span><b>${String(x.value).replace(".", ",")}%</b></div>`;
+  const row = (x) => `<div class="rm-row rk-${x.kind}" title="${esc(x.ref || "")}"><span>${esc(x.label)}</span><span class="rm-bar"><i style="width:${(x.value / max * 100).toFixed(1)}%"></i></span><b>${String(x.value).replace(".", ",")}%</b></div>`;
   return `<div class="card rm-card"><div class="eyebrow">Ставка: прогноз банка и рынок</div>
     <div class="rm-sub">Прогноз Альфа-Банка</div>${rm.bank.map(row).join("")}
     ${rm.market.length ? `<div class="rm-sub">Рыночные ставки (по материалам банка)</div>${rm.market.map(row).join("")}` : ""}
