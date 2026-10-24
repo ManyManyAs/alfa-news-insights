@@ -102,6 +102,8 @@ const CMD_ACTIONS = [
   ["Настроить главную", "grid", () => openHomeSetup()],
   ["Тур по сервису", "play", () => startTour()],
   ["Светлая / тёмная тема", "moon", () => toggleTheme()],
+  ["Высокая контрастность: вкл / выкл", "contrast", () => toggleContrast()],
+  ["Горячие клавиши ленты", "keys", () => { show("radar"); toast("Лента с клавиатуры: j / k — вниз и вверх, Enter — открыть, x — скрыть, / или Ctrl+K — поиск"); }],
 ];
 const norm = (s) => String(s || "").toLowerCase().replace(/ё/g, "е");
 function cmdItems(qs) {

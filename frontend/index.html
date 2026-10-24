@@ -10,6 +10,8 @@
   <link rel="preload" href="/static/fonts/Inter-Regular.woff" as="font" type="font/woff" crossorigin>
   <link rel="stylesheet" href="/static/styles.css">
   <link rel="icon" href="/static/brand/alfa-mark-red-bg.svg" type="image/svg+xml">
+  <link rel="manifest" href="/static/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/static/icon-192.png">
 </head>
 <body class="logged-out">
   <!-- ============================== Вход ============================== -->
@@ -43,7 +45,7 @@
 
   <!-- шапка документа для печати и PDF (на экране скрыта) -->
   <div class="report-print" id="reportPrint" aria-hidden="true"></div>
-  <div class="print-head" aria-hidden="true"><b>Альфа-Бизнес · Бизнес-радар</b><span id="printMeta"></span></div>
+  <div class="print-head" aria-hidden="true"><span class="ph-brand"><i class="ph-mark"><svg viewBox="104 63 162 235" aria-hidden="true"><path fill="currentColor" d="M 255.722656 288.140625 L 114.277344 288.140625 L 114.277344 258.75 L 255.722656 258.75 Z M 255.722656 288.140625"/><path fill="currentColor" d="M 164.976562 164.265625 L 184.816406 105.300781 L 185.550781 105.300781 L 204.289062 164.265625 Z M 210.894531 94.414062 C 206.859375 82.386719 202.210938 72.886719 186.285156 72.886719 C 170.359375 72.886719 165.414062 82.347656 161.167969 94.414062 L 117.402344 218.820312 L 146.425781 218.820312 L 156.527344 189.246094 L 212.371094 189.246094 L 221.738281 218.820312 L 252.597656 218.820312 Z M 210.894531 94.414062"/></svg></i><b>Альфа-Бизнес · Бизнес-радар</b></span><span id="printMeta"></span></div>
 
   <!-- ============================== Шапка ============================== -->
   <header class="topbar">
@@ -62,6 +64,7 @@
         <span class="bell-n" id="bellN" hidden></span></button>
         <div class="bell-pop" id="bellPop" role="dialog" aria-label="Уведомления" hidden></div></div>
       <button class="icon-btn" id="themeBtn" title="Светлая / тёмная тема" aria-label="Переключить тему"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></button>
+      <button class="btn ghost small install-btn" id="installBtn" hidden title="Установить Бизнес-радар как приложение">Установить</button>
       <button class="btn ghost small tour-btn" id="tourBtn" title="Пошаговый тур по возможностям сервиса"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10-6.5z" fill="currentColor"/></svg><span class="t-long">Тур по сервису</span><span class="t-short">Тур</span></button>
       <span class="user-chip" title="Пользователь"><span class="avatar" id="userAvatar" aria-hidden="true">—</span><span class="user-txt"><b id="userName">—</b><button class="link-btn logout" id="logoutBtn" title="Выйти и войти другим пользователем">Выйти</button></span></span>
     </div>
@@ -290,6 +293,7 @@
   <script src="/static/chat.js"></script>
   <script src="/static/actions.js"></script>
   <script src="/static/agent.js"></script>
+  <script src="/static/ui.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>

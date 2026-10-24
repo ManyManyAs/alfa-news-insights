@@ -187,9 +187,9 @@ async function init() {
   $("#ctxBtn").onclick = () => { const open = !document.querySelector(".topbar").classList.contains("ctx-open"); document.querySelector(".topbar").classList.toggle("ctx-open", open); $("#ctxBtn").setAttribute("aria-expanded", String(open)); };
   $("#backToFeed").onclick = () => closeDetail(true);
   addEventListener("popstate", () => { if (document.body.classList.contains("m-detail")) closeDetail(false); });
-  document.querySelectorAll("[data-view]").forEach((el) => el.onclick = () => show(el.dataset.view, el.dataset.bank));
-  document.querySelectorAll("[data-goto]").forEach((el) => el.onclick = () => show(el.dataset.goto));
-  document.querySelectorAll("[data-strip]").forEach((el) => el.onclick = () => show(el.dataset.strip));
+  document.querySelectorAll("[data-view]").forEach((el) => el.onclick = () => showT(el.dataset.view, el.dataset.bank));
+  document.querySelectorAll("[data-goto]").forEach((el) => el.onclick = () => showT(el.dataset.goto));
+  document.querySelectorAll("[data-strip]").forEach((el) => el.onclick = () => showT(el.dataset.strip));
   // быстрые действия на главной — как ряд кнопок в интернет-банке
   document.querySelectorAll("[data-qa]").forEach((el) => el.onclick = () => {
     const k = el.dataset.qa;
@@ -224,6 +224,8 @@ async function init() {
   $("#analyzeSubmit").onclick = analyzeNews;
   document.querySelectorAll("[data-example]").forEach((b) => b.onclick = () => { $("#analyzeUrl").value = ""; $("#analyzeText").value = ANALYZE_EXAMPLES[+b.dataset.example]; $("#analyzeText").focus(); });
   bindCmd();
+  bindFeedKeys();
+  bindInstall();
   applyHomeLayout();
   const hsb = document.getElementById("homeSetupBtn"); if (hsb) hsb.onclick = openHomeSetup;
   try { await enterApp(); } catch (e) { if (e.status !== 401) throw e; }
@@ -255,7 +257,7 @@ function bindLogin() {
     } catch (err) { $("#loginErr").textContent = err.message; }
     state.loggingIn = false;
   };
-  document.querySelectorAll(".logout").forEach((b) => b.onclick = async () => { await api("/api/auth/logout", { method: "POST" }); state.user = null; closeCtx(); showLogin(); });
+  document.querySelectorAll(".logout").forEach((b) => b.onclick = async () => { await api("/api/auth/logout", { method: "POST" }); await clearOfflineCache(); state.user = null; closeCtx(); showLogin(); });
 }
 
 async function enterApp() {
@@ -316,6 +318,12 @@ function closeDetail(fromButton) {
   if (fromButton && history.state && history.state.detail) history.back();
   const card = document.querySelector(`.feed-item[data-ev="${state.current}"]`);
   if (card) card.scrollIntoView({ block: "center" });
+}
+// мягкий переход между экранами по клику в навигации (View Transitions), если браузер умеет и анимация не отключена;
+// программные вызовы show() остаются синхронными — на них опираются тур и проверки
+function showT(view, sub) {
+  if (!document.startViewTransition || document.body.dataset.view === view || matchMedia("(prefers-reduced-motion: reduce)").matches) return show(view, sub);
+  document.startViewTransition(() => show(view, sub));
 }
 function show(view, sub) {
   if (view !== "radar") document.body.classList.remove("m-detail");
@@ -1207,6 +1215,7 @@ function bindCards(root) {
     el.onclick = (e) => { if (!e.target.closest("details")) open(); };  // «Комментарий ИИ» раскрывается, не открывая разбор
     el.onkeydown = (e) => { if (e.target.closest("details")) return; if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } };
   });
+  if (root.id === "feedList") bindSwipes(root);
 }
 function bindFeedControls() {
   document.querySelectorAll("[data-feff]").forEach((b) => b.onclick = () => {

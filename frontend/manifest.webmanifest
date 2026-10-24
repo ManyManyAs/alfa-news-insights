@@ -1,0 +1,25 @@
+{
+  "name": "Альфа-Бизнес · Бизнес-радар",
+  "short_name": "Бизнес-радар",
+  "lang": "ru",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0b0b0d",
+  "theme_color": "#0b0b0d",
+  "description": "Новости, которые влияют на вашу компанию: почему вам, сколько в рублях, позиция Альфа-Банка.",
+  "icons": [
+    {
+      "src": "/static/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/brand/alfa-mark-red-bg.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
