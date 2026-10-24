@@ -177,6 +177,12 @@ async function init() {
   });
   document.querySelectorAll(".nav-item[data-view]").forEach((el) => { el.tabIndex = 0; el.setAttribute("role", "link");
     el.onkeydown = (e) => { if (e.key === "Enter") show(el.dataset.view, el.dataset.bank); }; });
+  // телефон: нижняя панель с главными разделами, «Ещё» раскрывает все разделы листом снизу
+  const navMore = $("#navMore");
+  const setNav = (open) => { document.body.classList.toggle("nav-open", open); navMore.setAttribute("aria-expanded", String(open)); };
+  navMore.onclick = (e) => { e.stopPropagation(); setNav(!document.body.classList.contains("nav-open")); };
+  navMore.onkeydown = (e) => { if (e.key === "Enter") navMore.onclick(e); };
+  document.addEventListener("click", (e) => { if (document.body.classList.contains("nav-open") && !e.target.closest(".sidebar")) setNav(false); });
   $("#markAllRead").onclick = markAllRead;
   $("#bellBtn").onclick = (e) => { e.stopPropagation(); toggleBell(); };
   document.addEventListener("click", (e) => { if (!e.target.closest(".bell-wrap")) toggleBell(false); });
@@ -275,6 +281,8 @@ function closeDetail(fromButton) {
 }
 function show(view, sub) {
   if (view !== "radar") document.body.classList.remove("m-detail");
+  document.body.classList.remove("nav-open");
+  const nm = document.getElementById("navMore"); if (nm) nm.setAttribute("aria-expanded", "false");
   document.body.dataset.view = view;
   document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.id === `view-${view}`));
   document.querySelectorAll(".nav-item[data-view]").forEach((n) => n.classList.toggle("active", n.dataset.view === view

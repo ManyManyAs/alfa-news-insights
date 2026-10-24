@@ -242,6 +242,14 @@ async def shots(b):
         await pg.click("#ctxBtn")
         await asyncio.sleep(0.5)
         await pg.screenshot(path=OUT / "10b_mobile_context.png")
+        await pg.click("#ctxBtn")
+        await pg.click("#navMore")
+        await asyncio.sleep(0.6)
+        await pg.screenshot(path=OUT / "10c_mobile_menu.png")
+        await pg.click(".nav-item[data-view=forecasts]")
+        await pg.wait_for_selector("#view-forecasts.active", timeout=10000)
+        if await pg.evaluate("document.body.classList.contains('nav-open')"):
+            raise AssertionError("меню «Ещё» не закрылось после перехода в раздел")
         if wide > 1:
             raise AssertionError(f"на телефоне лишняя ширина {wide} px; шире экрана: {await pg.evaluate(WIDE_JS)}")
 
