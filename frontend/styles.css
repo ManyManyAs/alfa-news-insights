@@ -1055,3 +1055,12 @@ body.logged-out .layout, body.logged-out .topbar { display: none; }
   body.m-detail .m-back { bottom: calc(78px + env(safe-area-inset-bottom)); }
   #toast { bottom: calc(80px + env(safe-area-inset-bottom)); }
 }
+
+/* Связь с сервером пропала — полоса сверху */
+#netBar { position: fixed; left: 0; right: 0; top: 0; z-index: 60; background: var(--warn-bg2); color: var(--warn-ink2); text-align: center; font-size: 13px; font-weight: 600;
+  padding: 6px 12px; transform: translateY(-100%); transition: transform .25s var(--ease); }
+#netBar.on { transform: none; }
+/* График эффекта: наведение на месяц — вертикальная линия и подсказка с суммами трёх сценариев */
+.ec-hit rect { fill: transparent; cursor: crosshair; }
+.ec-hit line { stroke: var(--ink); stroke-opacity: 0; stroke-width: 1; pointer-events: none; }
+.ec-hit:hover line { stroke-opacity: .25; }
