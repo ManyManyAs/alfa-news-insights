@@ -6,6 +6,11 @@
 @font-face { font-family: "Inter"; src: url("/static/fonts/Inter-Medium.woff") format("woff"); font-weight: 500; font-display: swap; }
 @font-face { font-family: "Inter"; src: url("/static/fonts/Inter-SemiBold.woff") format("woff"); font-weight: 600; font-display: swap; }
 @font-face { font-family: "Inter"; src: url("/static/fonts/Inter-Bold.woff") format("woff"); font-weight: 700; font-display: swap; }
+/* Styrene A — фирменный шрифт Альфа-Банка для заголовков (брендбук: акциденция); использование разрешено организаторами */
+@font-face { font-family: "Styrene A"; src: url("/static/fonts/StyreneAWeb-Regular.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Styrene A"; src: url("/static/fonts/StyreneAWeb-Medium.woff2") format("woff2"); font-weight: 500; font-display: swap; }
+@font-face { font-family: "Styrene A"; src: url("/static/fonts/StyreneAWeb-Bold.woff2") format("woff2"); font-weight: 700; font-display: swap; }
+@font-face { font-family: "Styrene A"; src: url("/static/fonts/StyreneAWeb-Black.woff2") format("woff2"); font-weight: 900; font-display: swap; }
 @font-face { font-family: "Inter Display"; src: url("/static/fonts/InterDisplay-Bold.woff") format("woff"); font-weight: 700; font-display: swap; }
 @font-face { font-family: "Inter Display"; src: url("/static/fonts/InterDisplay-ExtraBold.woff") format("woff"); font-weight: 800; font-display: swap; }
 
@@ -24,7 +29,7 @@
   --sidebar: #ffffff; --sidebar-ink: #3d424a; --side-strong: #0b0b0d; --side-hover: #f2f3f5; --side-active: #eef0f3; --side-sep: #646a74;
   --top-bg: rgba(255, 255, 255, .92);
   --font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --display: "Inter Display", "Inter", system-ui, sans-serif;
+  --display: "Styrene A", "Inter Display", "Inter", system-ui, sans-serif;
   --ease: cubic-bezier(.2, .8, .2, 1);
 }
 :root[data-theme="dark"] {
@@ -1179,3 +1184,100 @@ h2 { font-size: 22px; font-weight: 750; }
 @media (max-width: 1200px) { .hero-globe canvas { height: calc(100% - 48px - 40px - 34px); } .globe-legend { bottom: 48px; } }
 /* «фундамент» под заголовком тёмного блока — как черта под знаком и в иконках саббрендов банка */
 .hero h1::after { content: ""; display: block; width: 48px; height: 5px; background: var(--red-2); margin-top: 14px; }
+
+/* =====================================================================================================
+   Визуальные блоки вместо текста (24.10): пульс ленты, цепочка влияния, диаграмма «деньги на кону»,
+   шкала «что на кону», лента дат календаря, короткие причины и свёрнутый комментарий ИИ
+   ===================================================================================================== */
+/* пульс ленты */
+.pulse-svg { width: 100%; height: auto; display: block; margin: 6px 0 4px; overflow: visible; }
+.pc-hit { fill: transparent; }
+.pc-col.on { cursor: pointer; }
+.pc-col.on:hover .pc-hit, .pc-col.on:focus .pc-hit { fill: var(--soft2); }
+.pc-col:focus { outline: none; }
+.pc-empty { fill: var(--line); }
+.pc-ax { font-size: 10px; fill: var(--muted); font-family: var(--font); }
+.pc-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--muted); }
+.pc-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.pc-legend i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+
+/* цепочка влияния: событие → фактор → через → деньги */
+.chain { display: flex; align-items: stretch; gap: 4px; margin: 12px 0 4px; flex-wrap: nowrap; }
+.ch-node { flex: 1 1 0; min-width: 0; background: var(--soft); border: var(--hair); border-radius: 12px; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; }
+.ch-node span { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 700; }
+.ch-node b { font-size: 13.5px; line-height: 1.3; overflow-wrap: anywhere; }
+.ch-node.eff-risk { background: var(--risk-bg); border-color: transparent; } .ch-node.eff-risk b { color: var(--risk); }
+.ch-node.eff-opportunity { background: var(--opp-bg); border-color: transparent; } .ch-node.eff-opportunity b { color: var(--opp); }
+.ch-node.eff-watch, .ch-node.eff-mixed { background: var(--watch-bg); border-color: transparent; } .ch-node.eff-watch b { color: var(--watch); }
+.ch-node.money { background: var(--ink); border-color: var(--ink); } .ch-node.money span { color: color-mix(in srgb, var(--on-ink) 60%, transparent); } .ch-node.money b { color: var(--on-ink); }
+.ch-node.calm b { color: var(--muted); font-weight: 600; }
+.ch-arrow { width: 18px; flex: none; align-self: center; fill: none; stroke: var(--muted); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+@media (max-width: 760px) { .chain { flex-direction: column; } .ch-arrow { transform: rotate(90deg); margin: -2px auto; height: 14px; } }
+
+/* «деньги на кону»: диаграмма по рычагам */
+.mbars { margin: 14px 0 6px; display: flex; flex-direction: column; gap: 10px; }
+.mb-row { display: grid; grid-template-columns: minmax(120px, 32%) 1fr; gap: 4px 14px; align-items: center; }
+.mb-label { display: flex; flex-direction: column; min-width: 0; }
+.mb-label b { font-size: 13.5px; line-height: 1.3; }
+.mb-ev { font-size: 12px; text-align: left; }
+.mb-bar { display: grid; grid-template-columns: 1fr 2px 1fr; align-items: center; height: 30px; }
+.mb-half { position: relative; height: 22px; display: flex; align-items: center; }
+.mb-half.neg { justify-content: flex-end; } .mb-half.pos { justify-content: flex-start; }
+.mb-half i { display: block; height: 100%; min-width: 3px; }
+.mb-half.neg i { background: var(--risk); border-radius: 6px 0 0 6px; } .mb-half.pos i { background: var(--opp); border-radius: 0 6px 6px 0; }
+.mb-half em { font-style: normal; font-size: 12px; font-weight: 700; white-space: nowrap; padding: 0 6px; font-variant-numeric: tabular-nums; }
+.mb-half.neg em { order: -1; color: var(--risk); } .mb-half.pos em { color: var(--opp); }
+.mb-zero { background: var(--ink); height: 30px; opacity: .5; }
+.mb-more { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 4px; font-size: 13px; padding: 6px 0 2px 12px; border-left: 2px solid var(--line); }
+.mb-axis { display: grid; grid-template-columns: minmax(120px, 32%) 1fr 1fr 1fr; gap: 0 14px; font-size: 11px; color: var(--muted); }
+.mb-axis span:first-child { grid-column: 2; } .mb-axis span:nth-child(2) { text-align: center; } .mb-axis span:last-child { text-align: right; }
+.howcalc { margin-top: 6px; } .howcalc summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--muted); }
+.howcalc p { margin: 6px 0 0; }
+@media (max-width: 640px) { .mb-row { grid-template-columns: 1fr; } .mb-axis { grid-template-columns: 1fr 1fr 1fr; } .mb-axis span:first-child { grid-column: auto; } }
+
+/* шкала «что на кону» в блоке «Коротко» */
+.stake { margin: 4px 0 10px; max-width: 460px; }
+.stake-track { position: relative; height: 10px; border-radius: 999px; background: rgba(255, 255, 255, .1); }
+.stake-track i { position: absolute; top: 0; bottom: 0; }
+.stake-track i.neg { background: #ff5a4f; border-radius: 999px 0 0 999px; } .stake-track i.pos { background: #34d17f; border-radius: 0 999px 999px 0; }
+.stake-track b { position: absolute; top: -4px; bottom: -4px; width: 3px; margin-left: -1.5px; background: #fff; border-radius: 2px; }
+.stake-lbl { display: flex; justify-content: space-between; font-size: 11.5px; color: rgba(255, 255, 255, .6); margin-top: 6px; font-variant-numeric: tabular-nums; }
+
+/* лента 90 дней в календаре */
+.cal-strip { position: relative; height: 54px; margin: 4px 8px 18px; }
+.cs-line { position: absolute; left: 0; right: 0; top: 22px; height: 2px; background: var(--line); border-radius: 2px; }
+.cs-month { position: absolute; top: 34px; transform: translateX(-50%); font-size: 11px; color: var(--muted); text-transform: capitalize; }
+.cs-month::before { content: ""; position: absolute; left: 50%; top: -12px; width: 1px; height: 8px; background: var(--line); }
+.cs-today { position: absolute; top: 34px; font-size: 11px; font-weight: 700; color: var(--red-ink); }
+.cs-dot { position: absolute; top: 15px; width: 16px; height: 16px; margin-left: -8px; border-radius: 50%; border: 3px solid var(--surface); cursor: pointer; padding: 0; background: var(--watch);
+  box-shadow: 0 0 0 1px var(--line); transition: transform .15s; }
+.cs-dot:hover, .cs-dot:focus-visible { transform: scale(1.35); }
+.cs-dot.norm { background: var(--risk); } .cs-dot.task { background: var(--opp); }
+.cal-item.flash { animation: calFlash 1.4s ease; border-radius: 12px; }
+@keyframes calFlash { 0%, 60% { background: var(--hl); } 100% { background: transparent; } }
+
+/* короткие причины и свёрнутый комментарий ИИ */
+.w-reason { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; margin-top: 6px; }
+.rchip { font-size: 12px; font-weight: 600; background: var(--soft2); border-radius: 999px; padding: 2px 9px; }
+.w-via { font-size: 12.5px; color: var(--muted); }
+details.ai-note { font-size: 12.5px; color: var(--ai); margin-top: 6px; }
+details.ai-note summary { cursor: pointer; font-weight: 600; list-style: none; display: inline-flex; gap: 5px; align-items: center; background: var(--ai-bg); border-radius: 999px; padding: 2px 10px; }
+details.ai-note summary::-webkit-details-marker { display: none; }
+details.ai-note[open] summary { margin-bottom: 4px; }
+
+/* Styrene A широкий: заголовки — Medium/Bold (по брендбуку), чуть меньше трекинг и кегль, чем у Inter Display */
+h1, h2, h3, .hs-txt b, .hs b, .mini-head h3 { letter-spacing: -.01em; }
+h2 { font-weight: 700; } h3 { font-weight: 500; }
+.page-head h2 { font-weight: 700; font-size: 28px; }
+.hero h1 { font-weight: 700; letter-spacing: -.02em; font-size: clamp(26px, 2.35vw, 36px); }
+.brand { font-family: var(--display); font-weight: 700; }
+.brand-txt small { font-family: var(--font); }
+.login-hero h1 { letter-spacing: -.03em; }
+/* кольцо по эффектам в дайджесте */
+.donut-wrap { display: flex; align-items: center; gap: 18px; margin: 10px 0 12px; }
+.donut { width: 104px; height: 104px; flex: none; }
+.dn-n { font: 700 20px var(--display); fill: var(--ink); }
+.dn-l { font-size: 9px; fill: var(--muted); font-family: var(--font); }
+.dn-legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 13.5px; }
+.dn-legend li { display: flex; align-items: center; gap: 8px; }
+.dn-legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
