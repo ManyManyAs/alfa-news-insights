@@ -148,21 +148,12 @@ function endTour() {
   const top = document.querySelector(".topbar"); if (top) top.classList.remove("ctx-open");
 }
 
-// Онбординг: при первом визите — «мы изучили вашу компанию: 5 факторов» и предложение пройти тур
+// Онбординг при первом визите: «мы изучили вашу компанию», выбор роли, «мои цифры» и тур
 function maybeOnboard() {
   let seen = false;
   try { seen = localStorage.getItem("onboarded") === "1"; } catch (e) { seen = false; }
   if (seen || !state.exposures) return;
-  const top = state.exposures.filter((e) => e.weight > 0).slice(0, 5);
-  const d = document.getElementById("onboard");
-  d.innerHTML = `<div class="ob"><div class="eyebrow">Бизнес-радар</div>
-    <h2>Мы изучили вашу компанию</h2>
-    <p class="muted">По продуктам банка, отрасли, ВЭД и графу платежей — вот 5 факторов, которые для вас важнее всего. Новости будем отбирать и объяснять через них.</p>
-    <ol class="ob-list">${top.map((e) => `<li><b>${esc(e.title)}</b><div class="muted small">${esc((e.reasons.find((r) => r.basis !== "baseline") || e.reasons[0] || {}).why || "")}</div></li>`).join("")}</ol>
-    <div class="row"><button class="btn ghost" id="obSkip">Смотреть самостоятельно</button><button class="btn btn-red" id="obTour">Пройти тур (2 минуты)</button></div></div>`;
-  d.showModal();
-  document.getElementById("obSkip").onclick = closeOnboarding;
-  document.getElementById("obTour").onclick = startTour;
+  onboardSteps();  // 3 шага: компания → роль → мои цифры (home.js)
 }
 function closeOnboarding() {
   try { localStorage.setItem("onboarded", "1"); } catch (e) { /* хранилище недоступно */ }

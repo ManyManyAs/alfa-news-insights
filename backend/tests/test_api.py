@@ -244,3 +244,13 @@ def test_bank_library_documents_search_and_company_theses(client, demo):
     assert len(mine) <= 3 and all(t["doc_title"] for t in mine)
     rm = client.get("/api/bank/rate-market").json()
     assert rm["bank"] and all(x["value"] > 0 for x in rm["bank"] + rm["market"])
+
+
+def test_me_overview_counts_per_company(client, demo):
+    """Этап 5: переключатель «мои компании» — у каждой доступной компании счётчик рисков и свежих событий."""
+    h = {"X-User-Id": demo["user_id"]}
+    me = client.get("/api/me", headers=h).json()
+    ov = client.get("/api/me/overview", headers=h).json()["companies"]
+    assert {c["uid"] for c in ov} == {c["uid"] for c in me["companies"]}
+    for c in ov:
+        assert c["risks"] >= 0 and c["fresh"] >= 0

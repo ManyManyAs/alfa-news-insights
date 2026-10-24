@@ -223,6 +223,23 @@ def me(user: str = Depends(current_user)):
     return {"user_id": user, "companies": companies}
 
 
+@app.get("/api/me/overview")
+def me_overview(role: str | None = None, user: str = Depends(current_user)):
+    """Переключатель «мои компании»: у каждой компании — сколько в её ленте рисков средней и высокой важности
+    и сколько событий за сутки. Те же правила и тот же кэш, что у ленты (cached_rank), без вызовов модели."""
+    since = (datetime.now(UTC) - timedelta(hours=24)).isoformat()[:13]
+    out = []
+    for uid in companies_of_user(user):
+        p = get_profile(uid)
+        if not p:
+            continue
+        items, mat = cached_rank(p, role, 40), ai_materiality(p.uid, role)
+        risks = sum(1 for s in items if s.effect == "risk" and importance_level(s.score, mat.get(s.event.id))["level"] >= 2)
+        fresh = sum(1 for s in items if (s.event.published_at or "")[:13] >= since)
+        out.append({"uid": p.uid, "risks": risks, "fresh": fresh})
+    return {"companies": out}
+
+
 # ------------------------------------------------------------------ компания и лента
 @app.get("/api/companies/{company_id}")
 def company(company_id: str, role: str | None = None, user: str = Depends(current_user)):

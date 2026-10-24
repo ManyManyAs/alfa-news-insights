@@ -230,9 +230,38 @@ async def shots(b):
                 raise AssertionError(f"ширина {w}: высота шапки {top} px, лишняя ширина {wide} px; шире экрана: {who}")
         await pg.set_viewport_size({"width": 1440, "height": 900})
 
+    async def s_stage5():
+        # этап 5: поиск Ctrl+K, настройка главной, «всё прочитано», онбординг в 3 шага, хлебные крошки
+        await pg.click(".nav-item[data-view=home]")
+        await pg.keyboard.press("Control+k")
+        await pg.wait_for_selector("#cmdk[open] .cmd-it", timeout=10000)
+        await pg.keyboard.type("ставк")
+        await asyncio.sleep(1.5)
+        await pg.screenshot(path=OUT / "18_search.png")
+        await pg.keyboard.press("Escape")
+        await wait_js(pg, "!document.querySelector('#cmdk[open]')", 5)
+        await pg.click("#homeSetupBtn")
+        await pg.wait_for_selector("#actionDialog[open] .hs-setup", timeout=10000)
+        await pg.screenshot(path=OUT / "19_home_setup.png")
+        await pg.keyboard.press("Escape")
+        await pg.evaluate("show('radar'); markAllRead(); document.querySelector('#fUnread').click()")
+        await pg.wait_for_selector("#feedList .e-state", timeout=10000)
+        await pg.screenshot(path=OUT / "20_all_read.png")
+        await pg.evaluate("document.querySelector('#fUnread').click()")
+        await pg.evaluate("onboardSteps()")
+        await pg.wait_for_selector("#onboard[open] [data-ob='1']", timeout=10000)
+        await pg.click("#onboard [data-ob='1']")
+        await pg.wait_for_selector("#onboard .ob-roles", timeout=10000)
+        await asyncio.sleep(0.5)
+        await pg.screenshot(path=OUT / "21_onboard_role.png")
+        await pg.click("#onboard [data-ob='2']")
+        await pg.click("#onboard [data-ob='skip']")
+        if not await pg.locator("#insightPanel .crumbs").count():
+            raise AssertionError("в разборе нет хлебных крошек")
+
     for name, fn in [("вход", s_login), ("главная", s_home), ("лента и разбор", s_insight), ("сценарии", s_scen),
                      ("чат", s_chat), ("трассировка", s_trace), ("мои действия", s_tasks), ("календарь", s_calendar), ("прогнозы банка", s_forecasts), ("дайджест", s_digest), ("качество и бюджет", s_quality),
-                     ("разделы банка", s_bank), ("уведомления", s_bell), ("тур по сервису", s_tour), ("ширины экрана", s_widths)]:
+                     ("разделы банка", s_bank), ("уведомления", s_bell), ("тур по сервису", s_tour), ("ширины экрана", s_widths), ("этап 5: навигация", s_stage5)]:
         await step(name, fn())
     await ctx.close()
 
