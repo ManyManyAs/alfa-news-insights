@@ -73,4 +73,6 @@ tasks:
   critique:           {model: deepseek, fallback: glm}
   revise:             {model: deepseek, fallback: glm}
   chat:               {model: qwen,     fallback: gemma}
+  # «Деньги на кону»: модель решает, какие события реально двигают рычаги компании; суммы — калькулятор
+  money_check:        {model: deepseek, fallback: qwen}
   judge:              {model: deepseek, fallback: glm}

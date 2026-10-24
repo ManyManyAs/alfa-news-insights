@@ -340,9 +340,14 @@ async function loadMoney() {
   state.money = m;
   if (state.feed) { renderWidget(); renderFocus(); }
   const pr = (x) => (x == null ? "" : ` · ${pctRev(x)} выручки`);
+  const aiLine = m.ai && m.ai.used
+    ? `${ico("spark")} ИИ отобрал ${m.events_used} ${plural(m.events_used, "событие", "события", "событий")} из ${m.candidates}${m.dropped ? ` — ${m.dropped} не влияют на деньги компании` : ""}; суммы считает калькулятор`
+    : `Отбор правилами: события средней и высокой важности; суммы считает калькулятор`;
+  const how = `<details class="howcalc"><summary>Как считаем</summary><p class="muted small">Модель для каждого события решает, двигает ли оно рычаг этой компании (ставку, курс, зарплаты, спрос, цены закупок), в какую сторону и насколько сильно. Суммы модель не считает: их даёт калькулятор — умеренное отклонение рычага от прогноза Альфа-Банка (ставка ±1 п.п., курс +10/−5%, зарплаты +3/−2 п.п.). Одна причина считается один раз, по самой сильной новости. Если всё пойдёт по прогнозу банка, план не меняется.</p></details>`;
   if (!m.levers.length) {
-    box.innerHTML = `<div class="eyebrow">Деньги на кону · 12 месяцев</div><h3>Заметного влияния на прибыль не видно</h3>
-      <p class="muted">В ленте сейчас нет событий, которые по нашим расчётам заметно меняют прибыль компании за 12 месяцев. Это тоже ответ: менять план не нужно.</p>`;
+    box.innerHTML = `<div class="eyebrow">Деньги на кону · 12 месяцев</div><h3>Событий, которые заметно меняют деньги, сейчас нет</h3>
+      <p class="muted">Это тоже ответ: по текущей ленте менять план не нужно.</p>
+      ${sensitivityBars(m.sensitivity)}<div class="money-ai">${aiLine}</div>${how}`;
     return;
   }
   box.innerHTML = `<div class="eyebrow">Деньги на кону · 12 месяцев</div>
@@ -352,8 +357,9 @@ async function loadMoney() {
       <div class="mt down"><span>Возможный минус</span><b>${rub(m.down)}</b><i>${pr(m.share_down).slice(3)}</i></div>
     </div>
     ${moneyBars(m.levers)}
-    <details class="howcalc"><summary>Как считаем</summary><p class="muted small">Это не сумма по новостям: одна причина (например, ставка) считается один раз, по самой сильной новости. Если всё пойдёт по прогнозу Альфа-Банка, план не меняется. Плюс и минус — умеренные отклонения от прогноза, а не худший и лучший случай. Учтены ${m.events_used} ${plural(m.events_used, "событие", "события", "событий")} средней и высокой важности; события без заметного денежного эффекта не учитываются.</p></details>`;
-  box.querySelectorAll("[data-mb]").forEach((b) => b.onclick = () => { const more = b.closest(".mb-row").querySelector(".mb-more"); more.hidden = !more.hidden; });
+    <div class="money-ai">${aiLine}</div>
+    <details class="howcalc"><summary>К чему ещё чувствительна компания</summary>${sensitivityBars(m.sensitivity)}</details>
+    ${how}`;
   box.querySelectorAll("[data-money-ev]").forEach((b) => b.onclick = () => { show("radar"); openInsight(b.dataset.moneyEv, false, "money"); });
 }
 

@@ -1323,3 +1323,23 @@ details.more-claims > summary::-webkit-details-marker { display: none; }
   .kinds { font-size: 12px; }
 }
 body.m-detail .insight { padding-bottom: 84px; }
+
+/* «Деньги на кону» v2: сигналы событий с направлением и причиной от ИИ, чувствительность компании */
+.mb-tilt { font-size: 11.5px; font-weight: 600; }
+.mb-tilt.neg { color: var(--risk); } .mb-tilt.pos { color: var(--opp); } .mb-tilt.even { color: var(--muted); }
+.mb-sigs { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 4px; padding: 2px 0 4px; }
+.mb-sig { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 8px; align-items: start; text-align: left; border: 0; background: var(--soft);
+  border-radius: 10px; padding: 7px 10px; cursor: pointer; font: inherit; color: var(--ink); }
+.mb-sig:hover { background: var(--soft2); }
+.mb-arrow { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: 13px; background: var(--soft2); }
+.mb-sig.worse .mb-arrow { background: var(--risk-bg); color: var(--risk); } .mb-sig.better .mb-arrow { background: var(--opp-bg); color: var(--opp); }
+.mb-sig-t { display: flex; flex-direction: column; min-width: 0; }
+.mb-sig-t b { font-size: 13px; font-weight: 600; line-height: 1.35; }
+.mb-sig-t i { font-style: normal; font-size: 12.5px; color: var(--muted); line-height: 1.4; }
+.mb-str { font-size: 9px; letter-spacing: 1px; color: var(--red-2); padding-top: 5px; white-space: nowrap; }
+.money-ai { font-size: 12.5px; color: var(--ai); margin: 8px 0 2px; display: flex; gap: 6px; align-items: center; }
+.sens { margin-top: 8px; }
+.sens-row { display: grid; grid-template-columns: minmax(0, 1fr) 30% auto; gap: 10px; align-items: center; font-size: 13px; padding: 4px 0; }
+.sens-bar { height: 8px; background: var(--soft2); border-radius: 999px; overflow: hidden; }
+.sens-bar i { display: block; height: 100%; border-radius: 999px; } .sens-bar i.neg { background: var(--risk); } .sens-bar i.pos { background: var(--opp); }
+.sens-row b { font-variant-numeric: tabular-nums; white-space: nowrap; }
