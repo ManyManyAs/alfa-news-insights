@@ -6,9 +6,9 @@ on:
   workflow_dispatch:
     inputs:
       task:
-        description: "check — проверка моделей; benchmark — сравнение моделей; warmup — предрасчёт + снапшот; judges — два судьи (GLM и Kimi) на готовых разборах; redteam — 10 атак через живые модели; all — всё"
+        description: "check — проверка моделей; benchmark — сравнение моделей; warmup — предрасчёт + снапшот; judges — два судьи (GLM и Kimi) на готовых разборах; redteam — 10 атак через живые модели; selfcheck — эксперимент «только DeepSeek» (сам себя проверяет) против текущего конвейера; all — всё"
         type: choice
-        options: [check, benchmark, warmup, judges, redteam, all]
+        options: [check, benchmark, warmup, judges, redteam, selfcheck, all]
         default: check
       max_rub:
         description: "Лимит расходов на прогон, ₽ (дневной лимит команды — 500 ₽)"
@@ -128,6 +128,22 @@ jobs:
           fi
           grep -E "Итог|Прогон" ../docs/llm/redteam_live.md | while read -r l; do echo "::notice title=red-team::$l"; done
           cat ../docs/llm/redteam_live.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Эксперимент «только DeepSeek»
+        if: inputs.task == 'selfcheck'
+        run: |
+          # копия БД: пересобранные разборы эксперимента не должны попасть в снапшот
+          python -c "import sqlite3; sqlite3.connect('/tmp/live.db').backup(sqlite3.connect('/tmp/selfcheck.db'))"
+          cp /tmp/live.demo_users.json /tmp/selfcheck.demo_users.json 2>/dev/null || true
+          set +e
+          DB_PATH=/tmp/selfcheck.db python scripts/deepseek_only.py --limit 12 --max-rub ${{ inputs.max_rub }} > selfcheck.log 2>&1
+          RC=$?
+          cat selfcheck.log
+          if [ "$RC" != "0" ]; then
+            echo "::error title=selfcheck::$(grep -v '^\s*$' selfcheck.log | tail -6 | tr '\n' ' ' | cut -c1-900)"
+            exit "$RC"
+          fi
+          grep -E "^Прогон|^\| \*\*Средняя|^- " ../docs/llm/deepseek_only.md | while read -r l; do echo "::notice title=selfcheck::$l"; done
+          cat ../docs/llm/deepseek_only.md >> "$GITHUB_STEP_SUMMARY"
       - name: Экспорт снапшота
         run: python scripts/manage.py snapshot-export
       - name: Итоги в summary
