@@ -350,11 +350,9 @@ async function loadMoney() {
       <div class="mt up"><span>Возможный плюс</span><b>${rub(m.up)}</b><i>${pr(m.share_up).slice(3)}</i></div>
       <div class="mt down"><span>Возможный минус</span><b>${rub(m.down)}</b><i>${pr(m.share_down).slice(3)}</i></div>
     </div>
-    <ul class="money-list">${m.levers.map((v) => `<li>
-      <div class="ml-head"><b>${esc(v.title)}</b><span class="ml-range">${v.down ? `<span class="bad">${rub(v.down)}</span>` : ""}${v.down && v.up ? " … " : ""}${v.up ? `<span class="ok">${rub(v.up)}</span>` : ""}</span></div>
-      <div class="ml-ev">${v.events.map((e) => `<button class="link-btn" data-money-ev="${esc(e.event_id)}">${esc(e.title)}</button>`).join("")}</div>
-      ${v.action ? `<div class="ml-act">Как ограничить: ${esc(v.action)}</div>` : ""}</li>`).join("")}</ul>
-    <p class="muted small">Это не сумма по новостям: одна причина (например, ставка) считается один раз, по самой сильной новости. Если всё пойдёт по прогнозу Альфа-Банка, план не меняется. Плюс и минус — умеренные отклонения от прогноза, а не худший и лучший случай. Учтены ${m.events_used} ${plural(m.events_used, "событие", "события", "событий")} средней и высокой важности; события без заметного денежного эффекта не учитываются.</p>`;
+    ${moneyBars(m.levers)}
+    <details class="howcalc"><summary>Как считаем</summary><p class="muted small">Это не сумма по новостям: одна причина (например, ставка) считается один раз, по самой сильной новости. Если всё пойдёт по прогнозу Альфа-Банка, план не меняется. Плюс и минус — умеренные отклонения от прогноза, а не худший и лучший случай. Учтены ${m.events_used} ${plural(m.events_used, "событие", "события", "событий")} средней и высокой важности; события без заметного денежного эффекта не учитываются.</p></details>`;
+  box.querySelectorAll("[data-mb]").forEach((b) => b.onclick = () => { const more = b.closest(".mb-row").querySelector(".mb-more"); more.hidden = !more.hidden; });
   box.querySelectorAll("[data-money-ev]").forEach((b) => b.onclick = () => { show("radar"); openInsight(b.dataset.moneyEv, false, "money"); });
 }
 
@@ -739,8 +737,8 @@ function renderFocus() {
     <div class="focus-main" data-ev="${main.event_id}" tabindex="0" role="button">
       <span class="pill ${main.effect}">${EFFECT[main.effect]}</span><span class="muted small">${fmtDate(main.published_at)} · важность: ${esc(impLevel(main).label || IMP_RU[impLevel(main).level] || "")}</span>
       <h3>${esc(main.title)}</h3>
-      <div class="why">Почему вам: ${esc(main.reasons[0]?.why || "")}</div>
-      <div class="focus-chips">${m ? `<span class="fchip">${ico("money")} ${moneyText(m)} · ${esc(m.title.toLowerCase())}</span>` : ""}${main.effective ? effectiveTag(main.effective) : ""}</div>
+      ${impactChain(main, m, moneyText)}
+      ${main.effective ? `<div class="focus-chips">${effectiveTag(main.effective)}</div>` : ""}
     </div>
     <div class="focus-foot">
       <button class="btn btn-red small" data-focus-open>Открыть разбор</button>
@@ -761,7 +759,7 @@ function renderWidget() {
     <div class="w-item eff-${it.effect} ${read.has(it.event_id) ? "read" : ""}" data-ev="${it.event_id}" tabindex="0" role="button">
       ${read.has(it.event_id) ? "" : `<span class="new-dot" title="Не прочитано"></span>`}<span class="pill ${it.effect}">${EFFECT[it.effect]}</span><span class="muted small">${fmtDate(it.published_at)}</span>${read.has(it.event_id) ? `<span class="read-mark">✓ прочитано</span>` : ""}
       <div class="title"><b>${esc(it.title)}</b></div>
-      <div class="why">Почему вам: ${esc(it.reasons[0]?.why || "")}</div>
+      ${reasonLine(it)}
       ${it.effective ? `<div>${effectiveTag(it.effective)}</div>` : ""}
       ${(() => { const m = eventMoney(it.event_id); return m ? `<div class="w-money">${ico("money")} ${moneyText(m)}</div>` : ""; })()}
     </div>`).join("") || `<div class="muted">Значимых событий для компании нет.</div>`;
@@ -769,6 +767,29 @@ function renderWidget() {
     $("#widgetList").insertAdjacentHTML("afterbegin", `<div class="quiet">За последние ${quiet.days} дней значимых для вашей компании событий не было — это тоже ответ: менять планы не нужно.${quiet.last ? ` Последнее важное — ниже.` : ""}</div>`);
   }
   bindCards($("#widgetList"));
+  renderPulse();
+}
+// Короткая причина «почему вам»: фактор со стрелкой и через что он задевает компанию (полный текст — в подсказке)
+function reasonLine(it) {
+  const r = it.reasons[0];
+  if (!r) return "";
+  const dir = r.direction === "up" ? " ↑" : r.direction === "down" ? " ↓" : "";
+  const via = (r.why || "").split(" — ")[0].replace(/^У компании /, "").replace(/^Компания /, "");
+  return `<div class="w-reason" title="${esc(r.why || "")}"><span class="rchip">${esc(r.factor_title || "")}${dir}</span>${via ? `<span class="w-via">через: ${esc(via)}</span>` : ""}</div>`;
+}
+function renderPulse() {
+  const box = document.getElementById("pulseCard");
+  if (!box || !state.feed) return;
+  box.innerHTML = pulseChart(state.feed);
+  box.querySelectorAll("[data-pulse-day]").forEach((g) => {
+    const go = () => {
+      show("radar");
+      $("#fSort").value = "date"; filters.sort = "date"; renderFeedList();
+      const h = document.querySelector(`.feed-day[data-day="${g.dataset.pulseDay}"]`);
+      if (h) h.scrollIntoView({ behavior: "smooth", block: "start" });
+    };
+    g.onclick = go; g.onkeydown = (e) => { if (e.key === "Enter") go(); };
+  });
 }
 
 // ---- фильтры ленты: эффект, фактор, период, поиск, сортировка, «непрочитанные»
@@ -888,7 +909,7 @@ function renderFeedList(animate = false) {
   let day = "";
   list.innerHTML = items.map((it) => {
     const n = notes[it.event_id];
-    const d = (it.published_at || "").slice(0, 10), head = byDate && d !== day ? `<div class="feed-day">${esc(dayTitle(d))}</div>` : "";
+    const d = (it.published_at || "").slice(0, 10), head = byDate && d !== day ? `<div class="feed-day" data-day="${esc(d)}">${esc(dayTitle(d))}</div>` : "";
     day = d;
     return `${head}<div class="feed-item eff-${it.effect} ${read.has(it.event_id) ? "read" : ""} ${it.event_id === state.current ? "active" : ""}" data-ev="${it.event_id}" tabindex="0" role="button">
       ${it.hidden ? `<button class="link-btn unhide" data-unhide="${it.event_id}">Вернуть в ленту</button>` : `<button class="hide-btn" data-hide="${it.event_id}" title="Скрыть из ленты" aria-label="Скрыть из ленты">×</button>`}
@@ -898,8 +919,8 @@ function renderFeedList(animate = false) {
       <div class="chips">${entityChips(it)}</div>
       <div class="reasons">${esc(reasonText(it))}</div>
       ${personalNote(it)}
-      ${n && !(it.imp && it.imp.source === "ai") ? `<div class="ai-note"><b>ИИ:</b> ${esc(n.why)}</div>` : ""}
-      ${it.imp && it.imp.source === "ai" && it.imp.why ? `<div class="ai-note"><b>ИИ после разбора:</b> ${esc(it.imp.why)}</div>` : ""}
+      ${(() => { const t = it.imp && it.imp.source === "ai" && it.imp.why ? it.imp.why : n && !(it.imp && it.imp.source === "ai") ? n.why : "";
+        return t ? `<details class="ai-note"><summary>${ico("spark")} Комментарий ИИ</summary>${esc(t)}</details>` : ""; })()}
       ${it.story ? `<div class="story-badge">Сюжет · ${it.story.count} ${plural(it.story.count, "событие", "события", "событий")}: ${esc(fmtDate(it.story.timeline[0].published_at))} → ${esc(fmtDate(it.story.timeline[it.story.timeline.length - 1].published_at))}</div>` : ""}
       ${impBar(it)}
     </div>`;
@@ -944,8 +965,8 @@ function bindCards(root) {
       if (from !== "feed") show("radar");
       openInsight(el.dataset.ev, false, from);
     };
-    el.onclick = open;
-    el.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } };
+    el.onclick = (e) => { if (!e.target.closest("details")) open(); };  // «Комментарий ИИ» раскрывается, не открывая разбор
+    el.onkeydown = (e) => { if (e.target.closest("details")) return; if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } };
   });
 }
 function bindFeedControls() {
@@ -1231,7 +1252,7 @@ function moneyLine(i, sc, lo, hi) {
   if (moneyOff(i)) return `<div class="sh-range"><span class="sh-note">Деньги: заметного влияния на прибыль за 12 месяцев не ожидаем — суммы не показываем.</span></div>`;
   const neg = sc.negative, pos = sc.positive;
   const main = (neg && neg.rows.length ? neg.rows : pos.rows).slice().sort((a, b) => Math.abs(b.effect_rub) - Math.abs(a.effect_rub))[0];
-  return `<div class="sh-range">Что на кону за 12 месяцев: от <b class="${lo < 0 ? "neg" : ""}">${rub(lo)}</b> до <b class="${hi > 0 ? "pos" : ""}">${rub(hi)}</b>
+  return `<div class="sh-range">${stakeBar(lo, hi)}Что на кону за 12 месяцев: от <b class="${lo < 0 ? "neg" : ""}">${rub(lo)}</b> до <b class="${hi > 0 ? "pos" : ""}">${rub(hi)}</b>
     <span class="sh-note">если всё пойдёт по прогнозу Альфа-Банка — без изменений к плану${main ? " · главный рычаг — " + esc(main.title.replace(/^./, (c) => c.toLowerCase())) : ""}${sc.base.start_month ? " · начнётся с " + esc((sc.base.months || [])[sc.base.start_month] || "") : ""} · расчёт — в подробном разборе</span></div>`;
 }
 // Новость и позиция банка расходятся — показываем наверху оба взгляда, без выбора «кто прав»
@@ -1804,9 +1825,13 @@ async function loadCalendar() {
       <div class="cal-body"><span class="pill ${cls}">${label}</span><span class="muted small">${n === 0 ? "сегодня" : `через ${n} ${plural(n, "день", "дня", "дней")}`}</span>
         <b>${esc(x.title)}</b>${x.note ? `<div class="muted small">${esc(x.note)}</div>` : ""}</div></li>`;
   }
-  box.innerHTML = items.length ? `<div class="card cal-card">${html}</ul>
+  box.innerHTML = items.length ? `<div class="card cal-card">${calendarStrip(items, c.today, c.until)}${html}</ul>
       <p class="muted small">Даты заседаний — <a href="${esc(c.source_url)}" target="_blank" rel="noopener">календарь Банка России</a>. Сроки действий — из «Моих действий».</p></div>`
     : `<div class="card"><p class="muted">В ближайшие ${c.horizon_days} дней ключевых дат нет.</p></div>`;
+  box.querySelectorAll("[data-cs]").forEach((b) => b.onclick = () => {
+    const li = box.querySelectorAll(".cal-item")[+b.dataset.cs];
+    if (li) { li.scrollIntoView({ behavior: "smooth", block: "center" }); li.classList.add("flash"); setTimeout(() => li.classList.remove("flash"), 1400); }
+  });
   box.querySelectorAll("[data-cev]").forEach((el) => { const go = () => { show("radar"); openInsight(el.dataset.cev, false, "calendar"); }; el.onclick = go; el.onkeydown = (e) => { if (e.key === "Enter") go(); }; });
   box.querySelectorAll("[data-ctask]").forEach((el) => { const go = () => show("tasks"); el.onclick = go; el.onkeydown = (e) => { if (e.key === "Enter") go(); }; });
 }
