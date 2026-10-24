@@ -177,6 +177,12 @@ async function init() {
   });
   document.querySelectorAll(".nav-item[data-view]").forEach((el) => { el.tabIndex = 0; el.setAttribute("role", "link");
     el.onkeydown = (e) => { if (e.key === "Enter") show(el.dataset.view, el.dataset.bank); }; });
+  // телефон: нижняя панель с главными разделами, «Ещё» раскрывает все разделы листом снизу
+  const navMore = $("#navMore");
+  const setNav = (open) => { document.body.classList.toggle("nav-open", open); navMore.setAttribute("aria-expanded", String(open)); };
+  navMore.onclick = (e) => { e.stopPropagation(); setNav(!document.body.classList.contains("nav-open")); };
+  navMore.onkeydown = (e) => { if (e.key === "Enter") navMore.onclick(e); };
+  document.addEventListener("click", (e) => { if (document.body.classList.contains("nav-open") && !e.target.closest(".sidebar")) setNav(false); });
   $("#markAllRead").onclick = markAllRead;
   $("#bellBtn").onclick = (e) => { e.stopPropagation(); toggleBell(); };
   document.addEventListener("click", (e) => { if (!e.target.closest(".bell-wrap")) toggleBell(false); });
@@ -275,6 +281,8 @@ function closeDetail(fromButton) {
 }
 function show(view, sub) {
   if (view !== "radar") document.body.classList.remove("m-detail");
+  document.body.classList.remove("nav-open");
+  const nm = document.getElementById("navMore"); if (nm) nm.setAttribute("aria-expanded", "false");
   document.body.dataset.view = view;
   document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.id === `view-${view}`));
   document.querySelectorAll(".nav-item[data-view]").forEach((n) => n.classList.toggle("active", n.dataset.view === view
@@ -1203,7 +1211,9 @@ function renderInsight(tab) {
         ${i.products.map((p) => `<div class="product"><span class="lbl">${esc(p.label)}</span><br><b>${esc(PRODUCT_RU[p.product] || p.product)}</b> — ${esc(p.why)}
           <div><button class="btn small" data-act="application" data-product="${esc(PRODUCT_RU[p.product] || p.product)}">Оставить заявку</button></div></div>`).join("")}
         <div class="cta"><button class="btn small" data-act="manager">Обсудить с менеджером</button><button class="btn ghost small" data-act="callback">Заказать обратный звонок</button></div></div>
-      <div class="q"><h4><span class="n">5</span>Как это оценивает Альфа-Банк</h4>${claims(i.bank_view)}</div>
+      <div class="q"><h4><span class="n">5</span>Как это оценивает Альфа-Банк</h4>
+        <div class="bv-card"><div class="bv-head"><span class="bv-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 10 12 4l9 6M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18"/></svg></span><div><b>Позиция Альфа-Банка</b><div class="muted small">тезисы и прогнозы из аналитики банка — со ссылкой на документ и страницу</div></div></div>
+        ${(i.bank_view || []).length ? claims(i.bank_view) : `<div class="muted small">В аналитике банка нет материалов по этой теме — сервис не придумывает позицию за банк.</div>`}</div></div>
       <div class="q"><h4><span class="n">6</span>На чём основан вывод</h4>
         <div class="small muted">Каждое утверждение выше помечено типом и источником. Автоматическая проверка разбора (${i.iterations} ${plural(i.iterations, "проход", "прохода", "проходов")}):</div>
         <ul class="quality">${i.quality.map((c) => `<li class="${c.passed ? "ok" : "bad"}">${c.passed ? "✓" : "✗"} ${esc(CHECK_RU[c.name] || c.name)}${c.passed ? "" : " — " + esc(cleanRefs(c.detail))}</li>`).join("")}</ul>
@@ -1227,9 +1237,9 @@ function renderInsight(tab) {
     loadTrace(i.trace_id);
   }
   $("#insightPanel").innerHTML = `<div class="insight">
-    <div><span class="pill ${i.effect}">${EFFECT[i.effect]}</span>
-      <span class="muted small">${state.pending === state.current ? "<span class='pending-dot' aria-hidden='true'></span>Черновик ИИ готов · агент проверяет факты и уточняет разбор" : i.generated_by.startsWith("llm") ? "Разбор подготовлен ИИ и проверен на ошибки" : "Быстрый разбор по профилю компании"} · ${allOk ? "<span class='ok'>✓ самопроверка пройдена</span>" : "<span title='Подробности — в блоке «На чём основан вывод»'>самопроверка: есть замечания</span>"}</span>
-      <span class="ins-actions"><button class="btn ghost small" id="pdfBtn" title="Сохранить разбор в PDF через печать браузера">Скачать PDF</button><button class="btn ghost small" id="refreshBtn">Пересчитать</button></span></div>
+    <div class="ins-top"><div class="ins-status"><span class="pill ${i.effect}">${EFFECT[i.effect]}</span>
+      <span class="muted small">${state.pending === state.current ? "<span class='pending-dot' aria-hidden='true'></span>Черновик ИИ готов · агент проверяет факты и уточняет разбор" : i.generated_by.startsWith("llm") ? "Разбор подготовлен ИИ и проверен на ошибки" : "Быстрый разбор по профилю компании"} · ${allOk ? "<span class='ok'>✓ самопроверка пройдена</span>" : "<span title='Подробности — в блоке «На чём основан вывод»'>самопроверка: есть замечания</span>"}</span></div>
+      <span class="ins-actions"><button class="btn ghost small" id="pdfBtn" title="Сохранить разбор в PDF через печать браузера">${ico("doc")} PDF</button><button class="btn ghost small" id="refreshBtn" title="Пересобрать разбор заново">Пересчитать</button></span></div>
     <h2 style="margin-top:8px">${esc(i.headline)}</h2>
     ${shortBlock(i)}
     ${divergenceBlock(i)}
@@ -1237,7 +1247,11 @@ function renderInsight(tab) {
     ${i.data_gaps.length ? `<div class="notice">Учтены пробелы в данных: ${esc(i.data_gaps.join("; "))}</div>` : ""}
     ${(() => { const f = state.feed.find((x) => x.event_id === state.current); return f && f.story ? `<details class="story" open><summary>Развитие сюжета · ${f.story.count} ${plural(f.story.count, "событие", "события", "событий")}</summary>${storyLine(f.story, state.current)}</details>` : ""; })()}
     <div class="tabs" role="tablist">${tabs.map(([k, t]) => `<button class="tab ${k === tab ? "active" : ""}" role="tab" aria-selected="${k === tab}" data-tab="${k}">${t}</button>`).join("")}</div>
-    ${body}<button class="btn ghost detail-toggle" id="detailToggle">Свернуть подробный разбор ▴</button>` : `
+    ${body}<button class="btn ghost detail-toggle" id="detailToggle">Свернуть подробный разбор ▴</button>
+    ${tab === "analysis" ? `<div class="ins-bar" role="toolbar" aria-label="Действия по разбору">
+      ${(i.actions || []).length ? `<button class="btn btn-red small" data-task="0" title="${esc(i.actions[0].text)}">＋ Главное действие в мои дела</button>` : ""}
+      <button class="btn ghost small" data-act="manager">Обсудить с менеджером</button>
+      <button class="btn ghost small" data-act="callback">Обратный звонок</button></div>` : ""}` : `
     <div class="cta"><button class="btn small" data-act="manager">Обсудить с менеджером</button><button class="btn ghost small" data-act="callback">Заказать обратный звонок</button></div>
     <button class="btn detail-toggle" id="detailToggle">Подробный разбор: карта влияния, сценарии, позиция банка, источники ▾</button>
     <div class="disclaimer">${esc(DISCLAIMER)}</div>`}</div>`;

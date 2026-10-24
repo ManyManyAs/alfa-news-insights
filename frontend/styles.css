@@ -21,7 +21,7 @@
   --radius: 20px; --radius-m: 16px; --radius-s: 12px;
   --shadow: 0 1px 2px rgba(16, 18, 22, .04), 0 4px 16px rgba(16, 18, 22, .04);
   --shadow-lift: 0 2px 4px rgba(16, 18, 22, .05), 0 16px 40px rgba(16, 18, 22, .10);
-  --sidebar: #ffffff; --sidebar-ink: #3d424a; --side-strong: #0b0b0d; --side-hover: #f2f3f5; --side-active: #eef0f3; --side-sep: #7a808a;
+  --sidebar: #ffffff; --sidebar-ink: #3d424a; --side-strong: #0b0b0d; --side-hover: #f2f3f5; --side-active: #eef0f3; --side-sep: #646a74;
   --top-bg: rgba(255, 255, 255, .92);
   --font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --display: "Inter Display", "Inter", system-ui, sans-serif;
@@ -1005,3 +1005,53 @@ body.logged-out .layout, body.logged-out .topbar { display: none; }
 .widget-head .btn { white-space: nowrap; flex: none; }
 @media (max-width: 1180px) { .home-grid { grid-template-columns: minmax(0, 1fr); } }
 .tool-row input[type=search] { max-width: none; }
+
+/* Разбор события: шапка, позиция банка, закреплённая панель действий */
+.ins-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px 12px; flex-wrap: wrap; }
+.ins-status { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; min-width: 0; flex: 1 1 260px; }
+.ins-top .ins-actions { float: none; flex: none; }
+.q h4 .n { background: var(--ink); color: var(--on-ink); }
+.bv-card { border-radius: var(--radius-m); padding: 14px 16px; background: var(--bank-bg); box-shadow: inset 4px 0 0 var(--red); }
+.bv-card .claim.bank_view { background: var(--surface); }
+.bv-head { display: flex; gap: 12px; align-items: center; margin-bottom: 6px; }
+.bv-mark { width: 34px; height: 34px; border-radius: 10px; background: var(--red); color: #fff; display: grid; place-items: center; flex: none; }
+.bv-mark svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.ins-bar { position: sticky; bottom: 0; z-index: 3; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 18px -26px -26px; padding: 12px 26px;
+  background: color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter: blur(10px); border-top: 1px solid var(--line); border-radius: 0 0 var(--radius) var(--radius); }
+@media (max-width: 980px) { .ins-bar { display: none; } }  /* на планшете и телефоне внизу — кнопка «К ленте» */
+@media print { .ins-bar { display: none; } }
+
+/* Прогнозы: название сверху, крупное значение под ним — длинные значения («−5,8 трлн руб.») не ломают слова */
+.fc-top { flex-direction: column; align-items: flex-start; gap: 2px; }
+.fc-top span { overflow-wrap: normal; font-weight: 600; color: var(--ink2); }
+.fc-top b { font: 800 26px/1.1 var(--display); letter-spacing: -.02em; }
+.fc-card { overflow-wrap: break-word; }
+/* «Мои действия»: ссылка на событие — обычной строкой слева */
+[data-tev] { text-align: left; display: block; margin-top: 4px; }
+
+/* Телефон: нижняя панель разделов, как в мобильном банке; «Ещё» — все разделы листом снизу */
+.nav-more { display: none !important; }
+@media (max-width: 640px) {
+  body:not(.logged-out) { padding-bottom: calc(68px + env(safe-area-inset-bottom)); }
+  .sidebar { position: fixed; top: auto; bottom: 0; left: 0; right: 0; height: auto; z-index: 35; flex-direction: row; justify-content: space-around; gap: 0;
+    padding: 4px 4px calc(4px + env(safe-area-inset-bottom)); border-right: 0; border-top: 1px solid var(--line); overflow: visible; background: var(--sidebar); }
+  .sidebar .nav-item:not([data-primary]) { display: none; }
+  .sidebar .nav-more { display: flex !important; }
+  body.nav-open .sidebar .nav-item { display: flex; }
+  .sidebar .nav-item { flex: 1 1 0; min-width: 0; flex-direction: column; gap: 2px; padding: 7px 2px 5px; font-size: 11px; font-weight: 600; border-radius: 12px; white-space: nowrap; }
+  .sidebar .nav-item span:not(.badge) { flex: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  .sidebar .nav-item svg { width: 22px; height: 22px; }
+  .sidebar .nav-item .badge { position: absolute; top: 2px; left: calc(50% + 5px); font-size: 10px; padding: 0 5px; min-width: 16px; }
+  .sidebar .nav-item.active { background: none; color: var(--red-ink); }
+  .sidebar .nav-item.active::before { display: none; }
+  .nav-sep, .nav-foot { display: none; }
+  body.nav-open .sidebar { flex-direction: column; justify-content: flex-start; max-height: 78vh; overflow-y: auto; border-radius: 22px 22px 0 0; padding: 14px 12px calc(10px + env(safe-area-inset-bottom));
+    box-shadow: 0 0 0 100vmax rgba(8, 8, 10, .45); }
+  body.nav-open .sidebar .nav-item, body.nav-open .sidebar .nav-more { flex: none; flex-direction: row; gap: 12px; font-size: 15px; padding: 11px 12px; }
+  body.nav-open .sidebar .nav-item .badge { position: static; }
+  body.nav-open .sidebar .nav-sep { display: block; }
+  body.nav-open .sidebar .nav-more { order: -1; justify-content: flex-start; color: var(--muted); }
+  body.nav-open .sidebar .nav-more span::after { content: " — свернуть"; }
+  body.m-detail .m-back { bottom: calc(78px + env(safe-area-inset-bottom)); }
+  #toast { bottom: calc(80px + env(safe-area-inset-bottom)); }
+}
