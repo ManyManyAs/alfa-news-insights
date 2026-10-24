@@ -285,7 +285,7 @@ function onboardSteps() {
       <div class="row"><button class="btn ghost" data-ob="0">Назад</button><button class="btn btn-red" data-ob="2">Дальше</button></div></div>`;
     if (k === 2) d.innerHTML = `<div class="ob">${dots(2)}<div class="eyebrow">Шаг 3 из 3</div><h2>Ваши цифры — точнее суммы</h2>
       <p class="muted">Без них «Деньги на кону» и сценарии считаются по оценкам из профиля. Если знаете долг, долю плавающей ставки, ФОТ или импорт — введите, это минута. Хранятся только в этом браузере.</p>
-      <div class="row"><button class="btn ghost" data-ob="1">Назад</button><button class="btn ghost" data-ob="nums">Ввести цифры</button><button class="btn btn-red" data-ob="tour">Пройти тур (2 мин)</button><button class="btn" data-ob="skip">Начать</button></div></div>`;
+      <div class="row"><button class="btn ghost" data-ob="1">Назад</button><button class="btn ghost" data-ob="nums">Ввести цифры</button><button class="btn btn-red" data-ob="tour">Пройти тур</button><button class="btn" data-ob="skip">Начать</button></div></div>`;
     d.querySelectorAll("[data-role]").forEach((b) => b.onclick = () => {
       d.querySelectorAll("[data-role]").forEach((x) => x.classList.toggle("on", x === b));
       const r = b.dataset.role || "";

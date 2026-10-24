@@ -8,6 +8,8 @@ const TOUR = [
     text: "Смените компанию или роль (финдиректор, казначей, главбух). Лента, причины и выводы перестроятся под профиль." },
   { view: "home", sel: "#focusCard", title: "Главное сейчас · критерий 02",
     text: "Одно событие, которое стоит открыть первым, и цепочка влияния: событие → фактор → через что задевает компанию → деньги за год." },
+  { view: "home", sel: "#cmdBtn", title: "Поиск по всему сервису",
+    text: "Ctrl+K или «/» — события ленты, разделы, действия и ответ из аналитики банка в одном окне." },
   { view: "home", sel: "#moneyCard", title: "Деньги на кону",
     text: "Что события ленты могут стоить или дать за 12 месяцев — по причинам, без двойного счёта. Суммы считает калькулятор, а не модель." },
   { view: "radar", sel: ".feed-col", title: "Персональная лента · критерии 01, 04",
@@ -20,13 +22,38 @@ const TOUR = [
     text: "Тезисы и прогнозы из аналитики банка со ссылкой на документ и страницу. Позиция банка всегда отделена от выводов модели." },
   { view: "radar", sel: "#insightPanel .tabs", open: true, title: "Источники и трассировка · критерий 12",
     text: "У каждого утверждения — тип и ссылки. Вкладка «Как получен вывод» показывает шаги агента: модели, инструменты, время и стоимость." },
+  { view: "radar", sel: "#insightPanel .chat", open: true, title: "Чат по разбору · критерий 10",
+    text: "Подсказки под событие, ответ про деньги с мини-графиком из калькулятора, «объясни проще» и «для собственника», сравнение с другим событием." },
   { view: "forecasts", sel: "#forecastsBox", title: "Прогнозы банка",
     text: "Макропрогноз Альфа-Банка по темам компании с историей пересмотров. Новые пересмотры отмечены и попадают в уведомления." },
   { view: "digest", sel: "#digestBox", title: "Дайджест под роль",
     text: "Сводка за день или неделю: главное, сроки, сюжеты, пересмотры прогнозов — и предпросмотр письма. Можно сохранить в PDF." },
+  { view: "tasks", sel: "#tasksBox", title: "Мои действия и обращения · критерий 06",
+    text: "Доска «сделать — в работе — готово» с исполнителем и деньгами на кону; обращения в банк со статусом; все сроки — в календарь; отчёт для руководителя одной страницей." },
+  { view: "home", sel: "#feedChat", title: "Вопрос по всей ленте · критерий 10",
+    text: "«Что главное на неделе для казначея?» — ответ по всем событиям ленты со ссылками на разборы." },
+  { view: "metrics", sel: "#opsBox", title: "Агент изнутри · критерии 08, 11, 12",
+    text: "Бюджет моделей с прогнозом до сброса, отбитые атаки red-team, сравнение моделей и что ИИ отсеял для «Денег на кону». Схема шагов агента и правки критика — во вкладке «Как получен вывод»." },
 ];
 
-let tourStep = -1;
+let tourStep = -1, tourTimer = 0;
+// «Сценарий для жюри»: тур идёт сам — шаг каждые 8 секунд, полоска показывает, сколько осталось до следующего
+const TOUR_AUTO_MS = 8000;
+function tourAuto(on) {
+  clearInterval(tourTimer); tourTimer = 0;
+  const o = document.getElementById("tour"), b = o && o.querySelector("[data-t=auto]");
+  if (b) { b.setAttribute("aria-pressed", String(on)); b.textContent = on ? "❚❚ Пауза" : "▶ Сам"; }
+  if (o) o.classList.toggle("auto", on);
+  if (!on) return;
+  if (typeof track === "function") track("tour_start", { meta: { auto: 1 } });
+  tourTimer = setInterval(() => goStep(tourStep + 1), TOUR_AUTO_MS);
+  restartProg();
+}
+function restartProg() {
+  const i = document.querySelector("#tour .tour-prog i");
+  if (!i) return;
+  i.style.animation = "none"; void i.offsetWidth; i.style.animation = tourTimer ? `tourProg ${TOUR_AUTO_MS}ms linear` : "none";
+}
 
 function waitFor(sel, ms = 90000) {
   return new Promise((resolve) => {
@@ -49,11 +76,13 @@ function tourUi() {
     o.innerHTML = `<div class="tour-spot"></div><div class="tour-pop" role="dialog" aria-live="polite">
       <div class="tour-n"></div><h3></h3><p></p>
       <div class="row"><button class="btn ghost small" data-t="end">Закончить</button>
-        <span><button class="btn ghost small" data-t="prev">Назад</button> <button class="btn btn-red small" data-t="next">Далее</button></span></div></div>`;
+        <span><button class="btn ghost small" data-t="auto" aria-pressed="false" title="Тур пойдёт сам: шаг каждые 8 секунд">▶ Сам</button> <button class="btn ghost small" data-t="prev">Назад</button> <button class="btn btn-red small" data-t="next">Далее</button></span></div>
+      <div class="tour-prog" aria-hidden="true"><i></i></div></div>`;
     document.body.appendChild(o);
     o.querySelector("[data-t=end]").onclick = endTour;
     o.querySelector("[data-t=prev]").onclick = () => goStep(tourStep - 1);
     o.querySelector("[data-t=next]").onclick = () => goStep(tourStep + 1);
+    o.querySelector("[data-t=auto]").onclick = () => tourAuto(!tourTimer);
     document.addEventListener("keydown", (e) => {
       if (tourStep < 0) return;
       if (e.key === "Escape") endTour();
@@ -70,6 +99,7 @@ async function goStep(i) {
   if (i >= TOUR.length) { if (typeof track === "function") track("tour_finish", { value: TOUR.length }); return endTour(); }
   if (i < 0) return;
   tourStep = i;
+  restartProg();
   const s = TOUR[i], o = tourUi();
   o.classList.add("on");
   o.querySelector(".tour-n").textContent = `Шаг ${i + 1} из ${TOUR.length}`;
@@ -144,6 +174,7 @@ function place() {
 
 function startTour() { closeOnboarding(); if (typeof track === "function") track("tour_start"); goStep(0); }
 function endTour() {
+  tourAuto(false);
   tourStep = -1; const o = document.getElementById("tour"); if (o) o.classList.remove("on");
   const top = document.querySelector(".topbar"); if (top) top.classList.remove("ctx-open");
 }
