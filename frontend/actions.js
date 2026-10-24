@@ -2,6 +2,9 @@
 // статусы обращений, канбан «Мои действия», деньги на кону у действия, сроки в колокольчике, все сроки в календарь,
 // отчёт для руководителя, история по событию, «поручить» роли.
 
+// суммы «Денег на кону» простым текстом (для письма менеджеру)
+function moneyPlain(m) { return [m.down ? rub(m.down) : "", m.up ? rub(m.up) : ""].filter(Boolean).join(" … ") + " за год"; }
+
 // ---------------------------------------------------------------- 61, 67. обращение в банк: контекст и предпросмотр
 function actContext() {
   const ins = state.current && state.insight && state.insight.event_id === state.current ? state.insight : null;
@@ -15,7 +18,7 @@ function draftComment(kind, product, c) {
   if (!c.ins) return "";
   const lines = [`По событию: «${c.ins.headline}».`];
   if (c.neg) lines.push(`По расчёту сервиса негативный сценарий — ${rub(c.neg.total_rub)} за 12 месяцев${myNums() ? " (по нашим цифрам)" : " (оценка по профилю)"}.`);
-  else if (c.m) lines.push(`По «Деньгам на кону»: ${moneyText(c.m)}.`);
+  else if (c.m) lines.push(`По «Деньгам на кону»: ${moneyPlain(c.m)}.`);
   if (kind === "application" && product) lines.push(`Хотим обсудить: ${product}${c.neg ? ` — чтобы ограничить риск примерно на ${rub(Math.abs(c.neg.total_rub)).replace(/^[−+]/, "")}` : ""}.`);
   else if (kind === "manager") lines.push("Хотим обсудить, что из продуктов банка поможет.");
   return lines.join(" ");
@@ -82,7 +85,7 @@ function taskCard(t, today) {
   const ci = COLS.findIndex(([k]) => k === t.status);
   return `<li class="kb-card ${late ? "late" : ""} ${soon ? "soon" : ""}" draggable="true" data-tid="${t.id}">
     <b>${esc(t.text)}</b>
-    ${m ? `<div class="kb-money" title="Сумма из «Денег на кону» по событию этого действия">${ico("money")} на кону по событию: ${esc(moneyText(m))}</div>` : ""}
+    ${m ? `<div class="kb-money" title="Сумма из «Денег на кону» по событию этого действия">${ico("money")} на кону по событию: ${moneyText(m)}</div>` : ""}
     <div class="kb-meta"><label class="kb-owner">${ico("user")}<select data-towner="${t.id}" aria-label="Исполнитель">${ownerOptions(t.owner)}</select></label>
       ${t.due ? `<span class="${late ? "bad" : soon ? "warn" : "muted"} small">${ico("clock")} ${esc(t.due)}${late ? " · срок прошёл" : soon ? " · скоро" : ""}</span>` : ""}</div>
     ${t.event_id ? `<button class="link-btn small" data-tev="${esc(t.event_id)}">По событию: ${esc(t.event_title ? (t.event_title.length > 60 ? t.event_title.slice(0, 60) + "…" : t.event_title) : "открыть разбор")}</button>` : ""}
@@ -169,7 +172,7 @@ function printReport() {
   const role = state.role ? state.roles[state.role] : "";
   box.innerHTML = `<h1>Бизнес-радар: главное для руководителя</h1><p class="rp-meta">${esc(companyName())}${role ? ` · взгляд: ${esc(role)}` : ""}</p>
     <h2>Три главных события</h2><ol>${top.map((it) => { const mm = eventMoney(it.event_id);
-      return `<li><b>${esc(it.title)}</b><br><span>${esc(EFFECT[it.effect])} · важность ${esc(IMP_RU[impLevel(it).level])}${mm ? ` · ${esc(moneyText(mm))}` : ""}</span><br><span class="rp-why">${esc((it.reasons[0] || {}).why || "")}</span></li>`; }).join("")}</ol>
+      return `<li><b>${esc(it.title)}</b><br><span>${esc(EFFECT[it.effect])} · важность ${esc(IMP_RU[impLevel(it).level])}${mm ? ` · ${moneyText(mm)}` : ""}</span><br><span class="rp-why">${esc((it.reasons[0] || {}).why || "")}</span></li>`; }).join("")}</ol>
     <h2>Деньги на кону за 12 месяцев</h2>${m && (m.down || m.up) ? `<p>Возможный минус: <b>${rub(m.down || 0)}</b> · возможный плюс: <b>${rub(m.up || 0)}</b>. Суммы — калькулятор по формулам, не модель.</p>` : `<p>Заметного влияния на прибыль по текущим событиям нет.</p>`}
     <h2>Действия в работе · ${open.length}</h2>${open.length ? `<ul>${open.slice(0, 8).map((t) => `<li>${esc(t.text)}${t.owner ? ` — <i>${esc(t.owner)}</i>` : ""}${t.due ? `, ${esc(t.due)}` : ""}</li>`).join("")}</ul>` : "<p>Нет открытых действий.</p>"}
     ${reqs.length ? `<h2>Ждут ответа банка · ${reqs.length}</h2><ul>${reqs.map((x) => `<li>${esc(x.ticket)} · ${esc(x.title)}${x.product ? ` · ${esc(x.product)}` : ""}</li>`).join("")}</ul>` : ""}
