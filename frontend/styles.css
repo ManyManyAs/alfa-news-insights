@@ -1119,16 +1119,16 @@ h2 { font-size: 22px; font-weight: 750; }
 
 /* «Дела по радару» и быстрые действия — как сводка и ряд кнопок на главной интернет-банка */
 .home-strip { margin: 0 0 12px; }
-.quick { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 8px; margin: 0 0 20px; }
+.home-quick { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 8px; margin: 0 0 20px; }
 .qa { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px 6px 12px; background: var(--surface); border-radius: var(--radius-m);
   font: inherit; font-size: 12.5px; font-weight: 600; color: var(--ink); cursor: pointer; text-align: center; line-height: 1.25; transition: box-shadow .2s, border-color .2s; }
 .qa-i { width: 40px; height: 40px; border-radius: 50%; background: var(--soft2); color: var(--ink2); display: grid; place-items: center; transition: background .2s, color .2s; }
 .qa-i svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .qa:hover .qa-i { background: var(--red); color: #fff; }
-@media (max-width: 1100px) { .quick { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (max-width: 1100px) { .home-quick { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 @media (max-width: 640px) {
-  .quick { display: flex; overflow-x: auto; scrollbar-width: none; margin: 0 -16px 16px; padding: 0 16px; }
-  .quick::-webkit-scrollbar { display: none; }
+  .home-quick { display: flex; overflow-x: auto; scrollbar-width: none; margin: 0 -16px 16px; padding: 0 16px; }
+  .home-quick::-webkit-scrollbar { display: none; }
   .qa { flex: 0 0 92px; }
 }
 
@@ -1149,3 +1149,9 @@ h2 { font-size: 22px; font-weight: 750; }
 .mini-row:has(.mini-dot) { grid-template-columns: 16px minmax(0, 1fr); }
 .mini-empty { font-size: 13.5px; color: var(--muted); padding: 6px 0 2px; }
 .skeleton.sm { height: 64px; }
+.hero .globe-hint { display: none; }
+/* нижняя панель на телефоне: короткие подписи, чтобы не обрезались */
+@media (max-width: 640px) {
+  body:not(.nav-open) .sidebar .nav-item[data-short] span:not(.badge) { display: none; }
+  body:not(.nav-open) .sidebar .nav-item[data-short]::after { content: attr(data-short); }
+}
