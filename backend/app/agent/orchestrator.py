@@ -45,6 +45,7 @@ AGENT_MAX_COST_RUB = 4.0
 # Правка моделью — только если она нужна (замечания LLM-критика или нет позиции банка) и на неё хватает
 # времени и денег; иначе замечания закрываются детерминированной правкой (repair_rules)
 REVISE_MIN_LEFT_S = 25
+HIDDEN_MIN_LEFT_S = 15  # поиск неочевидных последствий (две модели) — только если в бюджете времени остаётся столько
 CRITIC2_MIN_LEFT_S = 12
 REVISE_COST_FALLBACK_RUB = 1.5
 # Полный разбор с триггерами и сценариями длиннее 2200 токенов — обрезанный JSON уводил черновик на правила
@@ -351,6 +352,45 @@ def build_sources(ins: Insight, ctx: AgentContext) -> list[SourceRef]:
     return refs
 
 
+def add_hidden_sources(ins: Insight, p: CompanyProfile) -> None:
+    """Связи компании, через которые идут неочевидные последствия, — в «Источники» словами."""
+    have = {s.id for s in ins.sources}
+    for h in ins.hidden_effects or []:
+        for sid in h.sources:
+            if sid not in have:
+                have.add(sid)
+                ins.sources.append(SourceRef(id=sid, type=sid.split(":")[0], title=_profile_label(sid, p)))
+
+
+def upgrade_hidden(event: Event, profile: CompanyProfile, role: str | None) -> None:
+    """Старый разбор без поиска неочевидного: досчитать в фоне (две модели) и сохранить. Открытие разбора не ждёт."""
+    key = insight_key(event.id, profile.uid, role)
+    if key in _upgrading:
+        return
+    _upgrading.add(key)
+    try:
+        ins = cached_insight(event.id, profile.uid, role)
+        if not ins or ins.hidden_effects is not None or not ins.generated_by.startswith("llm") or not get_llm().enabled:
+            return
+        exposures = compute_exposures(profile, role)
+        ctx = AgentContext(event=event, profile=profile, role=role, exposures=exposures, scored=score_event(event, profile, exposures))
+        tracer = Tracer()
+        from app.agent.hidden import find_hidden
+
+        with llm_deadline(40):
+            ins.hidden_effects = find_hidden(ins, ctx, tracer)
+        add_hidden_sources(ins, profile)
+        with db.tx() as conn:
+            conn.execute("UPDATE insights SET payload=? WHERE key=?", (ins.model_dump_json(), key))
+    except Exception:  # дополнение: старый разбор остаётся как был
+        log.exception("Не удалось досчитать неочевидные последствия")
+    finally:
+        _upgrading.discard(key)
+
+
+_upgrading: set[str] = set()
+
+
 def _profile_label(sid: str, p: CompanyProfile) -> str:
     _, _, ref = sid.partition(":")
     labels = {"CL_PRODUCT_LOA_MARK": "Кредитные продукты", "CL_PRODUCT_DEP_MARK": "Депозиты", "CL_PRODUCT_LEA_MARK": "Лизинг",
@@ -477,7 +517,15 @@ def run_agent(event: Event, profile: CompanyProfile, role: str | None = None, li
 
     ins.iterations = iterations
     ins = fix_headline(ins, ctx)
+    # неочевидные последствия: автор и независимый проверяющий, если осталось время и разбор строит модель
+    left = AGENT_TIMEOUT_S - (time.perf_counter() - ctx.memory["_t0"])
+    if get_llm().enabled and ins.generated_by.startswith("llm") and left >= HIDDEN_MIN_LEFT_S and llm_allowed(ctx, tracer):
+        from app.agent.hidden import find_hidden
+
+        with llm_deadline(left):
+            ins.hidden_effects = find_hidden(ins, ctx, tracer)
     ins.sources = build_sources(ins, ctx)
+    add_hidden_sources(ins, ctx.profile)
     ins.trace_id = tracer.trace_id
     ins.news_seen = [n.id for n in event.news]
     ins.relevance = {"score": scored.score, "reasons": scored.reasons, "focus": p.get("focus")}

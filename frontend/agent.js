@@ -11,6 +11,7 @@ const AG_NODES = [
   ["decide", "Решение", (n) => n === "decide:revise"],
   ["revise", "Правка", (n) => n === "revise" || n === "repair:rules" || n.includes("(retry)")],
   ["check2", "Проверка", (n) => /^critique:.*#2$/.test(n)],
+  ["hidden", "Неочевидное", (n) => n.startsWith("hidden")],
   ["final", "Итог", (n) => n === "finalize"],
 ];
 const fmtMs = (ms) => ms >= 1000 ? `${(ms / 1000).toFixed(1).replace(".", ",")} с` : `${ms} мс`;

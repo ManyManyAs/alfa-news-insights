@@ -18,7 +18,7 @@ from app.ranking.scorer import Scored
 from app.security.guard import UNTRUSTED_NOTICE, sanitize_untrusted
 
 log = logging.getLogger(__name__)
-TOP_N = 15
+TOP_N = 25
 W_BASE, W_LLM = 0.6, 0.4
 
 
@@ -55,7 +55,7 @@ def rerank(items: list[Scored], profile: CompanyProfile, role: str | None) -> di
             {"role": "user", "content": f"Компания: {json.dumps(profile.llm_view(), ensure_ascii=False)}\n"
                                         f"Роль пользователя: {role or 'руководитель'}\n\n<news>\n" + "\n".join(lines) + "\n</news>"}]
     try:
-        data, res = llm.complete_json("rerank", msgs, RerankOut, max_tokens=900, temperature=0.0)
+        data, res = llm.complete_json("rerank", msgs, RerankOut, max_tokens=1500, temperature=0.0)
     except (LLMUnavailable, ValueError) as e:
         log.info("Реранк недоступен: %s", e)
         return {"applied": False, "reason": str(e)[:200]}
@@ -67,6 +67,16 @@ def rerank(items: list[Scored], profile: CompanyProfile, role: str | None) -> di
     for i, s in enumerate(top, 1):
         llm_rel = got.get(i, {}).get("relevance", 1)
         final.append((W_BASE * s.score / mx + W_LLM * llm_rel / 3, s.event.id))
-    order = [eid for _, eid in sorted(final, key=lambda x: -x[0])] + [s.event.id for s in items[TOP_N:]]
+    # ИИ-сито: «не про компанию» по мнению двух моделей — убираем из ленты (app/ranking/screen.py)
+    from app.ranking.screen import verify_and_store
+
+    try:
+        hidden = verify_and_store(top, got, profile, role)
+    except Exception:  # сито — дополнение: без него порядок всё равно уточняется
+        log.exception("ИИ-сито не сработало")
+        hidden = {}
+    order = [eid for _, eid in sorted(final, key=lambda x: -x[0]) if eid not in hidden] + [s.event.id for s in items[TOP_N:]
+                                                                                              if s.event.id not in hidden]
     notes = {top[n - 1].event.id: {"relevance": it["relevance"], "why": it["why"]} for n, it in got.items()}
-    return {"applied": True, "order": order, "notes": notes, "model": res.model, "cached": res.cached}
+    return {"applied": True, "order": order, "notes": notes, "model": res.model, "cached": res.cached,
+            "hidden": [{"event_id": k, "why": v} for k, v in hidden.items()]}

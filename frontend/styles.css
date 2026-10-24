@@ -1951,3 +1951,21 @@ button.cite { border: 0; font: inherit; cursor: pointer; }
 .bt-line { fill: none; stroke: var(--red); stroke-width: 3; stroke-linecap: round; }
 .bt-dot { fill: var(--surface); stroke: var(--red); stroke-width: 3; }
 .bt-v { font: 800 15px var(--display); fill: var(--ink); } .bt-d { font: 600 12px var(--font); fill: var(--ink2); }
+
+/* неочевидные последствия: цепочка шагов */
+.hid-block { border-left: 3px solid var(--ai); padding-left: 14px; }
+.hid-block h4 .n { background: var(--ai-bg); color: var(--ai); }
+.hid-block h4 .n .ico { width: 14px; height: 14px; }
+.hid-item { margin: 10px 0 12px; padding: 12px 14px; border-radius: var(--radius-s); background: var(--soft); }
+.hid-top { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; }
+.hid-top b { flex: 1; min-width: 200px; font-size: 15px; line-height: 1.4; }
+.hid-chain { list-style: none; margin: 10px 0 8px; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; counter-reset: hc; }
+.hid-chain li { position: relative; font-size: 13px; padding: 5px 10px; border-radius: 999px; background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--line); color: var(--ink); }
+.hid-chain li + li::before { content: "→"; position: absolute; left: -12px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 12px; }
+.hid-chain li + li { margin-left: 8px; }
+.hid-item.risk .hid-chain li:last-child { box-shadow: inset 0 0 0 1.5px var(--risk); color: var(--risk); font-weight: 600; }
+.hid-item.opportunity .hid-chain li:last-child { box-shadow: inset 0 0 0 1.5px var(--opp); color: var(--opp); font-weight: 600; }
+.hid-meta .link-btn { font-size: 12.5px; padding: 0; }
+.hid-meta .ico { width: 13px; height: 13px; vertical-align: -2px; }
+.hid-wait { margin: 10px 0; padding: 10px 12px; border-radius: var(--radius-s); background: var(--ai-bg); color: var(--ai); }
+.hid-wait .ico { width: 14px; height: 14px; vertical-align: -2px; animation: pulse 1.4s infinite; }
