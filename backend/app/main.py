@@ -824,16 +824,22 @@ def insight(event_id: str, company_id: str, role: str | None = None, refresh: bo
     if refresh or not cached_insight(ev.id, p.uid, role):
         throttle(user, "insight", 12)
     ins = served(get_or_create_insight(ev, p, role, force=refresh), ev)
-    maybe_upgrade_hidden(ins, ev, p, role)
+    if maybe_upgrade_hidden(ins, ev, p, role):
+        ins.hidden_effects = None
     return ins
 
 
-def maybe_upgrade_hidden(ins, ev, p, role) -> None:
+def maybe_upgrade_hidden(ins, ev, p, role) -> bool:
     """Старый разбор: неочевидные последствия досчитываются в фоне двумя моделями, открытие разбора не ждёт."""
-    if ins.hidden_effects is None and ins.generated_by.startswith("llm") and get_llm().enabled:
+    from app.agent.hidden import HIDDEN_VERSION
+
+    stale = ins.hidden_effects is None or ins.hidden_version < HIDDEN_VERSION
+    if stale and ins.generated_by.startswith("llm") and get_llm().enabled:
         from app.agent.orchestrator import upgrade_hidden
 
         threading.Thread(target=upgrade_hidden, args=(ev, p, role), daemon=True).start()
+        return True
+    return False
 
 
 def served(ins: Insight, ev) -> Insight:
@@ -868,8 +874,10 @@ def insight_stream(event_id: str, company_id: str, request: Request, role: str |
 
     def gen() -> Iterator[str]:
         if not refresh and (hit := cached_insight(ev.id, p.uid, role)):
-            maybe_upgrade_hidden(hit, ev, p, role)
-            yield _sse({"type": "done", "cached": True, "insight": served(hit, ev).model_dump()})
+            out = served(hit, ev)
+            if maybe_upgrade_hidden(out, ev, p, role):
+                out.hidden_effects = None  # интерфейс покажет «ИИ ищет…» и подгрузит пересчитанный блок
+            yield _sse({"type": "done", "cached": True, "insight": out.model_dump()})
             return
         q: queue.Queue = queue.Queue()
         result: dict = {}

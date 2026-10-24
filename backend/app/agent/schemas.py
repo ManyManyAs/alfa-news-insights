@@ -139,3 +139,4 @@ class Insight(BaseModel):
     news_added: list[dict] = Field(default_factory=list)
     # неочевидные последствия: None — ещё не искали (старый разбор), [] — искали и не нашли правдоподобных
     hidden_effects: list[HiddenEffect] | None = None
+    hidden_version: int = 0  # версия правил поиска (app/agent/hidden.py: HIDDEN_VERSION); старше — пересчитать
