@@ -1560,6 +1560,7 @@ async function loadDigest() {
     <div class="card dg-main">
       <div class="eyebrow">${esc(d.role_title)} · ${per}</div>
       <h3>${esc(d.company)}</h3>
+      ${effectDonut(d.counts)}
       <p>${esc(lead)}</p>
       <div class="sub-h">Главное</div><ul class="dg-list">${d.top.map(item).join("") || `<li class="muted">Нет событий</li>`}</ul>
       ${d.dates.length ? `<div class="sub-h">Сроки</div><ul class="dg-list">${d.dates.map((x) => `<li data-ev="${x.event_id}" tabindex="0" role="button">${ico("clock")} <b>${fmtDate(x.date)}</b> — через ${x.days} ${plural(x.days, "день", "дня", "дней")}: ${esc(x.title)}</li>`).join("")}</ul>` : ""}
@@ -1569,7 +1570,7 @@ async function loadDigest() {
     <div class="dg-side">
       <div class="card email">
         <div class="muted small">Предпросмотр письма</div>
-        <div class="em-head"><div><b>Альфа-Бизнес · Бизнес-радар</b></div><div class="muted small">Тема: ${esc(d.quiet ? `Спокойная ${d.period === "day" ? "день" : "неделя"} для вашего бизнеса` : `${d.top.length} ${plural(d.top.length, "событие", "события", "событий")} ${per}: ${d.top[0] ? d.top[0].title.slice(0, 60) : ""}`)}</div></div>
+        <div class="em-head"><div><b>Альфа-Бизнес · Бизнес-радар</b></div><div class="muted small">Тема: ${esc(d.quiet ? `${d.period === "day" ? "Спокойный день" : "Спокойная неделя"} для вашего бизнеса` : `${d.top.length} ${plural(d.top.length, "событие", "события", "событий")} ${per}: ${d.top[0] ? d.top[0].title.slice(0, 60) : ""}`)}</div></div>
         <div class="em-body"><p>Здравствуйте! Подборка ${per} для роли «${esc(d.role_title)}».</p>
           <ol>${d.top.slice(0, 3).map((t) => `<li><b>${esc(t.title)}</b><br><span class="muted">${esc(t.why)}</span></li>`).join("")}</ol>
           <p><button type="button" class="em-btn btn" id="digestOpen">Открыть Бизнес-радар</button></p>

@@ -104,3 +104,21 @@ function calendarStrip(items, today, until) {
     ${items.map((x, i) => `<button class="cs-dot ${x.kind}" style="left:${pos(x.date).toFixed(1)}%" data-cs="${i}" title="${esc(`${fmtDate(x.date)} — ${x.title}`)}" aria-label="${esc(`${fmtDate(x.date)} — ${x.title}`)}"></button>`).join("")}
   </div>`;
 }
+
+// Кольцо по эффектам (дайджест): доля рисков, возможностей и того, что стоит отслеживать
+function effectDonut(counts) {
+  const parts = EFF_ORDER.map((e) => [e, counts[e] || 0]).filter(([, v]) => v);
+  const total = parts.reduce((s, [, v]) => s + v, 0);
+  if (!total) return "";
+  const R = 34, C = 2 * Math.PI * R;
+  let off = 0;
+  const arcs = parts.map(([e, v]) => {
+    const len = v / total * C, a = `<circle r="${R}" cx="44" cy="44" fill="none" stroke="${EFF_COLOR[e]}" stroke-width="12" stroke-dasharray="${(len - 2).toFixed(2)} ${(C - len + 2).toFixed(2)}" stroke-dashoffset="${(-off).toFixed(2)}" transform="rotate(-90 44 44)"><title>${EFF_WORD[e]}: ${v}</title></circle>`;
+    off += len;
+    return a;
+  }).join("");
+  return `<div class="donut-wrap"><svg viewBox="0 0 88 88" class="donut" role="img" aria-label="${esc(parts.map(([e, v]) => `${EFF_WORD[e]} — ${v}`).join(", "))}">
+    <circle r="${R}" cx="44" cy="44" fill="none" stroke="var(--soft2)" stroke-width="12"/>${arcs}
+    <text x="44" y="42" text-anchor="middle" class="dn-n">${total}</text><text x="44" y="56" text-anchor="middle" class="dn-l">${plural(total, "событие", "события", "событий")}</text></svg>
+    <ul class="dn-legend">${parts.map(([e, v]) => `<li><i style="background:${EFF_COLOR[e]}"></i><b>${v}</b> ${EFF_WORD[e]}</li>`).join("")}</ul></div>`;
+}
