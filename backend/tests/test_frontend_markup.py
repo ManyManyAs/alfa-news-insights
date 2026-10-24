@@ -46,3 +46,14 @@ def test_views_are_direct_children_of_main():
     for vid, ancestors in p.views.items():
         assert "section" not in ancestors, f"экран {vid} вложен в другой экран"
         assert ancestors[-1] == "main", f"экран {vid} не лежит прямо в <main>: {ancestors[-3:]}"
+
+
+def test_every_static_file_in_css_and_html_exists():
+    """Шрифты и файлы, на которые ссылаются стили и разметка, лежат в репозитории (иначе браузер молча берёт запасной)."""
+    import re
+
+    front = INDEX.parent
+    css = (front / "styles.css").read_text(encoding="utf-8") + INDEX.read_text(encoding="utf-8")
+    refs = set(re.findall(r"/static/([\w./-]+\.(?:woff2?|svg|png|webmanifest|js|css))", css))
+    missing = sorted(r for r in refs if not (front / r).exists())
+    assert not missing, f"нет файлов: {missing}"
