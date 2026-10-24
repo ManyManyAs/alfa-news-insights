@@ -1004,3 +1004,4 @@ body.logged-out .layout, body.logged-out .topbar { display: none; }
 .tool-row input[type=search] { flex: 1 1 100%; }
 .widget-head .btn { white-space: nowrap; flex: none; }
 @media (max-width: 1180px) { .home-grid { grid-template-columns: minmax(0, 1fr); } }
+.tool-row input[type=search] { max-width: none; }
