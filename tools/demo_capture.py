@@ -125,6 +125,10 @@ async def shots(b):
             await pg.evaluate("document.querySelector('#whatIf').open = true")
             await asyncio.sleep(2)
         await pg.screenshot(path=OUT / "04_scenarios_whatif.png")
+        if await pg.locator("#insightPanel .bv-card").count():
+            await pg.evaluate("document.querySelector('#insightPanel .bv-card').scrollIntoView({block: 'center'})")
+            await asyncio.sleep(0.8)
+            await pg.screenshot(path=OUT / "17_bank_view.png")
 
     async def s_chat():
         await pg.locator("#chatInput").scroll_into_view_if_needed()
