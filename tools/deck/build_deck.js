@@ -19,6 +19,13 @@ const num = (x, n = 3) => String(+x.toFixed(n)).replace(".", ",");
 const base = readJson("docs/quality/baseline.json", {});
 const judges = readJson("docs/llm/judges.json", null);
 const red = readJson("docs/llm/redteam_live.json", null);
+// доля оценок двух судей, совпавших с точностью ±1 балл: диапазон по осям, из отчёта judges.json
+function within1(j) {
+  const v = Object.values((j && j.agreement && j.agreement.axes) || {}).map((x) => Math.round(x.within_1 * 100));
+  if (!v.length) return "—";
+  const lo = Math.min(...v), hi = Math.max(...v);
+  return lo === hi ? `${lo}%` : `${lo}–${hi}%`;
+}
 const TEAM = (process.env.DECK_TEAM || "@ManyManyAs · @Takabe11").trim();
 const STAND = "https://77-221-139-69.sslip.io";
 const REPO = "github.com/ManyManyAs/alfa-news-insights";
@@ -196,7 +203,7 @@ async function main() {
     s.addText(t, { x: x + 0.25, y: 3.25, w: 2.4, h: 0.95, fontSize: 14, color: C.text2, margin: 0, valign: "top", isTextBox: true });
   });
   const jo = judges && judges.agreement && judges.agreement.overall;
-  const judgeLine = jo ? `Независимые LLM-судьи на ${judges.agreement.n} разборах (из 5): GLM ${num(jo.glm, 2)}, Kimi ${num(jo.kimi, 2)}; совпадение ±1 балл — 95–100% по осям.`
+  const judgeLine = jo ? `Независимые LLM-судьи на ${judges.agreement.n} разборах (из 5): GLM ${num(jo.glm, 2)}, Kimi ${num(jo.kimi, 2)}; совпадение ±1 балл — ${within1(judges)} по осям; цель 4,2 пока не достигнута.`
     : "Независимые LLM-судьи: см. docs/llm/judges.md.";
   s.addText([
     { text: judgeLine, options: { breakLine: true } },

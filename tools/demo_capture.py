@@ -14,6 +14,7 @@ import json
 import os
 import sys
 import time
+import traceback
 from pathlib import Path
 
 from playwright.async_api import async_playwright
@@ -297,9 +298,14 @@ async def main():
     async with async_playwright() as p:
         # PW_CHANNEL=chrome — Google Chrome с образа раннера (без скачивания браузера)
         b = await p.chromium.launch(channel=os.environ.get("PW_CHANNEL") or None)
-        await shots(b)
-        if VIDEO:
-            await video(b)
+        for name, fn in [("скриншоты", shots)] + ([("видео", video)] if VIDEO else []):
+            try:
+                await fn(b)
+            except Exception as e:  # сбой вне шага: причина — в аннотации запуска, остальное продолжает сниматься
+                report[name] = f"ОШИБКА: {type(e).__name__}: {str(e)[:200]}"
+                print(f"{name}: {report[name]}\n{traceback.format_exc()}", flush=True)
+                if GHA:
+                    print(f"::error title=Съёмка: {name}::{report[name]}", flush=True)
         await b.close()
     (OUT / "capture_report.json").write_text(json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8")
     failed = [k for k, v in report.items() if v.startswith("ОШИБКА")]
