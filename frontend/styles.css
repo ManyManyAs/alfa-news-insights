@@ -1155,3 +1155,4 @@ h2 { font-size: 22px; font-weight: 750; }
   body:not(.nav-open) .sidebar .nav-item[data-short] span:not(.badge) { display: none; }
   body:not(.nav-open) .sidebar .nav-item[data-short]::after { content: attr(data-short); }
 }
+.mini-dot { align-self: start; justify-self: start; flex: none; }
