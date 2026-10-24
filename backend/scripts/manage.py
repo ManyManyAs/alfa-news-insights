@@ -84,6 +84,20 @@ def warmup(top: int = 5, max_rub: float | None = None, background: bool = False,
                           f"quality={all(c.passed for c in ins.quality)} | scores={ins.scores}")
         except LLMUnavailable as e:
             print("Остановлено:", e)
+        # «Деньги на кону»: ответ модели об отборе событий — в снапшот, чтобы и без ключа карточка была как на стенде
+        try:
+            from app.agent.money import money_view
+            from app.main import ai_materiality, cached_rank, importance_level
+
+            for u, p, role in plan:
+                if over():
+                    break
+                rev = p.revenue if not p.revenue_suspicious else None
+                m = money_view(p, role, cached_rank(p, role, 30), ai_materiality(p.uid, role), importance_level, cached_insight, rev)
+                print(f"money  | {u['label'][:28]:28s} | {role:10s} | рычагов {len(m['levers'])} | событий {m['events_used']}"
+                      f" из {m['candidates']} | ИИ: {m['ai'].get('used')}")
+        except Exception as e:  # деньги — дополнительный шаг прогрева, не должен ронять снапшот
+            print("money: пропущено:", type(e).__name__, str(e)[:160])
     if judged:
         print(f"LLM-судья: средняя оценка {sum(judged) / len(judged):.2f} по {len(judged)} разборам")
     print("Потрачено за прогон:", round(llm.budget_status()["spent_rub"] - start, 2), "₽")

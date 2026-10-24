@@ -123,6 +123,31 @@ def test_money_at_stake_no_double_count(client, demo):
     assert len(keys) == len(set(keys))  # одна причина — одна строка, а не по строке на новость
     assert m["down"] <= m["protect"] <= 0 or m["protect"] >= m["down"]
     assert m["up"] == sum(v["up"] for v in m["levers"]) and m["down"] == sum(v["down"] for v in m["levers"])
+    assert "sensitivity" in m and "candidates" in m  # чувствительность есть всегда — карточка не бывает пустой
+
+
+def test_money_ai_filters_irrelevant_events(client, demo, monkeypatch):
+    """ИИ отбирает события для «денег на кону»: отсеянное моделью не попадает в рычаги, направление и причина — от модели,
+    суммы — по-прежнему калькулятор."""
+    import app.agent.money as money
+
+    seen = {}
+
+    def fake(p, role, cands):
+        seen["n"] = len(cands)
+        keep = cands[0]["key"] if cands else None
+        return ({c["key"]: {"key": c["key"], "relevant": c["key"] == keep, "direction": "worse", "strength": 3,
+                            "why": "Проверка: событие дорожит кредит компании"} for c in cands},
+                {"used": True, "model": "test"})
+
+    monkeypatch.setattr(money, "ai_check", fake)
+    h = {"X-User-Id": demo["user_id"]}
+    m = client.get(f"/api/money?company_id={demo['primary_company']}&role={demo['role']}", headers=h).json()
+    assert m["ai"]["used"] and m["candidates"] <= seen["n"]
+    if seen["n"]:
+        assert m["events_used"] == 1 and m["dropped"] == m["candidates"] - 1
+        ev = m["levers"][0]["events"][0]
+        assert ev["direction"] == "worse" and ev["why"].startswith("Проверка") and m["levers"][0]["tilt"] == "worse"
 
 
 

@@ -67,19 +67,35 @@ function impactChain(it, money, moneyText) {
 // «Деньги на кону»: по рычагам — минус влево (красный), плюс вправо (зелёный), длина — сумма
 function moneyBars(levers) {
   const max = Math.max(1, ...levers.flatMap((v) => [Math.abs(v.down || 0), Math.abs(v.up || 0)]));
-  return `<div class="mbars">${levers.map((v, i) => {
-    const dw = Math.abs(v.down || 0) / max * 100, uw = Math.abs(v.up || 0) / max * 100;
+  const TILT = { worse: ["в минус", "neg"], better: ["в плюс", "pos"], even: ["в обе стороны", "even"] };
+  const sig = (e) => `<button class="mb-sig ${e.direction}" data-money-ev="${esc(e.event_id)}" title="${esc(e.title)}">
+      <span class="mb-arrow" aria-hidden="true">${e.direction === "worse" ? "↓" : e.direction === "better" ? "↑" : "↕"}</span>
+      <span class="mb-sig-t"><b>${esc(e.title.length > 90 ? e.title.slice(0, 90) + "…" : e.title)}</b>${e.why ? `<i>${esc(e.why)}</i>` : ""}</span>
+      <span class="mb-str" aria-label="сила сигнала ${e.strength} из 3">${"●".repeat(e.strength || 1)}${"○".repeat(3 - (e.strength || 1))}</span></button>`;
+  return `<div class="mbars">${levers.map((v) => {
+    const dw = Math.abs(v.down || 0) / max * 100, uw = Math.abs(v.up || 0) / max * 100, [tl, tc] = TILT[v.tilt || "even"];
+    const evs = v.events || [];
     return `<div class="mb-row">
-      <div class="mb-label"><b>${esc(v.title)}</b><button class="mb-ev link-btn" data-mb="${i}">${v.events.length} ${plural(v.events.length, "событие", "события", "событий")}</button></div>
+      <div class="mb-label"><b>${esc(v.title)}</b><span class="mb-tilt ${tc}">сигналы ленты: ${tl}</span></div>
       <div class="mb-bar" title="${esc(`${v.title}: от ${rub(v.down || 0)} до ${rub(v.up || 0)} за 12 месяцев`)}">
         <div class="mb-half neg">${dw ? `<i style="width:${dw.toFixed(1)}%"></i><em>${rub(v.down)}</em>` : ""}</div>
         <div class="mb-zero"></div>
         <div class="mb-half pos">${uw ? `<i style="width:${uw.toFixed(1)}%"></i><em>${rub(v.up)}</em>` : ""}</div>
       </div>
-      <div class="mb-more" hidden>${v.events.map((e) => `<button class="link-btn" data-money-ev="${esc(e.event_id)}">${esc(e.title)}</button>`).join("")}
+      <div class="mb-sigs">${evs.slice(0, 2).map(sig).join("")}${evs.length > 2 ? `<details class="more-claims"><summary>Ещё ${evs.length - 2}</summary>${evs.slice(2).map(sig).join("")}</details>` : ""}
         ${v.action ? `<div class="ml-act">Как ограничить: ${esc(v.action)}</div>` : ""}</div>
     </div>`;
   }).join("")}<div class="mb-axis"><span>минус к плану</span><span>прогноз банка = 0</span><span>плюс к плану</span></div></div>`;
+}
+
+// Чувствительность компании: сколько за 12 месяцев стоит типовое отклонение рычага от прогноза банка
+function sensitivityBars(list) {
+  if (!list || !list.length) return "";
+  const max = Math.max(1, ...list.map((x) => Math.abs(x.effect_rub)));
+  return `<div class="sens"><div class="sub-h">К чему чувствительна компания</div>${list.map((x) => `<div class="sens-row">
+      <span>${esc(x.title)}</span><span class="sens-bar"><i class="${x.effect_rub < 0 ? "neg" : "pos"}" style="width:${(Math.abs(x.effect_rub) / max * 100).toFixed(1)}%"></i></span>
+      <b class="${x.effect_rub < 0 ? "bad" : "ok"}">${rub(x.effect_rub)}</b></div>`).join("")}
+    <div class="muted small">Не прогноз по событию: сколько стоит отклонение от прогноза Альфа-Банка на типовую величину, по калькулятору.</div></div>`;
 }
 
 // Шкала «что на кону» в разборе: диапазон от негативного до позитивного сценария, база (прогноз банка) — ноль

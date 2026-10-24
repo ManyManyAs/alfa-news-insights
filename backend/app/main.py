@@ -619,60 +619,15 @@ def digest(company_id: str, role: str | None = None, period: str = Query("week",
     }
 
 
-PROTECT_ACTIONS = {
-    "rate": "зафиксировать ставку по части кредитов или рефинансировать долг",
-    "fx": "захеджировать валютные платежи (форвард на ближайшие поставки)",
-    "costs": "зафиксировать цены в договорах с ключевыми поставщиками",
-    "wages": "заложить индексацию зарплат в бюджет заранее",
-}
-
-
 @app.get("/api/money")
 def money_at_stake(company_id: str, role: str | None = None, user: str = Depends(current_user)):
-    """«Деньги на кону» за 12 месяцев по ленте: возможный плюс, возможный минус и что можно ограничить действиями.
+    """«Деньги на кону» за 12 месяцев по ленте (app/agent/money.py): ИИ отбирает события и направление по каждому
+    рычагу, суммы считает калькулятор. Рычаги не суммируются по новостям: одна причина — один риск."""
+    from app.agent.money import money_view
 
-    Не суммируем новости: у разных новостей одна и та же причина (ставка, курс, спрос) — это один риск.
-    Поэтому считаем по рычагам: для каждого рычага берём самый сильный минус и самый сильный плюс среди новостей,
-    затем складываем рычаги. В расчёт идут только события средней и высокой важности с заметным денежным эффектом.
-    """
     p = authorized_profile(company_id, user)
-    mat = ai_materiality(p.uid, role)
-    levers: dict[str, dict] = {}
-    used = 0
-    for s in cached_rank(p, role, 20)[:15]:
-        if importance_level(s.score, mat.get(s.event.id))["level"] < 2:
-            continue
-        ins = cached_insight(s.event.id, p.uid, role)
-        if ins is not None and ins.materiality is not None and ins.materiality <= 1:
-            continue
-        cls = s.event.classification
-        sc = ([x.model_dump() for x in ins.scenarios] if ins and ins.scenarios else
-              scenario_set(p, s.matched_factors, reasons=s.reasons, effective_dates=cls.effective_dates, regions=cls.regions,
-                           countries=cls.countries))
-        if not sc or sc[0].get("negligible"):
-            continue
-        by = {x["name"]: x for x in sc}
-        used += 1
-        for name, pick in (("negative", min), ("positive", max)):
-            for r in by.get(name, {}).get("rows", []):
-                key = r["lever"] if r["lever"] in PROTECT_ACTIONS else f"{r['lever']}:{r['title']}"
-                lv = levers.setdefault(key, {"lever": r["lever"], "title": r["title"], "down": 0, "up": 0, "events": []})
-                field = "down" if name == "negative" else "up"
-                v = r["effect_rub"]
-                if (field == "down" and v < 0) or (field == "up" and v > 0):
-                    lv[field] = pick(lv[field], v)
-                    if not any(e["event_id"] == s.event.id for e in lv["events"]):
-                        lv["events"].append({"event_id": s.event.id, "title": s.event.title, "effect": s.effect})
-    rows = sorted((v for v in levers.values() if v["down"] or v["up"]), key=lambda v: -(abs(v["down"]) + v["up"]))
-    for v in rows:
-        v["action"] = PROTECT_ACTIONS.get(v["lever"], "")
-        v["events"] = v["events"][:4]
-    down = sum(v["down"] for v in rows)
-    up = sum(v["up"] for v in rows)
-    protect = sum(v["down"] for v in rows if v["action"])
     rev = p.revenue if not p.revenue_suspicious else None
-    return {"up": round(up), "down": round(down), "protect": round(protect), "levers": rows, "events_used": used,
-            "share_up": round(up / rev, 4) if rev else None, "share_down": round(down / rev, 4) if rev else None}
+    return money_view(p, role, cached_rank(p, role, 30), ai_materiality(p.uid, role), importance_level, cached_insight, rev)
 
 
 @app.get("/api/stories/{story_id}")
