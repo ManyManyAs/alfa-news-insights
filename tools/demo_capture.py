@@ -52,6 +52,12 @@ async def login(pg, idx=0):
     await asyncio.sleep(2)
 
 
+# какие элементы вылезают за правый край окна (для сообщения об ошибке)
+WIDE_JS = """() => [...document.querySelectorAll('body *')].filter((e) => e.offsetParent && e.getBoundingClientRect().right > innerWidth + 1)
+  .map((e) => e.tagName.toLowerCase() + (e.id ? '#' + e.id : '') + (e.className && typeof e.className === 'string' ? '.' + e.className.trim().split(/\\s+/).join('.') : ''))
+  .slice(-6).join(', ')"""
+
+
 async def wait_js(pg, expr: str, timeout: float = 60):
     """Ожидание условия опросом через evaluate: CSP стенда запрещает eval, а ожидание функции-строкой его использует."""
     t0 = time.monotonic()
@@ -103,7 +109,8 @@ async def shots(b):
         await asyncio.sleep(2)
         await pg.screenshot(path=OUT / "00_globe.png")
         await pg.wait_for_selector("#focusCard .focus-main", timeout=30000)
-        await pg.locator("#radarWidget").scroll_into_view_if_needed()
+        # «Дела по радару» и виджет ленты под тёмным блоком с глобусом
+        await pg.evaluate("document.querySelector('#homeStrip').scrollIntoView({block: 'start'}); scrollBy(0, -80)")
         await asyncio.sleep(1)
         await pg.screenshot(path=OUT / "02_home.png")
 
@@ -185,14 +192,26 @@ async def shots(b):
         await pg.screenshot(path=OUT / "12_notifications.png")
         await pg.keyboard.press("Escape")
 
+    async def s_widths():
+        # оболочка на ширинах ноутбука: шапка в одну строку, у страницы нет горизонтальной прокрутки
+        await pg.click(".nav-item[data-view=home]")
+        for w in (1024, 1280):
+            await pg.set_viewport_size({"width": w, "height": 800})
+            await asyncio.sleep(1)
+            top = await pg.evaluate("() => document.querySelector('.topbar').offsetHeight")
+            wide = await pg.evaluate("() => document.documentElement.scrollWidth - innerWidth")
+            await pg.screenshot(path=OUT / f"16_width_{w}.png")
+            if top > 84 or wide > 1:
+                who = await pg.evaluate(WIDE_JS)
+                raise AssertionError(f"ширина {w}: высота шапки {top} px, лишняя ширина {wide} px; шире экрана: {who}")
+        await pg.set_viewport_size({"width": 1440, "height": 900})
+
     for name, fn in [("вход", s_login), ("главная", s_home), ("лента и разбор", s_insight), ("сценарии", s_scen),
                      ("чат", s_chat), ("трассировка", s_trace), ("мои действия", s_tasks), ("календарь", s_calendar), ("прогнозы банка", s_forecasts), ("дайджест", s_digest), ("качество и бюджет", s_quality),
-                     ("разделы банка", s_bank), ("уведомления", s_bell)]:
+                     ("разделы банка", s_bank), ("уведомления", s_bell), ("ширины экрана", s_widths)]:
         await step(name, fn())
     await ctx.close()
 
-    if SMOKE:
-        return
     ctx = await b.new_context(viewport={"width": 1440, "height": 900}, color_scheme="dark", locale="ru-RU")
     pg = await ctx.new_page()
 
@@ -215,6 +234,12 @@ async def shots(b):
         await pg.wait_for_selector(".feed-item", timeout=30000)
         await asyncio.sleep(2)
         await pg.screenshot(path=OUT / "10_mobile.png")
+        wide = await pg.evaluate("() => document.documentElement.scrollWidth - innerWidth")
+        await pg.click("#ctxBtn")
+        await asyncio.sleep(0.5)
+        await pg.screenshot(path=OUT / "10b_mobile_context.png")
+        if wide > 1:
+            raise AssertionError(f"на телефоне лишняя ширина {wide} px; шире экрана: {await pg.evaluate(WIDE_JS)}")
 
     await step("телефон", s_mobile())
     await ctx.close()
