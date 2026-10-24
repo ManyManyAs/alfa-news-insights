@@ -1567,12 +1567,20 @@ async function analyzeNews(e) {
 }
 
 // ---------------------------------------------------------------- действия после инсайта (менеджер, звонок, заявка)
+// Откуда обращение: из разбора события — его заголовок; из раздела банка или главной — название раздела
+function actWhere() {
+  const ins = state.current && state.insight && state.insight.event_id === state.current ? state.insight : null;
+  if (ins) return `Менеджер увидит, по какому событию вы обращаетесь: «${esc(ins.headline)}».`;
+  const view = document.body.dataset.view;
+  if (view === "bank" && typeof BANK !== "undefined" && BANK[state.bank]) return `Менеджер увидит, что вы обращаетесь из раздела «${esc(BANK[state.bank].title)}», и профиль компании.`;
+  return "Менеджер увидит профиль компании и сможет связаться с вами удобным способом.";
+}
 const ACT_TITLE = { manager: "Обсудить с менеджером", callback: "Заказать обратный звонок", application: "Оставить заявку" };
 function openAction(kind, product) {
   track("action_open", { event_id: state.current, meta: { kind } });
   const d = $("#actionDialog");
   d.innerHTML = `<form method="dialog" class="act-form"><h3>${esc(ACT_TITLE[kind])}${product ? ": " + esc(product) : ""}</h3>
-    <p class="muted small">Менеджер увидит, по какому событию вы обращаетесь${state.insight ? ": «" + esc(state.insight.headline) + "»" : ""}.</p>
+    <p class="muted small">${actWhere()}</p>
     <textarea id="actComment" rows="4" maxlength="1000" placeholder="Комментарий (необязательно): удобное время, вопрос, сумма…"></textarea>
     <div class="row"><button value="cancel" class="btn ghost">Отмена</button><button class="btn" id="actSend" value="send">Отправить</button></div></form>`;
   d.showModal();
