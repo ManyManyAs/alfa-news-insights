@@ -189,7 +189,7 @@ function bindCmd() {
 
 // ---------------------------------------------------------------- 45. настройка главной: скрыть и переставить карточки
 const HOME_CARDS = { focusCard: "Главное сейчас", radarWidget: "Что важно сегодня", moneyCard: "Деньги на кону", bankCard: "Макропрогноз банка",
-  pulseCard: "Пульс ленты", homeWhatIf: "Что если", bankThinks: "Что думает банк", datesMini: "Ближайшие даты", tasksMini: "Мои действия",
+  pulseCard: "Пульс ленты", homeWhatIf: "Что если", bankThinks: "Что думает банк", feedChat: "Спросить про всю ленту", datesMini: "Ближайшие даты", tasksMini: "Мои действия",
   radarCard: "Что давит на бизнес", profileCard: "Профиль и интересы" };
 function homePrefs() { try { return JSON.parse(localStorage.getItem("bn:home") || "null") || {}; } catch (e) { return {}; } }
 function saveHomePrefs(p) { try { localStorage.setItem("bn:home", JSON.stringify(p)); } catch (e) { /* без хранилища — до перезагрузки */ } }

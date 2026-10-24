@@ -8,6 +8,7 @@ import threading
 from collections.abc import Iterator
 from contextlib import asynccontextmanager
 from datetime import UTC, date, datetime, timedelta
+from typing import Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.responses import StreamingResponse
@@ -15,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from app import monitoring
-from app.agent.chat import answer, answer_stream
+from app.agent.chat import answer, answer_feed_stream, answer_stream
 from app.agent.orchestrator import cached_insight, get_or_create_insight
 from app.agent.scenario import MARGIN, bank_baseline, business_levers, relevant_levers, start_month
 from app.agent.scenario import Inputs as ScenarioInputs
@@ -888,6 +889,13 @@ class ChatRequest(BaseModel):
     company_id: str
     role: str | None = None
     question: str = Field(..., max_length=1000)
+    style: Literal["simple", "owner"] | None = None  # «Объясни проще» / «Для собственника»
+
+
+class FeedChatRequest(BaseModel):
+    company_id: str
+    role: str | None = None
+    question: str = Field(..., max_length=1000)
 
 
 @app.post("/api/chat")
@@ -899,7 +907,7 @@ def chat(req: ChatRequest, request: Request, user: str = Depends(current_user)):
     if not ev:
         raise HTTPException(404, "Событие не найдено")
     ins = get_or_create_insight(ev, p, req.role)
-    return answer(req.question, ins, p)
+    return answer(req.question, ins, p, req.style)
 
 
 @app.post("/api/chat/stream")
@@ -912,7 +920,23 @@ def chat_stream(req: ChatRequest, request: Request, user: str = Depends(current_
     if not ev:
         raise HTTPException(404, "Событие не найдено")
     ins = get_or_create_insight(ev, p, req.role)
-    return StreamingResponse((_sse(e) for e in answer_stream(req.question, ins, p)),
+    return StreamingResponse((_sse(e) for e in answer_stream(req.question, ins, p, req.style)),
+                             media_type="text/event-stream", headers=SSE_HEADERS)
+
+
+@app.post("/api/chat/feed")
+def chat_feed(req: FeedChatRequest, request: Request, user: str = Depends(current_user)):
+    """Вопрос по всей ленте с главной («что главное на неделе для казначея?»): контекст — 15 карточек ленты
+    с важностью и причинами, ссылки [ev:n] фронтенд превращает в переход к разбору. Без модели — правила."""
+    p = authorized_profile(req.company_id, user)
+    throttle(user, "chat", 20)
+    throttle_ip(request, "chat", 40)
+    items = feed(req.company_id, req.role, limit=15, show_hidden=False, user=user)["items"]
+    cards = [{"n": k + 1, "event_id": it["event_id"], "title": it["title"], "date": (it["published_at"] or "")[:10],
+              "effect": it["effect"], "importance": it["imp"]["label"], "summary": it["summary"] or "",
+              "why": "; ".join(r.get("why", "") for r in it["reasons"][:2] if r.get("why"))} for k, it in enumerate(items)]
+    role_title = role_titles().get(req.role or "")
+    return StreamingResponse((_sse(e) for e in answer_feed_stream(req.question, cards, p, role_title)),
                              media_type="text/event-stream", headers=SSE_HEADERS)
 
 

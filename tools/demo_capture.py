@@ -137,7 +137,8 @@ async def shots(b):
 
     async def s_chat():
         await pg.locator("#chatInput").scroll_into_view_if_needed()
-        await pg.click(".chat .quick button >> text=Что говорит банк?")
+        await pg.evaluate("""() => { const bs = [...document.querySelectorAll('.chat .quick button')];
+            (bs.find((b) => /рубл/.test(b.textContent)) || bs.find((b) => /банк/i.test(b.textContent)) || bs[0]).click(); }""")
         await wait_js(pg, "document.querySelector('#chatLog') && document.querySelector('#chatLog').innerText.length > 80", 90)
         await asyncio.sleep(4)  # ответ дописывается потоком
         await pg.locator("#chatLog").scroll_into_view_if_needed()
@@ -259,9 +260,30 @@ async def shots(b):
         if not await pg.locator("#insightPanel .crumbs").count():
             raise AssertionError("в разборе нет хлебных крошек")
 
+    async def s_stage6():
+        # этап 6: «для собственника», сравнение двух событий, вопрос по всей ленте с главной
+        await pg.evaluate("show('radar')")
+        if await pg.locator(".msg-tools [data-style=owner]").count():
+            await pg.click(".msg-tools [data-style=owner] >> nth=0")
+            await wait_js(pg, "document.querySelectorAll('#chatLog .msg.bot').length >= 2 && !document.querySelector('#chatLog .typing')", 90)
+            await asyncio.sleep(1)
+            await pg.locator("#chatLog").scroll_into_view_if_needed()
+            await pg.screenshot(path=OUT / "22_chat_owner.png")
+        await pg.evaluate("document.querySelector('.cmp').open = true")
+        await pg.click("#cmpGo")
+        await pg.wait_for_selector("#cmpOut .cmp-verdict", timeout=10000)
+        await pg.locator(".cmp").scroll_into_view_if_needed()
+        await pg.screenshot(path=OUT / "23_compare.png")
+        await pg.click(".nav-item[data-view=home]")
+        await pg.locator("#feedChat").scroll_into_view_if_needed()
+        await pg.click("#feedChat [data-fq] >> nth=0")
+        await wait_js(pg, "document.querySelector('#fcLog .msg.bot') && !document.querySelector('#fcLog .typing') && document.querySelector('#fcLog').innerText.length > 60", 90)
+        await asyncio.sleep(1)
+        await pg.screenshot(path=OUT / "24_feed_chat.png")
+
     for name, fn in [("вход", s_login), ("главная", s_home), ("лента и разбор", s_insight), ("сценарии", s_scen),
                      ("чат", s_chat), ("трассировка", s_trace), ("мои действия", s_tasks), ("календарь", s_calendar), ("прогнозы банка", s_forecasts), ("дайджест", s_digest), ("качество и бюджет", s_quality),
-                     ("разделы банка", s_bank), ("уведомления", s_bell), ("тур по сервису", s_tour), ("ширины экрана", s_widths), ("этап 5: навигация", s_stage5)]:
+                     ("разделы банка", s_bank), ("уведомления", s_bell), ("тур по сервису", s_tour), ("ширины экрана", s_widths), ("этап 5: навигация", s_stage5), ("этап 6: чат", s_stage6)]:
         await step(name, fn())
     await ctx.close()
 

@@ -16,7 +16,7 @@ from app.storage import db
 ALLOWED = {
     "home_view", "widget_click", "feed_view", "card_open", "preview_ready", "draft_ready", "insight_ready", "source_click",
     "action_open", "chat_question", "whatif_open", "digest_view", "tour_start", "tour_finish", "map_hover",
-    "detail_open", "detail_close", "cmd_open", "cmd_run", "globe_place", "home_setup", "onboard_step",
+    "detail_open", "detail_close", "cmd_open", "cmd_run", "globe_place", "home_setup", "onboard_step", "chat_rating",
     "js_error",  # ошибка в браузере: только текст ошибки и файл:строка, без данных пользователя
 }
 
@@ -82,6 +82,7 @@ def product_metrics(days: int = 7) -> dict:
     hides = db.query_one("SELECT COUNT(*) n FROM hidden_events WHERE ts >= ?", (since,))["n"]
     opens = cnt.get("card_open", 0)
     preview, full_fresh = vals("preview_ready"), vals("insight_ready", cached=False)
+    chat_rates = vals("chat_rating")  # 👍/👎 под ответом чата: +1 / −1
     return {
         "days": days, "active_users": users, "counts": cnt,
         "funnel": {"home_views": cnt.get("home_view", 0), "widget_clicks": cnt.get("widget_click", 0),
@@ -96,6 +97,7 @@ def product_metrics(days: int = 7) -> dict:
             "hide_rate": _ratio(hides, opens),
             "helpful_share": _ratio(fb["pos"], fb["pos"] + fb["neg"]),
             "tour_completion": _ratio(cnt.get("tour_finish", 0), cnt.get("tour_start", 0)),
+            "chat_helpful_share": _ratio(sum(1 for v in chat_rates if v > 0), len(chat_rates)),
         },
         "feedback": {"pos": fb["pos"], "neg": fb["neg"], "neg_reasons": reasons},
         "actions": actions,

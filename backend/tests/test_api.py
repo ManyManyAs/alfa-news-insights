@@ -254,3 +254,16 @@ def test_me_overview_counts_per_company(client, demo):
     assert {c["uid"] for c in ov} == {c["uid"] for c in me["companies"]}
     for c in ov:
         assert c["risks"] >= 0 and c["fresh"] >= 0
+
+
+def test_chat_offtopic_money_and_feed(client, demo):
+    """Этап 6: честный отказ не по теме, суммы — из калькулятора, чат по всей ленте со ссылками на события."""
+    h, cid = {"X-User-Id": demo["user_id"]}, demo["primary_company"]
+    ev = client.get(f"/api/feed?company_id={cid}", headers=h).json()["items"][0]["event_id"]
+    body = {"event_id": ev, "company_id": cid, "role": demo["role"]}
+    r = client.post("/api/chat", headers=h, json={**body, "question": "Напиши стих про осень"}).json()
+    assert r["mode"] == "guard" and "не могу" in r["answer"]
+    r = client.post("/api/chat", headers=h, json={**body, "question": "Сколько это стоит нам в рублях?", "style": "owner"}).json()
+    assert r["answer"]
+    s = client.post("/api/chat/feed", headers=h, json={"company_id": cid, "role": demo["role"], "question": "Что главное на неделе?"})
+    assert s.status_code == 200 and '"events"' in s.text and "[ev:" in s.text

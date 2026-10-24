@@ -511,6 +511,7 @@ async function reload() {
   updateRevBadge();
   loadNextDate();
   loadCompanyOverview();
+  renderFeedChat();
   if ($("#view-digest").classList.contains("active")) loadDigest();
   if ($("#view-tasks").classList.contains("active")) loadTasks();
 }
@@ -1803,7 +1804,7 @@ function citeChip(id) {
   const title = esc(src ? src.title : id);
   return src?.url
     ? `<a class="cite ${esc(kind)}" href="${esc(src.url)}" target="_blank" rel="noopener" title="${title}">${label}</a>`
-    : `<span class="cite ${esc(kind)}" title="${title}">${label}</span>`;
+    : `<span class="cite ${esc(kind)}" data-cid="${esc(id)}" title="${title} — открыть в источниках">${label}</span>`;
 }
 function renderChatMd(raw) {
   const inline = (t) => esc(t)
@@ -1826,33 +1827,7 @@ function renderChatMd(raw) {
   close();
   return out.join("");
 }
-function chatBlock() {
-  return `<div class="chat"><h4>Задать уточняющий вопрос</h4>
-    <div class="quick">${["Какие главные риски?", "Что говорит банк?", "Покажи разрез по контрагентам", "Что делать в первую очередь?", "Откуда эти выводы?"].map((t) => `<button data-q="${t}">${t}</button>`).join("")}</div>
-    <div class="chat-log" id="chatLog"></div>
-    <div class="chat-row"><input id="chatInput" aria-label="Ваш вопрос по разбору" placeholder="Например: как это повлияет на наш лизинг?"><button class="btn" id="chatSend">Спросить</button></div></div>`;
-}
-function bindChat() {
-  if (!$("#chatSend")) return;
-  const send = async (text) => {
-    if (!text) return;
-    track("chat_question", { event_id: state.current });
-    $("#chatLog").insertAdjacentHTML("beforeend", `<div class="msg user">${esc(text)}</div>`);
-    $("#chatInput").value = "";
-    $("#chatLog").insertAdjacentHTML("beforeend", `<div class="msg bot typing"></div>`);
-    const bubble = [...document.querySelectorAll("#chatLog .msg.bot")].pop();
-    let raw = "";
-    try {
-      await sse("/api/chat/stream", { method: "POST", body: JSON.stringify({ event_id: state.current, company_id: state.company, role: state.role, question: text }) }, (e) => {
-        if (e.type === "delta") { bubble.classList.remove("typing"); raw += e.text; bubble.innerHTML = renderChatMd(raw); }
-        if (e.type === "meta") bubble.title = "режим: " + e.mode;
-      });
-    } catch (e) { bubble.classList.add("bad"); bubble.textContent = e.message; }
-  };
-  $("#chatSend").onclick = () => send($("#chatInput").value.trim());
-  $("#chatInput").onkeydown = (e) => { if (e.key === "Enter") send($("#chatInput").value.trim()); };
-  document.querySelectorAll("[data-q]").forEach((b) => b.onclick = () => send(b.dataset.q));
-}
+// чат по разбору и по всей ленте — chat.js (этап 6)
 
 async function sendFeedback(rating, reason = null) {
   const r = await api("/api/feedback", { method: "POST", body: JSON.stringify({ event_id: state.current, company_id: state.company, role: state.role, rating, reason }) });
@@ -2117,6 +2092,7 @@ async function loadMetrics() {
       ${tile("Обращаются в банк", pct(r.action_rate), Object.entries(p.actions).map(([k, v]) => `${ACTION_NAMES[k] || esc(k)}: ${v}`).join(" · ") || "менеджер, звонок, заявка")}
       ${tile("Скрывают как нерелевантное", pct(r.hide_rate), "сигнал пересмотреть ранжирование · цель ≤ 10%", vsTarget(r.hide_rate, 0.1, true))}
       ${tile("Тур по сервису пройден", pct(r.tour_completion), `${p.counts.tour_start || 0} запусков`)}
+      ${tile("Полезные ответы чата", pct(r.chat_helpful_share), `${p.counts.chat_rating || 0} оценок 👍/👎 под ответами`)}
     </div>
     <div class="card funnel"><div class="muted small">Воронка: от главной до обращения в банк</div>${funnel}</div>
 
