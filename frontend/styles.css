@@ -1177,3 +1177,5 @@ h2 { font-size: 22px; font-weight: 750; }
 .hero-globe canvas { height: calc(100% - 56px - 46px - 34px); }
 .globe-legend { bottom: 54px; }
 @media (max-width: 1200px) { .hero-globe canvas { height: calc(100% - 48px - 40px - 34px); } .globe-legend { bottom: 48px; } }
+/* «фундамент» под заголовком тёмного блока — как черта под знаком и в иконках саббрендов банка */
+.hero h1::after { content: ""; display: block; width: 48px; height: 5px; background: var(--red-2); margin-top: 14px; }
