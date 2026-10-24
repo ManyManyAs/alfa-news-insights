@@ -232,9 +232,11 @@ def feed_answer_rules(q: str, cards: list[dict]) -> str:
     hit = [c for c in cards if any(w[:5] in (c["title"] + " " + c.get("summary", "")).lower() for w in words)]
     pick = hit[:4] or [c for c in cards if c["effect"] == "risk"][:4] or cards[:4]
     head = "По вашему вопросу в ленте:" if hit else "Главное в ленте для компании по важности:"
-    why = lambda c: c["why"].split(";")[0].strip()  # noqa: E731
-    return head + "\n" + "\n".join(f"• **{c['title']}** — важность {c['importance']}" + (f": {why(c)}" if c["why"] else "") + f" [ev:{c['n']}]"
-                                     for c in pick)
+    lines = []
+    for c in pick:
+        why = c["why"].split(";")[0].strip()
+        lines.append(f"• **{c['title']}** — важность {c['importance']}" + (f": {why}" if why else "") + f" [ev:{c['n']}]")
+    return head + "\n" + "\n".join(lines)
 
 
 def answer_feed_stream(q: str, cards: list[dict], profile: CompanyProfile, role_title: str | None) -> Iterator[dict]:
