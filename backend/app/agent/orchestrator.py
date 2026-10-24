@@ -522,9 +522,7 @@ def run_agent(event: Event, profile: CompanyProfile, role: str | None = None, li
     # неочевидные последствия: автор и независимый проверяющий, если осталось время и разбор строит модель
     left = AGENT_TIMEOUT_S - (time.perf_counter() - ctx.memory["_t0"])
     if get_llm().enabled and ins.generated_by.startswith("llm") and left >= HIDDEN_MIN_LEFT_S and llm_allowed(ctx, tracer):
-        from app.agent.hidden import find_hidden
-
-        from app.agent.hidden import HIDDEN_VERSION
+        from app.agent.hidden import HIDDEN_VERSION, find_hidden
 
         with llm_deadline(left):
             ins.hidden_effects = find_hidden(ins, ctx, tracer)
