@@ -146,7 +146,8 @@ async def shots(b):
 
     async def s_trace():
         await pg.click("#insightPanel .tab[data-tab=trace]")
-        await asyncio.sleep(2.5)
+        await pg.wait_for_selector("#traceBox .ag-svg", timeout=20000)  # этап 8: схема шагов агента
+        await asyncio.sleep(1)
         await pg.locator("#insightPanel .tabs").scroll_into_view_if_needed()
         await pg.screenshot(path=OUT / "06_trace.png")
 
@@ -161,6 +162,10 @@ async def shots(b):
         await wait_js(pg, "document.querySelector('#metricsBox').innerText.length > 100", 60)
         await asyncio.sleep(2)
         await pg.screenshot(path=OUT / "08_quality.png")
+        await pg.wait_for_selector("#opsBox .ops-card", timeout=20000)  # этап 8: бюджет, безопасность, модели
+        await pg.locator("#opsBox").scroll_into_view_if_needed()
+        await asyncio.sleep(0.5)
+        await pg.screenshot(path=OUT / "27_agent_ops.png")
 
     async def s_tasks():
         await pg.click("#insightPanel .tab[data-tab=analysis]")
