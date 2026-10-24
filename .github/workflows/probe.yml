@@ -39,3 +39,26 @@ jobs:
           print(f"::notice title=Модели сегодня::{json.dumps(llm, ensure_ascii=False)} · живых в топ-10: {json.dumps(m.get('live_share'), ensure_ascii=False)[:200]}")
           print(f"::notice title=Судья (критик)::{json.dumps(m['insights'], ensure_ascii=False)[:400]}")
           EOF
+      - name: Лента и «деньги на кону» по демо-персонам
+        run: |
+          if [ -z "$DOMAIN" ] && [[ "$HOST" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then DOMAIN="${HOST//./-}.sslip.io"; fi
+          BASE="https://${DOMAIN:-77-221-139-69.sslip.io}"
+          curl -sf "$BASE/api/demo-users" > users.json
+          python3 - "$BASE" <<'EOF'
+          import json, sys, http.cookiejar, urllib.request
+          base = sys.argv[1]
+          for u in json.load(open("users.json"))["users"]:
+              jar = http.cookiejar.CookieJar()
+              op = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+              req = urllib.request.Request(f"{base}/api/auth/login", data=json.dumps({"login": u["user_id"], "password": "alfa2026"}).encode(),
+                                           headers={"Content-Type": "application/json"})
+              op.open(req, timeout=30).read()
+              q = f"company_id={u['primary_company']}&role={u['role']}"
+              feed = json.load(op.open(f"{base}/api/feed?{q}&limit=50", timeout=60))
+              items = feed.get("items", feed if isinstance(feed, list) else [])
+              m = json.load(op.open(f"{base}/api/money?{q}", timeout=120))
+              live = sum(1 for i in items if (i.get("trust") or "") != "demo")
+              print(f"::notice title=Персона {u['label'][:30]}::лента {len(items)} (живых {live}); деньги: рычагов {len(m.get('levers', []))}, "
+                    f"событий {m.get('events_used')} из {m.get('candidates')}, ИИ {json.dumps(m.get('ai'), ensure_ascii=False)[:160]}, "
+                    f"пересмотров {len(m.get('revisions', []))}")
+          EOF

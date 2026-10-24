@@ -344,10 +344,17 @@ async function loadMoney() {
     ? `${ico("spark")} ИИ отобрал ${m.events_used} ${plural(m.events_used, "событие", "события", "событий")} из ${m.candidates}${m.dropped ? ` — ${m.dropped} не влияют на деньги компании` : ""}; суммы считает калькулятор`
     : `Отбор правилами: события средней и высокой важности; суммы считает калькулятор`;
   const how = `<details class="howcalc"><summary>Как считаем</summary><p class="muted small">Модель для каждого события решает, двигает ли оно рычаг этой компании (ставку, курс, зарплаты, спрос, цены закупок), в какую сторону и насколько сильно. Суммы модель не считает: их даёт калькулятор — умеренное отклонение рычага от прогноза Альфа-Банка (ставка ±1 п.п., курс +10/−5%, зарплаты +3/−2 п.п.). Одна причина считается один раз, по самой сильной новости. Если всё пойдёт по прогнозу банка, план не меняется.</p></details>`;
+  const revs = m.revisions || [];
+  const revSum = revs.reduce((t, r) => t + r.effect_rub, 0);
   if (!m.levers.length) {
-    box.innerHTML = `<div class="eyebrow">Деньги на кону · 12 месяцев</div><h3>Событий, которые заметно меняют деньги, сейчас нет</h3>
-      <p class="muted">Это тоже ответ: по текущей ленте менять план не нужно.</p>
-      ${sensitivityBars(m.sensitivity)}<div class="money-ai">${aiLine}</div>${how}`;
+    box.innerHTML = `<div class="eyebrow">Деньги на кону · 12 месяцев</div>
+      <h3>${revs.length ? "Что уже изменилось для денег компании" : "Событий, которые заметно меняют деньги, сейчас нет"}</h3>
+      ${revs.length ? `<div class="money-tiles one"><div class="mt ${revSum < 0 ? "down" : "up"}"><span>Пересмотр прогноза банка</span><b>${rub(revSum)}</b><i>за 12 месяцев к плану по прежнему прогнозу</i></div></div>` : ""}
+      ${revisionRows(revs)}
+      <p class="muted small">${revs.length ? "Новостей ленты с заметным денежным эффектом сейчас нет — по ним план менять не нужно." : "Это тоже ответ: по текущей ленте менять план не нужно."}</p>
+      <details class="howcalc"><summary>К чему чувствительна компания</summary>${sensitivityBars(m.sensitivity)}</details>
+      <div class="money-ai">${aiLine}</div>${how}`;
+    box.querySelectorAll("[data-money-ev]").forEach((b) => b.onclick = () => { show("radar"); openInsight(b.dataset.moneyEv, false, "money"); });
     return;
   }
   box.innerHTML = `<div class="eyebrow">Деньги на кону · 12 месяцев</div>
@@ -358,6 +365,7 @@ async function loadMoney() {
     </div>
     ${moneyBars(m.levers)}
     <div class="money-ai">${aiLine}</div>
+    ${revisionRows(revs)}
     <details class="howcalc"><summary>К чему ещё чувствительна компания</summary>${sensitivityBars(m.sensitivity)}</details>
     ${how}`;
   box.querySelectorAll("[data-money-ev]").forEach((b) => b.onclick = () => { show("radar"); openInsight(b.dataset.moneyEv, false, "money"); });

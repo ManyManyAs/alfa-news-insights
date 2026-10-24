@@ -1343,3 +1343,13 @@ body.m-detail .insight { padding-bottom: 84px; }
 .sens-bar { height: 8px; background: var(--soft2); border-radius: 999px; overflow: hidden; }
 .sens-bar i { display: block; height: 100%; border-radius: 999px; } .sens-bar i.neg { background: var(--risk); } .sens-bar i.pos { background: var(--opp); }
 .sens-row b { font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* пересмотры прогноза банка в «Деньгах на кону» */
+.money-tiles.one { grid-template-columns: 1fr; }
+.rev-money { margin-top: 12px; }
+.rm-row { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 10px 12px; border-radius: 12px; background: var(--bank-bg); margin-top: 6px;
+  box-shadow: inset 3px 0 0 var(--red); }
+.rm-what { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rm-what b { font-size: 13.5px; }
+.rm-change { font: 700 15px var(--display); }
+.rm-eff { text-align: right; display: flex; flex-direction: column; flex: none; }
+.rm-eff b { font: 700 17px var(--display); white-space: nowrap; }
