@@ -63,11 +63,14 @@ tasks:
   summarize_doc:      {model: kimi,     fallback: qwen}
   ocr_page:           {model: qwen_vl,  fallback: qwen_vl}
   event_brief:        {model: deepseek, fallback: qwen}
-  plan:               {model: qwen,     fallback: gemma}
-  # Автор разбора — DeepSeek: в бенчмарке 21.10 лучшая оценка судьи (4,4 против 3,6 у GLM), быстрее и дешевле.
-  # Критик — всегда другая модель, чем автор, чтобы модель не оценивала собственный черновик.
+  # Весь агент разбора — DeepSeek: план, черновик, самопроверка и правка.
+  # Эксперимент 24.10 (docs/llm/deepseek_only.md, 12 пар разборов, независимые судьи): «только DeepSeek» не хуже
+  # текущего конвейера у Kimi (3,35 против 3,22) и лучше у GLM (4,1 против 3,73); заметнее всего выросла
+  # обоснованность (Kimi 2,83 → 3,33). Запасные модели — другие, чтобы сервис работал, если DeepSeek недоступен.
+  # Независимость оценки сохраняется на уровне судей: GLM и Kimi в конвейере не участвуют.
+  plan:               {model: deepseek, fallback: qwen}
   interpret:          {model: deepseek, fallback: glm}
-  critique:           {model: glm,      fallback: gemma}
+  critique:           {model: deepseek, fallback: glm}
   revise:             {model: deepseek, fallback: glm}
   chat:               {model: qwen,     fallback: gemma}
   judge:              {model: deepseek, fallback: glm}
