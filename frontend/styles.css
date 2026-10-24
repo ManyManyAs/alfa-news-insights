@@ -1698,7 +1698,8 @@ button.cite { border: 0; font: inherit; cursor: pointer; }
 .kb-card.drag { opacity: .5; }
 .kb-card.late { box-shadow: inset 3px 0 0 var(--risk); } .kb-card.soon { box-shadow: inset 3px 0 0 var(--mixed); }
 .kb-col[data-col="done"] .kb-card > b { text-decoration: line-through; color: var(--muted); font-weight: 500; }
-.kb-money { font-size: 12.5px; color: var(--ink2); background: var(--bank-bg); border-radius: 8px; padding: 4px 8px; display: flex; gap: 6px; align-items: center; }
+.kb-money { font-size: 12.5px; color: var(--ink2); background: var(--bank-bg); border-radius: 8px; padding: 4px 8px; display: block; line-height: 1.5; }
+.kb-money .ico { vertical-align: -2px; margin-right: 4px; }
 .kb-money .ico, .kb-meta .ico { width: 14px; height: 14px; flex: none; }
 .kb-meta { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
 .kb-owner { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }

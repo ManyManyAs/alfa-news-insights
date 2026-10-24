@@ -19,7 +19,8 @@ function draftComment(kind, product, c) {
   const lines = [`По событию: «${c.ins.headline}».`];
   if (c.neg) lines.push(`По расчёту сервиса негативный сценарий — ${rub(c.neg.total_rub)} за 12 месяцев${myNums() ? " (по нашим цифрам)" : " (оценка по профилю)"}.`);
   else if (c.m) lines.push(`По «Деньгам на кону»: ${moneyPlain(c.m)}.`);
-  if (kind === "application" && product) lines.push(`Хотим обсудить: ${product}${c.neg ? ` — чтобы ограничить риск примерно на ${rub(Math.abs(c.neg.total_rub)).replace(/^[−+]/, "")}` : ""}.`);
+  // какой продукт и насколько снизит риск, сервис не обещает — это решает менеджер; в письме только факты разбора
+  if (kind === "application" && product) lines.push(`Хотим обсудить продукт «${product}» в связи с этим событием.`);
   else if (kind === "manager") lines.push("Хотим обсудить, что из продуктов банка поможет.");
   return lines.join(" ");
 }
