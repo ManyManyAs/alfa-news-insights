@@ -92,6 +92,38 @@ sources:
     url: https://www.banki.ru/xml/news.rss
     trust: media
 
+  # --- добавлены 24.10 (этап 8): адреса проверены scripts/probe_feeds.py на раннере, см. docs/llm/feeds_probe.md
+  - id: kommersant_business
+    title: Коммерсантъ — бизнес
+    type: rss
+    url: https://www.kommersant.ru/RSS/section-business.xml
+    trust: media
+  - id: kommersant_finance
+    title: Коммерсантъ — финансы
+    type: rss
+    url: https://www.kommersant.ru/RSS/section-finance.xml
+    trust: media
+  - id: vedomosti_economics
+    title: Ведомости — экономика
+    type: rss
+    url: https://www.vedomosti.ru/rss/rubric/economics
+    trust: media
+  - id: frank
+    title: Frank Media — банки и финансы
+    type: rss
+    url: https://frankmedia.ru/feed
+    trust: media
+  - id: pnp
+    title: Парламентская газета — законы
+    type: rss
+    url: https://www.pnp.ru/rss/index.xml
+    trust: media
+  - id: cnews
+    title: CNews — ИТ-рынок
+    type: rss
+    url: https://www.cnews.ru/inc/rss/news.xml
+    trust: media
+
   # --- демо
   - id: demo_seed
     title: Демо-набор новостей (data/sample/news_seed.jsonl)
