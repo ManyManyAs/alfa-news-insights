@@ -187,7 +187,22 @@ async function init() {
   addEventListener("popstate", () => { if (document.body.classList.contains("m-detail")) closeDetail(false); });
   document.querySelectorAll("[data-view]").forEach((el) => el.onclick = () => show(el.dataset.view, el.dataset.bank));
   document.querySelectorAll("[data-goto]").forEach((el) => el.onclick = () => show(el.dataset.goto));
+  // официальный логотип из брендбука, если он положен в frontend/brand/logo.svg (см. README там же)
+  if (document.body.dataset.logo) {
+    document.querySelectorAll(".brand-mark").forEach((m) => {
+      const img = new Image(); img.src = "/static/brand/logo.svg"; img.alt = "";
+      m.classList.add("official"); m.replaceChildren(img);
+    });
+  }
   document.querySelectorAll("[data-strip]").forEach((el) => el.onclick = () => show(el.dataset.strip));
+  // быстрые действия на главной — как ряд кнопок в интернет-банке
+  document.querySelectorAll("[data-qa]").forEach((el) => el.onclick = () => {
+    const k = el.dataset.qa;
+    if (k === "analyze") return $("#analyzeDialog").showModal();
+    if (k === "manager") { state.current = null; return openAction("manager"); }
+    if (k === "interests") return $("#profileCard").scrollIntoView({ behavior: "smooth", block: "start" });
+    show(k);
+  });
   $("#analyzeBtn").onclick = () => $("#analyzeDialog").showModal();
   bindFeedControls();
   $("#showHidden").onclick = () => { state.showHidden = !state.showHidden; loadFeed(); };
@@ -373,6 +388,12 @@ function renderStrip() {
     const open = state.tasks.filter((t) => t.status === "open");
     const late = open.filter((t) => { const d = /\d{1,2}\.\d{1,2}/.test(t.due || "") ? dueDate(t.due) : null; return d && d < today; }).length;
     setStrip("stripTasks", String(open.length));
+    const tl = document.getElementById("tasksList");
+    if (tl) tl.innerHTML = open.slice(0, 3).map((t) => `<button class="mini-row" data-mini-task>
+        <span class="mini-dot task"></span><span class="mini-t">${esc(t.text.length > 90 ? t.text.slice(0, 90) + "…" : t.text)}</span>
+        <span class="mini-s">${esc([t.owner, t.due].filter(Boolean).join(" · "))}</span></button>`).join("")
+      || `<div class="mini-empty">Пока пусто. В разборе события нажмите «В мои действия» — шаг появится здесь с исполнителем и сроком.</div>`;
+    if (tl) tl.querySelectorAll("[data-mini-task]").forEach((b) => b.onclick = () => show("tasks"));
     setStrip("stripTasksSub", late ? `открытых, ${late} ${plural(late, "просрочено", "просрочено", "просрочено")}` : `${plural(open.length, "открытое действие", "открытых действия", "открытых действий")}`);
   }
   if (state.freshRevs) setStrip("stripRevs", String(state.freshRevs.length));
@@ -383,8 +404,18 @@ async function loadNextDate() {
   try {
     const c = await api(`/api/calendar?${q({ company_id: state.company })}`);
     const items = [...c.items];
-    (state.feed || []).filter((it) => it.effective && it.effective.date >= c.today).forEach((it) => items.push({ date: it.effective.date, kind: "norm", title: it.title }));
+    (state.feed || []).filter((it) => it.effective && it.effective.date >= c.today).forEach((it) => items.push({ date: it.effective.date, kind: "norm", title: it.title, event_id: it.event_id }));
     items.sort((a, b) => a.date.localeCompare(b.date));
+    const dl = document.getElementById("datesList"), fmtD = (d) => new Date(d).toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
+    if (dl) {
+      dl.innerHTML = items.slice(0, 3).map((it) => { const n = Math.round((new Date(it.date) - new Date(c.today)) / 864e5);
+        return `<button class="mini-row" ${it.event_id ? `data-mini-ev="${esc(it.event_id)}"` : "data-mini-cal"}><span class="mini-date">${esc(fmtD(it.date))}</span>
+          <span class="mini-t">${esc(it.kind === "cbr" ? "Заседание Банка России по ставке" : it.title)}</span>
+          <span class="mini-s">${n === 0 ? "сегодня" : `через ${n} ${plural(n, "день", "дня", "дней")}`}</span></button>`; }).join("")
+        || `<div class="mini-empty">В ближайшие месяцы ключевых дат нет.</div>`;
+      dl.querySelectorAll("[data-mini-ev]").forEach((b) => b.onclick = () => { show("radar"); openInsight(b.dataset.miniEv, false, "home"); });
+      dl.querySelectorAll("[data-mini-cal]").forEach((b) => b.onclick = () => show("calendar"));
+    }
     const x = items[0];
     if (!x) { setStrip("stripDate", "нет"); setStrip("stripDateSub", "ключевых дат в ближайшие месяцы"); return; }
     const n = Math.round((new Date(x.date) - new Date(c.today)) / 864e5);
@@ -484,7 +515,7 @@ function renderHero() {
   const roleTitle = state.role ? (state.roles[state.role] || "").toLowerCase() : "";
   $("#heroDate").textContent = "Бизнес-радар · " + new Date().toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" });
   $("#heroTitle").innerHTML = `Что в мире меняется <span class="red">для вашего бизнеса</span>`;
-  $("#heroSub").innerHTML = `${esc(company)}${region ? ` · ${esc(region)}` : ""}${roleTitle ? ` · взгляд: ${esc(roleTitle)}` : ""}.<br>Из живого потока новостей отобрано <b>${feed.length}</b> ${plural(feed.length, "событие", "события", "событий")}, которые касаются именно компании — каждое с объяснением «почему вам».`;
+  $("#heroSub").innerHTML = `${esc(company)}${region ? ` · ${esc(region)}` : ""}${roleTitle ? ` · взгляд: ${esc(roleTitle)}` : ""}.<br>Отобрано <b>${feed.length}</b> ${plural(feed.length, "событие", "события", "событий")} из живого потока новостей — у каждого есть ответ «почему вам».`;
   const stats = [["risk", "рисков", cnt("risk")], ["opportunity", "возможностей", cnt("opportunity")], ["watch", "отслеживать", cnt("watch") + cnt("mixed")]];
   const box = $("#heroStats");
   if (!box.children.length) box.innerHTML = stats.map(([k, t]) => `<button class="hs ${k}" data-hs="${k}"><b data-v="0">0</b><span>${t}</span></button>`).join("")
