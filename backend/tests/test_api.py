@@ -292,3 +292,18 @@ def test_importance_explained_and_proof_details(client, demo):
     assert {"rules_level", "score", "thresholds"} <= set(imp) and imp["level"] <= imp["rules_level"] + 1
     p = client.get("/api/proof").json()
     assert isinstance(p["redteam"]["attacks"], list)
+
+
+def test_user_news_not_in_others_feed_and_money_throttled(client, demo):
+    """Аудит: новость из «Проверить новость» не попадает в общую ленту; «Деньги на кону» ограничены по частоте."""
+    from app.news.ingest import list_events
+    from app.security import auth
+
+    auth._hits.clear()
+    h, cid = {"X-User-Id": demo["user_id"]}, demo["primary_company"]
+    r = client.post("/api/news/analyze", headers=h, json={"text": "Пример. Правительство ввело новый сбор на импорт станков 7% с 1 марта."}).json()
+    assert r["event_id"] not in {e.id for e in list_events(1500)}
+    assert client.get(f"/api/insights/{r['event_id']}?company_id={cid}", headers=h).status_code == 200  # свой разбор открывается
+    codes = [client.get(f"/api/money?company_id={cid}", headers=h).status_code for _ in range(35)]
+    assert 429 in codes
+    auth._hits.clear()

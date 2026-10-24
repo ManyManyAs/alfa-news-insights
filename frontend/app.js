@@ -263,6 +263,7 @@ function bindLogin() {
 
 async function enterApp() {
   const me = await api("/api/me");
+  try { if (localStorage.getItem("bn:last-user") !== me.user_id) { await clearOfflineCache(); localStorage.setItem("bn:last-user", me.user_id); } } catch (e) { /* без хранилища */ }
   $("#loginView").hidden = true;
   document.body.classList.remove("logged-out");
   initHeroGlobe();
@@ -326,6 +327,14 @@ function showT(view, sub) {
   if (!document.startViewTransition || document.body.dataset.view === view || matchMedia("(prefers-reduced-motion: reduce)").matches) return show(view, sub);
   document.startViewTransition(() => show(view, sub));
 }
+function viewError(view, sub, err) {
+  const box = document.querySelector(`#view-${view} .skeleton`)?.parentElement || document.querySelector(`#view-${view} [id$="Box"]`);
+  if (!box) return;
+  box.innerHTML = `<div class="card bad"><b>Не удалось загрузить раздел.</b> <span class="muted">${esc((err && err.message) || "нет связи с сервером")}</span>
+    <div class="row" style="margin-top:10px"><button class="btn small" data-vretry>Повторить</button></div></div>`;
+  box.querySelector("[data-vretry]").onclick = () => show(view, sub);
+}
+const guard = (p, view, sub) => Promise.resolve(p).catch((e) => viewError(view, sub, e));
 function show(view, sub) {
   if (view !== "radar") document.body.classList.remove("m-detail");
   document.body.classList.remove("nav-open");
@@ -335,12 +344,12 @@ function show(view, sub) {
   document.querySelectorAll(".nav-item[data-view]").forEach((n) => n.classList.toggle("active", n.dataset.view === view
     && (view !== "bank" || n.dataset.bank === (sub || state.bank || "accounts"))));
   if (view === "bank") openBank(sub || state.bank || "accounts");
-  if (view === "metrics") { loadMetrics(); renderProof($("#proofBox")); renderOps($("#opsBox")); }
-  if (view === "sources") loadSources();
-  if (view === "digest") { loadDigest(); track("digest_view"); }
-  if (view === "forecasts") loadForecasts();
-  if (view === "tasks") loadTasks();
-  if (view === "calendar") loadCalendar();
+  if (view === "metrics") { guard(loadMetrics(), view, sub); renderProof($("#proofBox")); renderOps($("#opsBox")); }
+  if (view === "sources") guard(loadSources(), view, sub);
+  if (view === "digest") { guard(loadDigest(), view, sub); track("digest_view"); }
+  if (view === "forecasts") guard(loadForecasts(), view, sub);
+  if (view === "tasks") guard(loadTasks(), view, sub);
+  if (view === "calendar") guard(loadCalendar(), view, sub);
   if (view === "home") track("home_view");
   if (view === "radar") track("feed_view");
 }
@@ -1343,7 +1352,13 @@ async function openInsight(eventId, refresh = false, from = "feed") {
         if (wasDraft && typeof schedulePlace === "function") schedulePlace();  // тур: подсветка — на обновлённый блок
       } else if (e.type === "error") { throw new Error(e.detail); }
     });
-  } catch (e) { $("#insightPanel").innerHTML = `<div class="insight bad">Ошибка: ${esc(e.message)}</div>`; }
+  } catch (e) {
+    clearInterval(state.thinkTimer);
+    if (state.current !== eventId) return;  // пользователь уже открыл другое событие — его панель не трогаем
+    $("#insightPanel").innerHTML = `<div class="insight bad"><b>Не удалось получить разбор.</b> <span class="muted">${esc(e.message)}</span>
+      <div class="row" style="margin-top:10px"><button class="btn small" id="insRetry">Повторить</button></div></div>`;
+    document.getElementById("insRetry").onclick = () => openInsight(eventId, refresh, from);
+  }
 }
 
 // Метка источника у утверждения: понятное слово вместо внутреннего id, полное название — в подсказке
@@ -2105,7 +2120,7 @@ async function loadMetrics() {
     </div>
     <div class="card funnel"><div class="muted small">Воронка: от главной до обращения в банк</div>${funnel}</div>
 
-    <h3 class="mon-h">Скорость и стоимость разбора</h3>
+    <h3 class="mon-h">Скорость и стоимость разбора <span class="mon-scope">скорость — за выбранный период; стоимость и число разборов — по последним 200 разборам, бюджет — за сегодня</span></h3>
     <div class="metrics">
       ${tile("Первый вывод, p50 / p95", `${secs(sp.preview_p50)} / ${secs(sp.preview_p95)}`, "предпросмотр без модели · цель p95 ≤ 2 с", vsTarget(sp.preview_p95, 2000, true))}
       ${tile("Разбор моделью на экране, p50 / p95", `${secs(sp.draft_p50)} / ${secs(sp.draft_p95)}`, "черновик модели показывается сразу, проверка критиком идёт в фоне · цель p95 ≤ 30 с", vsTarget(sp.draft_p95, 30000, true))}
@@ -2116,14 +2131,14 @@ async function loadMetrics() {
       ${tile("Разборов построено", m.insights.total, `${c.with_llm} — моделью, остальные — правилами`)}
     </div>
 
-    <h3 class="mon-h">Качество разборов: LLM-судья (1–5)</h3>
+    <h3 class="mon-h">Качество разборов: критик конвейера (1–5) <span class="mon-scope">последние 200 разборов · внутренняя оценка агента; независимые судьи GLM и Kimi — в блоке «Как мы проверяли»</span></h3>
     <div class="metrics">
       ${tile("Средняя оценка", j.avg != null ? num(j.avg) : "—", j.n ? `${j.n} разборов · цель ≥ 4,2` : "появится после разборов моделью", vsTarget(j.avg, 4.2))}
       ${Object.entries(j.by_axis || {}).map(([k, v]) => tile(AXES[k] || esc(k), num(v), "", vsTarget(v, 4))).join("")}
       ${tile("Прошли самопроверку", pct(m.insights.quality_passed_share), "факты, цифры, источники, дисклеймер", vsTarget(m.insights.quality_passed_share, 0.95))}
     </div>
 
-    <h3 class="mon-h">Офлайн-оценка на размеченных данных</h3>
+    <h3 class="mon-h">Офлайн-оценка на размеченных данных <span class="mon-scope">пересчитывается в CI на каждый PR, от периода не зависит</span></h3>
     <div class="card"><div class="muted small" style="margin-bottom:8px">${rel.pairs ? `${rel.pairs} пар «профиль клиента — новость» по ${rel.cases} профилям${dd.pairs ? `, ${dd.pairs} пар для склейки дублей` : ""}. ` : ""}Пересчитывается в CI на каждый PR; падение метрики больше чем на 0,05 блокирует слияние.</div>
       ${offline ? `<div class="table-wrap"><table class="sources"><thead><tr><th>Метрика</th><th>Значение</th><th>Цель</th><th></th></tr></thead><tbody>${offline}</tbody></table></div>` : '<div class="muted">Базовая линия не найдена</div>'}</div>
 

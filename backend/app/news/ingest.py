@@ -228,7 +228,9 @@ def list_events(limit: int = 200, business_days: int | None = None) -> list[Even
     if hit is not None:
         _events_cache["sig"] = sig
         return hit
-    where = "classification IS NOT NULL"
+    # текст, присланный пользователем через «Проверить новость», — его личная проверка: в общую ленту всех компаний
+    # он не попадает (иначе один пользователь мог бы засорить ленты других); разбор открывается по id события
+    where = "classification IS NOT NULL AND COALESCE(json_extract(classification, '$.trust'), '') != 'user'"
     args: list = []
     if business_days:
         where += f" AND {BUSINESS_SQL} AND (published_at >= ? OR json_extract(classification, '$.trust') = 'demo')"

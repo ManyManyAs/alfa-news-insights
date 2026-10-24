@@ -2,7 +2,8 @@
 // оболочка приложения и последняя загруженная лента открываются офлайн (этап 9). При выходе кэш данных удаляется.
 const SHELL = "br-shell-v1", API = "br-api";
 // данные, которые имеет смысл показать без сети: кто я, профиль компании, лента, прогнозы банка
-const API_OFFLINE = [/^\/api\/me$/, /^\/api\/companies\/[^/]+$/, /^\/api\/feed$/, /^\/api\/bank\/forecasts$/, /^\/api\/demo-users$/, /^\/api\/money$/];
+// личные данные кэшируются только для работы без сети; при выходе и смене пользователя кэш удаляется (ui.js, app.js)
+const API_OFFLINE = [/^\/api\/me$/, /^\/api\/companies\/[^/]+$/, /^\/api\/feed$/, /^\/api\/bank\/forecasts$/, /^\/api\/demo-users$/];
 
 self.addEventListener("push", (event) => {
   let d = {};

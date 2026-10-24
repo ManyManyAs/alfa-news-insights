@@ -119,8 +119,11 @@ async function loadTasks() {
   box.querySelectorAll("[data-goto2]").forEach((b) => b.onclick = () => show(b.dataset.goto2));
   box.querySelectorAll("[data-req]").forEach((b) => b.onclick = async () => {
     const [id, st] = b.dataset.req.split(":");
-    await api(`/api/actions/${id}`, { method: "PATCH", body: JSON.stringify({ company_id: state.company, status: st }) });
-    toast(st === "resolved" ? "Обращение отмечено решённым" : "Обращение отозвано"); loadTasks();
+    b.disabled = true;
+    try {
+      await api(`/api/actions/${id}`, { method: "PATCH", body: JSON.stringify({ company_id: state.company, status: st }) });
+      toast(st === "resolved" ? "Обращение отмечено решённым" : "Обращение отозвано"); loadTasks();
+    } catch (e) { b.disabled = false; toast("Не удалось изменить статус: " + e.message); }
   });
   const ia = document.getElementById("icsAll"); if (ia) ia.onclick = () => icsAll(tasks.filter((t) => t.status !== "done"));
   document.getElementById("reportBtn").onclick = printReport;

@@ -768,12 +768,14 @@ def digest(company_id: str, role: str | None = None, period: str = Query("week",
 
 
 @app.get("/api/money")
-def money_at_stake(company_id: str, role: str | None = None, user: str = Depends(current_user)):
+def money_at_stake(company_id: str, request: Request, role: str | None = None, user: str = Depends(current_user)):
     """«Деньги на кону» за 12 месяцев по ленте (app/agent/money.py): ИИ отбирает события и направление по каждому
     рычагу, суммы считает калькулятор. Рычаги не суммируются по новостям: одна причина — один риск."""
     from app.agent.money import money_view
 
     p = authorized_profile(company_id, user)
+    throttle(user, "money", 30)  # отбор событий моделью: повторы из кэша, но частые запросы ограничиваем
+    throttle_ip(request, "money", 60)
     rev = p.revenue if not p.revenue_suspicious else None
     return money_view(p, role, cached_rank(p, role, 30), ai_materiality(p.uid, role), importance_level, cached_insight, rev)
 
@@ -785,11 +787,13 @@ class MoneyRequest(BaseModel):
 
 
 @app.post("/api/money")
-def money_at_stake_mine(req: MoneyRequest, user: str = Depends(current_user)):
+def money_at_stake_mine(req: MoneyRequest, request: Request, user: str = Depends(current_user)):
     """То же по «моим цифрам» клиента (долг, импорт, ФОТ…): числа приходят в теле запроса и нигде не сохраняются."""
     from app.agent.money import money_view, user_inputs
 
     p = authorized_profile(req.company_id, user)
+    throttle(user, "money", 30)
+    throttle_ip(request, "money", 60)
     try:
         own = user_inputs(req.numbers)
     except ValueError as e:

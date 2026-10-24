@@ -19,6 +19,9 @@ from app.storage import db
 
 STORY_WINDOW_DAYS = 45
 STORY_THRESHOLD = 0.25
+# сюжет не растёт бесконечно: в день решения ЦБ десятки заметок «про ставку» склеивались в один сюжет из 40+
+# событий и прятали друг друга; полный сюжет — новые события начинают следующий (связь видна по общему фактору)
+STORY_MAX_EVENTS = 12
 
 
 def _top_factors(cls: EventClassification, n: int = 2) -> list[str]:
@@ -53,10 +56,13 @@ def assign_story(event_id: str) -> str | None:
     title, text = _event_lead(event_id)
     t = _dt(row["published_at"])
     best, best_score = None, 0.0
+    sizes = {r["id"]: len(json.loads(r["event_ids"] or "[]")) for r in db.query("SELECT id, event_ids FROM stories")}
     for c in db.query("SELECT id, title, published_at, classification, story_id FROM events "
                       "WHERE id != ? AND classification IS NOT NULL ORDER BY published_at DESC LIMIT 400", (event_id,)):
         tc = _dt(c["published_at"])
         if t and tc and abs(t - tc) > timedelta(days=STORY_WINDOW_DAYS):
+            continue
+        if c["story_id"] and sizes.get(c["story_id"], 0) >= STORY_MAX_EVENTS:
             continue
         ccls = EventClassification.model_validate_json(c["classification"])
         ct, ctext = _event_lead(c["id"])
