@@ -730,7 +730,7 @@ function renderFocus() {
     try { localStorage.setItem(key, new Date().toISOString()); } catch (e) { /* хранилище недоступно */ }
   }
   const fresh = state.visitMark ? feed.filter((it) => (it.published_at || "") > state.visitMark).length : 0;
-  const due = feed.filter((it) => it.effective && it.effective.days >= 0).sort((a, b) => a.effective.days - b.effective.days)[0];
+  const due = feed.filter((it) => it.effective && it.effective.days >= 0 && !otherRegionTag(it)).sort((a, b) => a.effective.days - b.effective.days)[0];
   const m = eventMoney(main.event_id);
   const unreadRisks = feed.filter((i) => i.effect === "risk" && !read.has(i.event_id)).length;
   box.innerHTML = `<div class="eyebrow">Главное сейчас</div>
