@@ -61,4 +61,6 @@ jobs:
               print(f"::notice title=Персона {u['label'][:30]}::лента {len(items)} (живых {live}); деньги: рычагов {len(m.get('levers', []))}, "
                     f"событий {m.get('events_used')} из {m.get('candidates')}, ИИ {json.dumps(m.get('ai'), ensure_ascii=False)[:160]}, "
                     f"пересмотров {len(m.get('revisions', []))}")
+              for r in m.get("rejected", [])[:4]:
+                  print(f"::notice title=Отсеяно · {u['label'][:20]}::{r['lever']}: {r['title'][:80]} — {r['why'][:140]}")
           EOF
