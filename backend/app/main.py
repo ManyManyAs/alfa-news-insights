@@ -1086,6 +1086,51 @@ def bank_forecasts():
             "documents": list(kb.documents.values()), "theses_count": len(kb.theses)}
 
 
+@app.get("/api/bank/documents")
+def bank_documents():
+    """Материалы Альфа-Банка: название, дата, страницы, сколько тезисов и прогнозов, сколько разборов на них ссылаются."""
+    from app.knowledge.library import documents, pipeline_stats
+
+    return {"documents": documents(), "stats": pipeline_stats()}
+
+
+@app.get("/api/bank/documents/{doc_id}")
+def bank_document(doc_id: str):
+    from app.knowledge.library import document
+
+    d = document(doc_id)
+    if not d:
+        raise HTTPException(404, "Материал не найден")
+    return d
+
+
+@app.get("/api/bank/search")
+def bank_search(q: str = Query(..., min_length=2, max_length=200), user: str = Depends(current_user)):
+    """«Спросить аналитику банка»: поиск по тезисам и прогнозам тем же поиском, что у агента. Без модели — только
+    то, что есть в материалах, со ссылкой на документ и страницу."""
+    from app.knowledge.library import search
+
+    throttle(user, "bank_search", 30)
+    return {"query": q, "results": search(sanitize_untrusted(q)[0])}
+
+
+@app.get("/api/bank/for-company")
+def bank_for_company(company_id: str, role: str | None = None, user: str = Depends(current_user)):
+    """«Банк думает»: свежие тезисы банка по главным темам компании (по её чувствительности)."""
+    from app.knowledge.library import for_company
+
+    p = authorized_profile(company_id, user)
+    exp = sorted(apply_overrides(p.uid, compute_exposures(p, role)).values(), key=lambda e: e.weight, reverse=True)
+    return {"theses": for_company([e.factor for e in exp if e.weight > 0][:6])}
+
+
+@app.get("/api/bank/rate-market")
+def bank_rate_market():
+    from app.knowledge.library import rate_market
+
+    return rate_market()
+
+
 @app.get("/api/data/quality")
 def data_quality():
     """Отчёт о качестве данных кейса и о том, как сервис обрабатывает пробелы."""

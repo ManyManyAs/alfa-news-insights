@@ -227,3 +227,20 @@ def test_feed_filtered_explains_what_was_not_shown(client, demo):
         assert g["n"] >= len(g["examples"]) and g["title"]
         assert not ({e["event_id"] for e in g["examples"]} & shown)
     assert len(feed[0]["reasons"]) <= 5
+
+
+def test_bank_library_documents_search_and_company_theses(client, demo):
+    """Этап 4: материалы банка как библиотека — документ целиком, поиск по тезисам, тезисы под компанию, ставки рынка."""
+    h, cid = {"X-User-Id": demo["user_id"]}, demo["primary_company"]
+    lib = client.get("/api/bank/documents").json()
+    assert lib["stats"]["theses"] > 0 and lib["documents"]
+    doc = client.get(f"/api/bank/documents/{lib['documents'][0]['doc_id']}").json()
+    assert doc["theses"] and all(t["ref"].startswith("bank:") for t in doc["theses"])
+    assert client.get("/api/bank/documents/nope").status_code == 404
+    found = client.get("/api/bank/search?q=ключевая ставка", headers=h).json()["results"]
+    assert found and found[0]["doc_title"] and found[0]["ref"].startswith("bank:")
+    assert client.get("/api/bank/search?q=ставка").status_code == 401  # поиск — для вошедших
+    mine = client.get(f"/api/bank/for-company?company_id={cid}", headers=h).json()["theses"]
+    assert len(mine) <= 3 and all(t["doc_title"] for t in mine)
+    rm = client.get("/api/bank/rate-market").json()
+    assert rm["bank"] and all(x["value"] > 0 for x in rm["bank"] + rm["market"])

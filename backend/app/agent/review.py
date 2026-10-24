@@ -275,6 +275,27 @@ def story_delta(ev) -> dict | None:
             "now": ev.classification.summary, "new_numbers": new_nums[:4], "days_since_prev": days}
 
 
+def bank_docs(ins: Insight) -> dict[str, str]:
+    """Ссылка на материал банка → документ: из разбора можно открыть материал целиком (тезисы, страницы, прогнозы)."""
+    kb = get_knowledge()
+    th = {t["id"]: t["doc_id"] for t in kb.theses}
+    out = {}
+    for _, c in all_claims(ins):
+        for s in c.sources:
+            if not s.startswith("bank:") or s in out:
+                continue
+            ref = s.partition(":")[2]
+            if ref in th:
+                out[s] = th[ref]
+            elif ref.startswith("fc-"):
+                indicator, _, period = ref[3:].rpartition("-")
+                if doc := (kb.forecast(indicator, period) or {}).get("doc_id"):
+                    out[s] = doc
+            elif ch := next((c for c in kb.chunks if c.id == ref), None):
+                out[s] = ch.doc_id
+    return out
+
+
 # --------------------------------------------------------------- сборка
 def review(ins: Insight, ev, today: date | None = None) -> Insight:
     """Дополняет разбор проверяемыми пометками. Тексты разбора не меняются."""
@@ -282,9 +303,16 @@ def review(ins: Insight, ev, today: date | None = None) -> Insight:
     for c in ins.what_happened:
         if c.kind == "fact":
             c.support = fact_support(c.text, ev.news)
+    try:
+        from app.knowledge.library import usage_map
+
+        usage = usage_map()
+    except Exception:  # счётчик — справка, не повод ломать разбор
+        usage = {}
     for c in ins.bank_view:
         if c.kind != "bank_view":
             continue
+        c.used = max((usage.get(s, 0) for s in c.sources if s.startswith("bank:")), default=0) or None
         dates = [d for d in (_bank_date(s) for s in c.sources if s.startswith("bank:")) if d]
         if dates:
             c.as_of = max(dates)[:10]
@@ -294,6 +322,6 @@ def review(ins: Insight, ev, today: date | None = None) -> Insight:
         delta = story_delta(ev)
     except Exception:  # сюжет — дополнение, разбор без него не ломается
         delta = None
-    ins.review = {"kind": checklist(ins, ev), "numbers": number_pairs(ev), "story_delta": delta,
+    ins.review = {"kind": checklist(ins, ev), "numbers": number_pairs(ev), "story_delta": delta, "bank_docs": bank_docs(ins),
                   "sources_n": len({n.source_title or n.source for n in ev.news})}
     return ins

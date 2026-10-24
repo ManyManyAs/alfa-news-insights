@@ -33,6 +33,7 @@ const ICO = {
   warn: '<path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17v.5"/>',
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/>',
   doc: '<path d="M6 2h8l5 5v15H6z"/><path d="M14 2v5h5M9 13h7M9 17h7"/>',
+  bell: '<path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 20a2 2 0 0 0 4 0"/>',
 };
 function ico(name) { return `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${ICO[name] || ""}</svg>`; }
 function plural(n, one, few, many) { const m10 = n % 10, m100 = n % 100; return m10 === 1 && m100 !== 11 ? one : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? few : many; }
@@ -501,6 +502,7 @@ async function reload() {
   await Promise.all([loadProfile(), loadFeed(), state.bankLoaded ? null : loadBank()]);
   loadMoney();
   loadHomeWhatIf();
+  loadBankThinks();
   loadTaskCount();
   updateRevBadge();
   loadNextDate();
@@ -1308,7 +1310,8 @@ function supportTag(c) {
 function asOfTag(c) {
   if (c.kind !== "bank_view" || !c.as_of) return "";
   const d = new Date(c.as_of).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" });
-  return `<span class="asof ${c.stale ? "stale" : ""}" title="${c.stale ? "Материалу больше трёх месяцев: банк мог обновить позицию" : "Дата материала Альфа-Банка"}">материал от ${esc(d)}${c.stale ? " · позиция могла обновиться" : ""}</span>`;
+  const doc = (((state.insight || {}).review || {}).bank_docs || {})[(c.sources || []).find((x) => x.startsWith("bank:"))];
+  return `<span class="asof ${c.stale ? "stale" : ""}" title="${c.stale ? "Материалу больше трёх месяцев: банк мог обновить позицию" : "Дата материала Альфа-Банка"}">материал от ${esc(d)}${c.stale ? " · позиция могла обновиться" : ""}</span>${c.used > 1 ? `<span class="asof used" title="Столько разборов сервиса опираются на этот материал банка">используют ${c.used} ${plural(c.used, "разбор", "разбора", "разборов")}</span>` : ""}${doc ? `<button class="link-btn doc-open" data-doc="${esc(doc)}">весь материал →</button>` : ""}`;
 }
 // Словарь: термин в тексте — с подсказкой по наведению и фокусу (один раз на утверждение)
 const GLOSS = [
@@ -1533,6 +1536,13 @@ function divergenceBlock(i) {
     <div class="muted small">Сервис показывает оба взгляда. Вывод в таких местах — мнение модели, а не позиция банка.</div></div>`;
 }
 
+// Нет материалов банка по теме — честный ответ отдельной карточкой, а не мелкой строкой
+function noBankView(i) {
+  const extra = (i.bank_view || []).filter((c) => c.kind !== "bank_view");
+  return `<div class="no-bank"><span class="nb-ico" aria-hidden="true">${ico("doc")}</span><div><b>По этой теме у Альфа-Банка нет опубликованных материалов</b>
+    <p class="muted small">Сервис не придумывает позицию за банк: выводы в разборе помечены как выводы сервиса. Получить оценку аналитика можно через менеджера.</p>
+    <div class="nb-act"><button class="btn small" data-act="manager">Спросить аналитика через менеджера</button><button class="btn ghost small" data-goview="forecasts">Все материалы банка</button></div></div></div>${extra.length ? claims(extra) : ""}`;
+}
 // Проверяемость разбора: тип события и на что разбор обязан ответить, цифры новости рядом с прогнозом банка, что нового в сюжете
 function reviewBlock(i) {
   const r = i.review || {}, k = r.kind;
@@ -1592,7 +1602,7 @@ function renderInsight(tab) {
         <div class="cta"><button class="btn small" data-act="manager">Обсудить с менеджером</button><button class="btn ghost small" data-act="callback">Заказать обратный звонок</button></div></div>
       <div class="q"><h4><span class="n">5</span>Как это оценивает Альфа-Банк</h4>
         <div class="bv-card"><div class="bv-head"><span class="bv-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 10 12 4l9 6M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18"/></svg></span><div><b>Позиция Альфа-Банка</b><div class="muted small">тезисы и прогнозы из аналитики банка — со ссылкой на документ и страницу</div></div></div>
-        ${(i.bank_view || []).length ? claims(i.bank_view) : `<div class="muted small">В аналитике банка нет материалов по этой теме — сервис не придумывает позицию за банк.</div>`}</div></div>
+        ${(i.bank_view || []).some((c) => c.kind === "bank_view") ? claims(i.bank_view) : noBankView(i)}</div></div>
       <div class="q"><h4><span class="n">6</span>На чём основан вывод</h4>
         ${reviewBlock(i)}
         <div class="qa-sum"><span class="qa-ring ${allOk ? "ok" : "warn"}">${i.quality.filter((c) => c.passed).length}/${i.quality.length}</span>
@@ -1611,7 +1621,7 @@ function renderInsight(tab) {
     body = `<ol class="sources-list">${i.sources.map((s) => `<li id="src-${CSS.escape(s.id)}"><b>[${esc(s.type === "bank" ? "Альфа-Банк" : s.type === "news" ? "Новость" : s.type === "graph" ? "Граф платежей" : s.type === "calc" ? "Расчёт" : s.type === "peers" ? "Похожие компании" : "Профиль")}]</b> ${esc(s.title)}
       ${s.date ? `<span class="muted"> · ${fmtDate(s.date)}</span>` : ""}${s.page ? `<span class="muted"> · стр. ${s.page}</span>` : ""}
       ${s.stale ? `<span class="pill mixed">материал устарел</span>` : ""}
-      ${s.url ? ` <a href="${esc(s.url)}" target="_blank" rel="noopener">первоисточник ↗</a>` : ""}
+      ${s.url ? ` <a href="${esc(s.url)}" target="_blank" rel="noopener">первоисточник ↗</a>` : ""}${s.type === "bank" && ((i.review || {}).bank_docs || {})[s.id] ? ` <button class="link-btn" data-doc="${esc(i.review.bank_docs[s.id])}">весь материал →</button>` : ""}
       ${s.quote ? `<div class="muted small">«${esc(s.quote)}»</div>` : ""}</li>`).join("")}</ol>`;
   } else {
     body = `<div id="traceBox" class="loading">Загрузка трассировки…</div>`;
@@ -1648,6 +1658,8 @@ function renderInsight(tab) {
   if (svgMap) svgMap.addEventListener("mouseenter", () => track("map_hover", { event_id: state.current }), { once: true });
   document.querySelectorAll("[data-src]").forEach((el) => el.onclick = () => { renderInsight("sources"); const li = document.getElementById("src-" + CSS.escape(el.dataset.src)); if (li) { li.classList.add("hl"); li.scrollIntoView({ block: "center" }); } });
   document.querySelectorAll("#insightPanel [data-nums]").forEach((el) => el.onclick = openNumbers);
+  document.querySelectorAll("#insightPanel [data-doc]").forEach((el) => el.onclick = (e) => { e.stopPropagation(); openDoc(el.dataset.doc); });
+  document.querySelectorAll("#insightPanel [data-goview]").forEach((el) => el.onclick = () => show(el.dataset.goview));
   document.querySelectorAll("#insightPanel [data-csv]").forEach((el) => el.onclick = () => downloadCalc(i));
   applyNumsToInsight(i);
   $("#refreshBtn").onclick = () => openInsight(state.current, true);
@@ -2201,8 +2213,120 @@ function markRevsSeen(list) {
   try { localStorage.setItem("fcseen:" + state.company, JSON.stringify([...s].slice(-200))); } catch (e) { /* хранилище недоступно */ }
 }
 async function companyRevisions() {
-  const d = await bankForecasts(), fx = companyFactors();
-  return d.forecasts.filter((f) => f.revision && fx.has(f.factor));
+  const d = await bankForecasts(), fx = companyFactors(), w = watchedInd();
+  return d.forecasts.filter((f) => f.revision && (fx.has(f.factor) || w.has(f.indicator)));
+}
+// Подписка на пересмотр конкретного показателя (например, курса юаня) — в этом браузере, уведомление в колокольчике
+function watchedInd() { try { return new Set(JSON.parse(localStorage.getItem("bn:watch-ind") || "[]")); } catch (e) { return new Set(); } }
+function toggleWatchInd(ind) {
+  const w = watchedInd(); if (w.has(ind)) w.delete(ind); else w.add(ind);
+  try { localStorage.setItem("bn:watch-ind", JSON.stringify([...w])); } catch (e) { /* без хранилища — до перезагрузки */ }
+  return w.has(ind);
+}
+function bankSearchBlock() {
+  return `<div class="card bank-search"><div class="eyebrow">Спросить аналитику банка</div>
+    <form id="bsForm" class="bs-form" role="search"><input id="bsQ" type="search" minlength="2" maxlength="200" placeholder="Например: ставки по кредитам, курс юаня, зарплаты, стройка" aria-label="Вопрос к материалам банка"><button class="btn">Найти</button></form>
+    <div class="bs-chips">${["ключевая ставка в 2027", "курс юаня", "рост зарплат", "спрос на жильё", "флоатеры"].map((x) => `<button class="chip" data-bsq="${esc(x)}">${esc(x)}</button>`).join("")}</div>
+    <div id="bsOut" aria-live="polite"></div>
+    <div class="muted small">Ищет по тезисам и прогнозам из материалов Альфа-Банка тем же поиском, что использует агент. Ответ — только то, что написано в материалах, со ссылкой на документ и страницу.</div></div>`;
+}
+async function runBankSearch(qs) {
+  const out = $("#bsOut");
+  out.innerHTML = `<div class="skeleton sm"></div>`;
+  try {
+    const r = await api(`/api/bank/search?${q({ q: qs })}`);
+    track("bank_search");
+    out.innerHTML = r.results.length ? `<ol class="bs-res">${r.results.map((x, k) => `<li class="${k === 0 ? "top" : ""}"><div>${esc(x.text)}</div>
+      ${x.quote ? `<div class="bs-q">«${esc(x.quote)}»</div>` : ""}
+      <div class="muted small">${esc(x.doc_title || "")}${x.page ? `, стр. ${x.page}` : ""} · ${fmtDate(x.date)}${x.used ? ` · используют ${x.used} ${plural(x.used, "разбор", "разбора", "разборов")}` : ""} <button class="link-btn" data-doc="${esc(x.doc_id)}">весь материал →</button></div></li>`).join("")}</ol>`
+      : `<p class="muted">В материалах банка по этому запросу ничего нет — сервис не придумывает ответ.</p>`;
+    out.querySelectorAll("[data-doc]").forEach((b) => b.onclick = () => openDoc(b.dataset.doc));
+  } catch (e) { out.textContent = "Не удалось найти: " + e.message; }
+}
+function rateMarketCard(rm) {
+  if (!rm || !(rm.bank || []).length) return "";
+  const all = [...rm.bank, ...rm.market], max = Math.max(...all.map((x) => x.value)) * 1.08;
+  const row = (x) => `<div class="rm-row ${x.kind}" title="${esc(x.ref || "")}"><span>${esc(x.label)}</span><span class="rm-bar"><i style="width:${(x.value / max * 100).toFixed(1)}%"></i></span><b>${String(x.value).replace(".", ",")}%</b></div>`;
+  return `<div class="card rm-card"><div class="eyebrow">Ставка: прогноз банка и рынок</div>
+    <div class="rm-sub">Прогноз Альфа-Банка</div>${rm.bank.map(row).join("")}
+    ${rm.market.length ? `<div class="rm-sub">Рыночные ставки (по материалам банка)</div>${rm.market.map(row).join("")}` : ""}
+    <p class="muted small">${esc(rm.note)}</p></div>`;
+}
+// Хронология пересмотров: все изменения прогнозов банка по дате — ступенька вверх или вниз
+function revTimeline(fcs) {
+  const rv = fcs.filter((f) => f.revision && f.period >= "2026").sort((a, b) => String(b.revision.to_date).localeCompare(String(a.revision.to_date)));
+  if (!rv.length) return "";
+  return `<div class="card rt-card"><div class="eyebrow">Хронология пересмотров</div><ol class="rt">${rv.slice(0, 8).map((f) => `<li class="${f.revision.direction}">
+    <span class="rt-d">${fmtDate(f.revision.to_date)}</span><span class="rt-t">${esc(f.title)}, ${esc(f.period)}</span>
+    <span class="rt-v">${fmtVal(f.revision.from, f.unit)} <i>${f.revision.direction === "up" ? "↗" : "↘"}</i> <b>${fmtVal(f.revision.to, f.unit)}</b></span></li>`).join("")}</ol></div>`;
+}
+const DOC_TYPE = { macro: "Макроэкономика", debt_market: "Долговой рынок", commodities: "Сырьё", equity_sector: "Отрасли и акции" };
+function libraryBlock(lib) {
+  const st = lib.stats || {};
+  return `<div class="card lib-card"><div class="eyebrow">Материалы Альфа-Банка · ${lib.documents.length}</div>
+    <div class="lib-grid">${lib.documents.map((d) => `<button class="lib-doc ${d.stale ? "stale" : ""}" data-doc="${esc(d.doc_id)}">
+      <span class="ld-type">${esc(DOC_TYPE[d.type] || d.type || "")} · ${fmtDate(d.date)}</span><b>${esc(d.title)}</b>
+      <span class="ld-n">${d.theses} ${plural(d.theses, "тезис", "тезиса", "тезисов")}${d.forecasts ? ` · ${d.forecasts} ${plural(d.forecasts, "прогноз", "прогноза", "прогнозов")}` : ""}${d.used ? ` · в ${d.used} ${plural(d.used, "разборе", "разборах", "разборах")}` : ""}</span>
+      ${d.stale ? `<span class="ld-stale">материалу больше года — в разборах не используется</span>` : ""}</button>`).join("")}</div>
+    <details class="pipe"><summary>Как материалы банка попадают в разбор</summary>${pipelineSvg(st)}</details></div>`;
+}
+function pipelineSvg(st) {
+  const steps = [["PDF-материалы", `${st.documents || "—"} документов кейса`], ["Чтение страниц", `${st.pages || "—"} страниц с тезисами; OCR сканов — Qwen3-VL`],
+    ["Тезисы и прогнозы", `${st.theses || "—"} тезисов с цитатой и страницей, ${st.forecasts || "—"} чисел прогноза`], ["Поиск", "BM25 + темы события: тезисы к разбору"],
+    ["Проверка", "число из позиции банка должно быть в цитируемом материале"], ["Разбор", "«Позиция Альфа-Банка» со ссылкой на документ и страницу"]];
+  const W = 980, bw = 150, gap = (W - bw * steps.length) / (steps.length - 1);
+  return `<svg class="pipe-svg" viewBox="0 0 ${W} 120" role="img" aria-label="Путь материалов банка: ${steps.map((x) => x[0]).join(" → ")}">
+    ${steps.map(([t, s], k) => { const x = k * (bw + gap); return `<g><rect x="${x}" y="8" width="${bw}" height="96" rx="14" class="${k === steps.length - 1 ? "fin" : ""}"/>
+      <text x="${x + 12}" y="34" class="pt">${esc(t)}</text>${wrapSvg(s, 22).map((ln, j) => `<text x="${x + 12}" y="${56 + j * 15}" class="ps">${esc(ln)}</text>`).join("")}
+      ${k < steps.length - 1 ? `<path d="M${x + bw + 4} 56h${gap - 8}" class="pa"/><path d="M${x + bw + gap - 9} 51l5 5-5 5" class="pa"/>` : ""}</g>`; }).join("")}</svg>
+    <p class="muted small">PDF в репозиторий и на стенд не выкладываем — так требуют условия распространения материалов. В разборе видны название, дата, страница и дословная цитата: по ним место в документе находится за секунды.</p>`;
+}
+function wrapSvg(s, n) { const out = []; let cur = ""; for (const w of s.split(" ")) { if ((cur + " " + w).trim().length > n) { out.push(cur.trim()); cur = w; } else cur += " " + w; } if (cur.trim()) out.push(cur.trim()); return out.slice(0, 3); }
+function bindForecasts(box) {
+  const f = $("#bsForm");
+  if (f) f.onsubmit = (e) => { e.preventDefault(); const v = $("#bsQ").value.trim(); if (v.length >= 2) runBankSearch(v); };
+  box.querySelectorAll("[data-bsq]").forEach((b) => b.onclick = () => { $("#bsQ").value = b.dataset.bsq; runBankSearch(b.dataset.bsq); });
+  box.querySelectorAll("[data-doc]").forEach((b) => b.onclick = () => openDoc(b.dataset.doc));
+  box.querySelectorAll("[data-watch-ind]").forEach((b) => b.onclick = () => {
+    const on = toggleWatchInd(b.dataset.watchInd);
+    b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on)); b.innerHTML = `${ico("bell")} ${on ? "слежу" : "следить"}`;
+    toast(on ? "Сообщим в колокольчике, когда банк пересмотрит этот прогноз" : "Больше не следим за этим прогнозом");
+    track("watch_indicator", { meta: { on } });
+  });
+}
+// Карточка материала банка: все тезисы по страницам с цитатами, прогнозы-числа, где используется
+async function openDoc(docId) {
+  const dlg = $("#actionDialog");
+  dlg.innerHTML = `<div class="doc-dlg"><div class="skeleton"></div></div>`;
+  if (!dlg.open) dlg.showModal();
+  try {
+    const d = await api(`/api/bank/documents/${encodeURIComponent(docId)}`);
+    track("doc_open");
+    const pages = [...new Set(d.theses.map((t) => t.page))];
+    dlg.innerHTML = `<form method="dialog" class="doc-dlg"><div class="eyebrow">${esc(DOC_TYPE[d.type] || "Материал Альфа-Банка")} · ${fmtDate(d.date)}</div>
+      <h3>${esc(d.title)}</h3>
+      <p class="muted small">${d.theses.length} ${plural(d.theses.length, "тезис", "тезиса", "тезисов")} на ${pages.length} ${plural(pages.length, "странице", "страницах", "страницах")}${d.forecasts.length ? ` · ${d.forecasts.length} ${plural(d.forecasts.length, "прогноз", "прогноза", "прогнозов")}` : ""}${d.used ? ` · на материал ссылаются ${d.used} ${plural(d.used, "разбор", "разбора", "разборов")}` : ""} · файл: ${esc(d.file || "")}</p>
+      ${d.stale ? `<div class="notice">Материалу больше года: в разборах он не используется как текущая позиция банка.</div>` : ""}
+      <div class="doc-body">${pages.map((pg) => `<div class="doc-page"><div class="dp-n">стр. ${pg ?? "—"}</div><div>${d.theses.filter((t) => t.page === pg).map((t) => `<div class="dp-t"><div>${esc(t.thesis)}</div>${t.quote ? `<div class="bs-q">«${esc(t.quote)}»</div>` : ""}<div class="muted small">${esc(t.horizon || "")}${t.used ? ` · используют ${t.used} ${plural(t.used, "разбор", "разбора", "разборов")}` : ""}</div></div>`).join("")}</div></div>`).join("")}
+      ${d.forecasts.length ? `<div class="sub-h">Прогнозы в материале</div><table class="fc">${d.forecasts.map((f) => `<tr><td>${esc(f.title)}, ${esc(f.period)}</td><td class="num">${fmtVal(f.value, f.unit)}</td><td class="muted small">${f.page ? "стр. " + f.page : ""}</td></tr>`).join("")}</table>` : ""}</div>
+      <p class="muted small">PDF не публикуем (условия распространения материалов) — по странице и цитате место находится в исходном документе.</p>
+      <div class="row"><button value="close" class="btn">Закрыть</button></div></form>`;
+  } catch (e) { dlg.innerHTML = `<form method="dialog" class="doc-dlg"><p>Не удалось открыть материал: ${esc(e.message)}</p><div class="row"><button class="btn">Закрыть</button></div></form>`; }
+}
+// «Банк думает» на главной: свежие тезисы банка по главным темам компании
+async function loadBankThinks() {
+  const box = $("#bankThinks");
+  if (!box || !state.company) return;
+  try {
+    const r = await api(`/api/bank/for-company?${q({ company_id: state.company, role: state.role })}`);
+    if (!r.theses.length) { box.hidden = true; return; }
+    box.hidden = false;
+    box.innerHTML = `<div class="mini-head"><h3>Что думает банк</h3><button class="link-more" data-goto="forecasts">Все материалы →</button></div>
+      <div class="bt-list">${r.theses.map((t) => `<button class="bt" data-doc="${esc(t.doc_id)}"><span class="bt-txt">${esc(t.thesis)}</span><span class="muted small">${esc(t.doc_title || "")} · ${fmtDate(t.date)}${t.page ? `, стр. ${t.page}` : ""}</span></button>`).join("")}</div>
+      <div class="muted small">По темам, к которым чувствительна компания · позиция Альфа-Банка со ссылкой на материал</div>`;
+    box.querySelectorAll("[data-doc]").forEach((b) => b.onclick = () => openDoc(b.dataset.doc));
+    box.querySelectorAll("[data-goto]").forEach((b) => b.onclick = () => show(b.dataset.goto));
+  } catch (e) { box.hidden = true; }
 }
 async function updateRevBadge() {
   const seen = seenRevs(), fresh = (await companyRevisions()).filter((f) => !seen.has(revKey(f)));
@@ -2236,6 +2360,7 @@ async function loadForecasts() {
     const isNew = r && (state.freshRevs || []).some((x) => revKey(x) === revKey(f));
     return `<div class="fc-card ${r ? "revised" : ""}">
       <div class="fc-top"><span>${esc(f.title)}, ${esc(f.period)}${isNew ? `<span class="fc-new">новое</span>` : ""}</span><b>${fmtVal(f.value, f.unit)}</b></div>
+      <button class="fc-watch ${watchedInd().has(f.indicator) ? "on" : ""}" data-watch-ind="${esc(f.indicator)}" aria-pressed="${watchedInd().has(f.indicator)}" title="Уведомлять о пересмотре этого прогноза">${ico("bell")} ${watchedInd().has(f.indicator) ? "слежу" : "следить"}</button>
       ${r ? `<div class="rev ${r.direction}">${r.direction === "up" ? "▲ повысил" : "▼ понизил"} с ${fmtVal(r.from, f.unit)} (${fmtDate(r.from_date)}) до ${fmtVal(r.to, f.unit)} (${fmtDate(r.to_date)})</div>` : ""}
       ${stepChart(f)}
       ${e ? `<div class="muted small">Почему важно вам: ${esc(e.title)}${e.reasons && e.reasons[0] && e.reasons[0].why && !/Макрофактор/.test(e.reasons[0].why) ? " — " + esc(e.reasons[0].why) : ""}</div>` : ""}
@@ -2244,7 +2369,11 @@ async function loadForecasts() {
   const revs = rel.filter((f) => f.revision);
   await updateRevBadge();
   const fresh = new Set((state.freshRevs || []).map(revKey));
+  const [lib, rm] = await Promise.all([api("/api/bank/documents").catch(() => null), api("/api/bank/rate-market").catch(() => null)]);
   box.innerHTML = `
+    ${bankSearchBlock()}
+    <div class="fc-top-grid">${rateMarketCard(rm)}${revTimeline(d.forecasts)}</div>
+    ${lib ? libraryBlock(lib) : ""}
     ${revs.length ? `<div class="card fc-alert"><div class="eyebrow">Банк изменил взгляд</div><h3>${revs.length} ${plural(revs.length, "пересмотр", "пересмотра", "пересмотров")} прогноза по темам вашей компании${fresh.size ? ` · ${fresh.size} ${plural(fresh.size, "новый", "новых", "новых")}` : ""}</h3>
       <ul>${revs.map((f) => `<li><b>${esc(f.title)}, ${esc(f.period)}</b>: ${fmtVal(f.revision.from, f.unit)} → ${fmtVal(f.revision.to, f.unit)} <span class="muted small">(${fmtDate(f.revision.to_date)})</span>${fresh.has(revKey(f)) ? `<span class="fc-new">новое</span>` : ""}</li>`).join("")}</ul>
       <p class="muted small">Число у пункта меню «Прогнозы банка» — пересмотры, которых вы ещё не видели; после открытия этого раздела оно пропадает. Сценарии в разборах строятся от последнего прогноза банка: «база» — это он.</p></div>` : ""}
@@ -2252,6 +2381,7 @@ async function loadForecasts() {
     <div class="fc-grid">${rel.map(card).join("") || `<p class="muted">Нет прогнозов банка по темам компании.</p>`}</div>
     <details class="fc-more"><summary>Остальные прогнозы банка (${other.length})</summary><div class="fc-grid">${other.map(card).join("")}</div></details>
     <p class="muted small">${d.theses_count} тезисов и ${d.forecasts.length} прогнозов из ${(d.documents || []).length} аналитических материалов Альфа-Банка.</p>`;
+  bindForecasts(box);
   markRevsSeen(revs);
   state.freshRevs = [];
   const b = $("#revBadge"); if (b) { b.hidden = true; b.textContent = ""; }
