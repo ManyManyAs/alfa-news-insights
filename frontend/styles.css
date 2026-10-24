@@ -624,7 +624,7 @@ body.logged-out .layout, body.logged-out .topbar { display: none; }
   .nav-item.active::before { left: 10px; right: 10px; top: auto; bottom: 0; width: auto; height: 3px; border-radius: 3px 3px 0 0; }
   .nav-sep, .nav-foot, .nav-item.muted { display: none; }
   .proto, .brand-txt small { display: none; }
-  .home-grid, .radar-grid, .cols { grid-template-columns: 1fr; }
+  .radar-grid, .cols { grid-template-columns: 1fr; }
   .radar-widget { grid-row: auto; }
   .insight-col { position: static; max-height: none; }
   main { padding: 16px; }
@@ -992,3 +992,15 @@ body.logged-out .layout, body.logged-out .topbar { display: none; }
 .seg button.on .seg-n { opacity: .75; }
 .feed-day { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin: 18px 4px 8px; }
 .feed-day:first-child { margin-top: 4px; }
+
+/* лента: узкая колонка — заголовок и кнопка переносятся, фильтры эффекта в одну строку с прокруткой */
+.feed-head { flex-wrap: wrap; }
+.feed-head h2 { white-space: normal; }
+.feed-head .btn { padding: 7px 12px; font-size: 13.5px; }
+.feed-tools .seg { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; max-width: 100%; }
+.feed-tools .seg::-webkit-scrollbar { display: none; }
+.feed-tools .seg button { white-space: nowrap; flex: none; }
+.seg button.zero { display: none; }
+.tool-row input[type=search] { flex: 1 1 100%; }
+.widget-head .btn { white-space: nowrap; flex: none; }
+@media (max-width: 1180px) { .home-grid { grid-template-columns: minmax(0, 1fr); } }

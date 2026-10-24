@@ -109,7 +109,8 @@ async def shots(b):
         await asyncio.sleep(2)
         await pg.screenshot(path=OUT / "00_globe.png")
         await pg.wait_for_selector("#focusCard .focus-main", timeout=30000)
-        await pg.locator("#radarWidget").scroll_into_view_if_needed()
+        # «Дела по радару» и виджет ленты под тёмным блоком с глобусом
+        await pg.evaluate("document.querySelector('#homeStrip').scrollIntoView({block: 'start'}); scrollBy(0, -80)")
         await asyncio.sleep(1)
         await pg.screenshot(path=OUT / "02_home.png")
 

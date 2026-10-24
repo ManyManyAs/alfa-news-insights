@@ -825,6 +825,7 @@ function renderFeedList(animate = false) {
     const k = b.dataset.feff, n = k === "all" ? state.feed.length : state.feed.filter((x) => x.effect === k).length;
     if (!b.dataset.label) b.dataset.label = b.textContent;
     b.innerHTML = `${esc(b.dataset.label)}<span class="seg-n">${n}</span>`;
+    b.classList.toggle("zero", !n && k !== "all" && !b.classList.contains("on"));
   });
   // при сортировке по дате — группы по дням, как операции в выписке
   const byDate = $("#fSort").value === "date";
