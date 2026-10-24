@@ -169,7 +169,7 @@ async function main() {
     s.addText([{ text: h, options: { bold: true, fontSize: 17, breakLine: true } }, { text: m, options: { fontSize: 13 } }],
       { x: x + 0.1, y: 1.75, w: 1.65, h: 1.15, color: i === 3 ? HEX.white : HEX.ink, align: "center", valign: "middle", margin: 0, isTextBox: true });
   });
-  const stats = [["17 с", "медиана полного разбора"], ["≤ 4 ₽ · 60 с", "бюджет агента на один разбор"], ["100%", "разборов проходят самопроверку"]];
+  const stats = [["0,2 с · ~50 с", "готовый разбор · новый с нуля (замер стенда)"], ["≤ 4 ₽ · 60 с", "бюджет агента на один разбор"], ["100%", "разборов проходят самопроверку"]];
   stats.forEach(([n, t], i) => {
     s.addText(n, { x: 0.6 + i * 4.1, y: 3.45, w: 3.9, h: 0.9, fontSize: 40, bold: true, color: HEX.red, margin: 0, isTextBox: true });
     s.addText(t, { x: 0.6 + i * 4.1, y: 4.35, w: 3.9, h: 0.45, fontSize: 15, color: C.text2, margin: 0, isTextBox: true });
