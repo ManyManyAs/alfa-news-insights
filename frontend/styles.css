@@ -1027,7 +1027,7 @@ body.logged-out .layout, body.logged-out .topbar { display: none; }
 .fc-top b { font: 800 26px/1.1 var(--display); letter-spacing: -.02em; }
 .fc-card { overflow-wrap: break-word; }
 /* «Мои действия»: ссылка на событие — обычной строкой слева */
-[data-tev] { text-align: left; display: block; margin-top: 4px; }
+[data-tev], [data-focus-ev] { text-align: left; display: block; margin-top: 4px; }
 
 /* Телефон: нижняя панель разделов, как в мобильном банке; «Ещё» — все разделы листом снизу */
 .nav-more { display: none !important; }
