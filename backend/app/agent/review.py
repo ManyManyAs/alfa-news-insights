@@ -177,10 +177,8 @@ def fact_support(claim_text: str, news: list) -> list[str]:
     outlets: list[str] = []
     for n in news:
         body = f"{n.title} {n.text}"
-        if nums:
-            ok = nums <= {_num(x) for x in NUM_RE.findall(body)}
-        else:
-            ok = bool(words) and len(words & _words(body)) / len(words) >= 0.5
+        found = {_num(x) for x in NUM_RE.findall(body)}
+        ok = nums <= found if nums else bool(words) and len(words & _words(body)) / len(words) >= 0.5
         name = n.source_title or n.source
         if ok and name not in outlets:
             outlets.append(name)
