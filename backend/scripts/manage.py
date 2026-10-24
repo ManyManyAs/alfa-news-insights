@@ -110,6 +110,10 @@ def warmup(top: int = 5, max_rub: float | None = None, background: bool = False,
                     if over():
                         break
                     upgrade_hidden(sc.event, p, role)
+                    hi = cached_insight(sc.event.id, p.uid, role)
+                    if hi and hi.hidden_effects is not None:
+                        print(f"hidden | {u['label'][:28]:28s} | {role:10s} | {len(hi.hidden_effects)} | "
+                              + ("; ".join(h.text for h in hi.hidden_effects)[:220] or "правдоподобного неочевидного нет"))
                 m = money_view(p, role, cached_rank(p, role, 30), ai_materiality(p.uid, role), importance_level, cached_insight, rev)
                 print(f"money  | {u['label'][:28]:28s} | {role:10s} | рычагов {len(m['levers'])} | событий {m['events_used']}"
                       f" из {m['candidates']} | ИИ: {m['ai'].get('used')}")
