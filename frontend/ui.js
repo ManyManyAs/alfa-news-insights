@@ -131,3 +131,9 @@ function bindHScroll(el) {
   new ResizeObserver(edge).observe(el);
   edge();
 }
+
+// ---------------------------------------------------------------- клавиатура: Space нажимает элементы-кнопки, как Enter
+document.addEventListener("keydown", (e) => {
+  if (e.key !== " " || !e.target.matches || !e.target.matches('[role="button"]:not(button):not(input):not(textarea)')) return;
+  e.preventDefault(); e.target.click();
+});
