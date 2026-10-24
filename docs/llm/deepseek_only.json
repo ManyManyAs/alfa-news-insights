@@ -1,0 +1,661 @@
+{
+  "run_at": "2026-10-24T01:12:54.393951+00:00",
+  "spent_rub": 29.81,
+  "stopped": null,
+  "n_pairs": 12,
+  "current": {
+    "n": 12,
+    "glm": {
+      "overall": 3.73,
+      "axes": {
+        "personalization": 4,
+        "depth": 3.83,
+        "grounding": 3.17,
+        "bank_view": 3.92,
+        "actionability": 3.75
+      }
+    },
+    "kimi": {
+      "overall": 3.22,
+      "axes": {
+        "personalization": 3.92,
+        "depth": 3.08,
+        "grounding": 2.83,
+        "bank_view": 3.08,
+        "actionability": 3.17
+      }
+    },
+    "quality_pass": 1.0,
+    "iterations": 1.92
+  },
+  "deepseek_only": {
+    "n": 12,
+    "glm": {
+      "overall": 4.1,
+      "axes": {
+        "personalization": 4.17,
+        "depth": 3.83,
+        "grounding": 4,
+        "bank_view": 4.67,
+        "actionability": 3.83
+      }
+    },
+    "kimi": {
+      "overall": 3.35,
+      "axes": {
+        "personalization": 4,
+        "depth": 3,
+        "grounding": 3.33,
+        "bank_view": 3.25,
+        "actionability": 3.17
+      }
+    },
+    "quality_pass": 1.0,
+    "iterations": 2,
+    "seconds_p50": 41.0,
+    "rub_mean": 1.59
+  },
+  "deepseek_rules_fallback": 0,
+  "rows": [
+    {
+      "key": "ev-08fa7d4956|U_17597|accountant",
+      "title": "Субсидия застройщикам Новосибирской области: для московской IT-компании прямого эффекта нет, значим лишь общий сигнал по стоимости кредита",
+      "current": {
+        "meta": {
+          "generated_by": "llm:deepseek/deepseek-v4.1-flash",
+          "iterations": 2,
+          "quality_pass": 1.0,
+          "seconds": null,
+          "rub": null
+        },
+        "glm": {
+          "personalization": 4,
+          "depth": 3,
+          "grounding": 2,
+          "bank_view": 3,
+          "actionability": 3
+        },
+        "kimi": {
+          "personalization": 4,
+          "depth": 3,
+          "grounding": 2,
+          "bank_view": 2,
+          "actionability": 2
+        }
+      },
+      "deepseek_only": {
+        "meta": {
+          "generated_by": "llm:deepseek/deepseek-v4.1-flash",
+          "iterations": 2,
+          "quality_pass": 1.0,
+          "seconds": 46.2,
+          "rub": 0.0
+        },
+        "glm": {
+          "personalization": 4,
+          "depth": 3,
+          "grounding": 4,
+          "bank_view": 4,
+          "actionability": 3
+        },
+        "kimi": {
+          "personalization": 4,
+          "depth": 3,
+          "grounding": 3,
+          "bank_view": 3,
+          "actionability": 3
+        }
+      }
+    },
+    {
+      "key": "ev-08fa7d4956|U_52056|accountant",
+      "title": "Новосибирская область субсидирует до 3 п.п. ставки застройщикам КРТ с 2027 года",
+      "current": {
+        "meta": {
+          "generated_by": "llm:deepseek/deepseek-v4.1-flash",
+          "iterations": 2,
+          "quality_pass": 1.0,
+          "seconds": null,
+          "rub": null
+        },
+        "glm": {
+          "personalization": 4,
+          "depth": 4,
+          "grounding": 4,
+          "bank_view": 4,
+          "actionability": 4
+        },
+        "kimi": {
+          "personalization": 4,
+          "depth": 3,
+          "grounding": 3,
+          "bank_view": 3,
+          "actionability": 3
+        }
+      },
+      "deepseek_only": {
+        "meta": {
+          "generated_by": "llm:deepseek/deepseek-v4.1-flash",
+          "iterations": 2,
+          "quality_pass": 1.0,
+          "seconds": 46.3,
+          "rub": 0.0
+        },
+        "glm": {
+          "personalization": 4,
+          "depth": 3,
+          "grounding": 3,
+          "bank_view": 4,
+          "actionability": 3
+        },
+        "kimi": {
+          "personalization": 4,
+          "depth": 3,
+          "grounding": 4,
+          "bank_view": 3,
+          "actionability": 3
+        }
+      }
+    },
+    {
+      "key": "ev-08fa7d4956|U_52056|ceo",
+      "title": "Новосибирская область субсидирует до 3 п.п. ставки застройщикам КРТ с 2027 года",
+      "current": {
+        "meta": {
+          "generated_by": "llm:deepseek/deepseek-v4.1-flash",
+          "iterations": 2,
+          "quality_pass": 1.0,
+          "seconds": null,
+          "rub": null
+        },
+        "glm": {
+          "personalization": 4,
+          "depth": 4,
+          "grounding": 3,
+          "bank_view": 4,
+          "actionability": 3
+        },
+        "kimi": {
+          "personalization": 4,
+          "depth": 4,
+          "grounding": 3,
+          "bank_view": 3,
+          "actionability": 4
+        }
+      },
+      "deepseek_only": {
+        "meta": {
+          "generated_by": "llm:deepseek/deepseek-v4.1-flash",
+          "iterations": 2,
+          "quality_pass": 1.0,
+          "seconds": 39.3,
+          "rub": 0.0
+        },
+        "glm": {
+          "personalization": 4,
+          "depth": 4,
+          "grounding": 3,
+          "bank_view": 4,
+          "actionability": 4
+        },
+        "kimi": {
+          "personalization": 4,
+          "depth": 3,
+          "grounding": 3,
+          "bank_view": 3,
+          "actionability": 4
+        }
+      }
+    },
+    {
+      "key": "ev-08fa7d4956|U_52056|cfo",
+      "title": "Новосибирская область субсидирует до 3 п.п. ставки застройщикам КРТ с 2027 года",
+      "current": {
+        "meta": {
+          "generated_by": "llm:deepseek/deepseek-v4.1-flash",
+          "iterations": 2,
+          "quality_pass": 1.0,
+          "seconds": null,
+          "rub": null
+        },
+        "glm": {
+          "personalization": 4,
+          "depth": 4,
+          "grounding": 4,
+          "bank_view": 4,
+          "actionability": 4
+        },
+        "kimi": {
+          "personalization": 4,
+          "depth": 3,
+          "grounding": 4,
+          "bank_view": 4,
+          "actionability": 3
+        }
+      },
+      "deepseek_only": {
+        "meta": {
+          "generated_by": "llm:deepseek/deepseek-v4.1-flash",
+          "iterations": 2,
+          "quality_pass": 1.0,
+          "seconds": 39.2,
+          "rub": 0.0
+        },
+        "glm": {
+          "personalization": 4,
+          "depth": 4,
+          "grounding": 5,
+          "bank_view": 5,
+          "actionability": 4
+        },
+        "kimi": {
+          "personalization": 4,
+          "depth": 3,
+          "grounding": 3,
+          "bank_view": 2,
+          "actionability": 3
+        }
+      }
+    },
+    {
+      "key": "ev-08fa7d4956|U_52056|owner",
+      "title": "Новосибирская область субсидирует до 3 п.п. ставки застройщикам КРТ с 2027 года",
+      "current": {
+        "meta": {
+          "generated_by": "llm:deepseek/deepseek-v4.1-flash",
+          "iterations": 2,
+          "quality_pass": 1.0,
+          "seconds": null,
+          "rub": null
+        },
+        "glm": {
+          "personalization": 4,
+          "depth": 4,
+          "grounding": 3,
+          "bank_view": 5,
+          "actionability": 4
+        },
+        "kimi": {
+          "personalization": 4,
+          "depth": 3,
+          "grounding": 4,
+          "bank_view": 3,
+          "actionability": 4
+        }
+      },
+      "deepseek_only": {
+        "meta": {
+          "generated_by": "llm:deepseek/deepseek-v4.1-flash",
+          "iterations": 2,
+          "quality_pass": 1.0,
+          "seconds": 35.6,
+          "rub": 4.03
+        },
+        "glm": {
+          "personalization": 4,
+          "depth": 4,
+          "grounding": 4,
+          "bank_view": 5,
+          "actionability": 4
+        },
+        "kimi": {
+          "personalization": 4,
+          "depth": 3,
+          "grounding": 3,
+          "bank_view": 4,
+          "actionability": 3
+        }
+      }
+    },
+    {
+      "key": "ev-08fa7d4956|U_52056|treasurer",
+      "title": "Новосибирская область субсидирует до 3 п.п. ставки застройщикам КРТ с 2027 года",
+      "current": {
+        "meta": {
+          "generated_by": "llm:deepseek/deepseek-v4.1-flash",
+          "iterations": 2,
+          "quality_pass": 1.0,
+          "seconds": null,
+          "rub": null
+        },
+        "glm": {
+          "personalization": 4,
+          "depth": 4,
+          "grounding": 4,
+          "bank_view": 5,
+          "actionability": 4
+        },
+        "kimi": {
+          "personalization": 4,
+          "depth": 3,
+          "grounding": 4,
+          "bank_view": 3,
+          "actionability": 3
+        }
+      },
+      "deepseek_only": {
+        "meta": {
+          "generated_by": "llm:deepseek/deepseek-v4.1-flash",
+          "iterations": 2,
+          "quality_pass": 1.0,
+          "seconds": 44.7,
+          "rub": 2.39
+        },
+        "glm": {
+          "personalization": 4,
+          "depth": 4,
+          "grounding": 4,
+          "bank_view": 5,
+          "actionability": 4
+        },
+        "kimi": {
+          "personalization": 4,
+          "depth": 3,
+          "grounding": 4,
+          "bank_view": 4,
+          "actionability": 3
+        }
+      }
+    },
+    {
+      "key": "ev-08fa7d4956|U_74328|accountant",
+      "title": "Новосибирская область субсидирует до 3 п.п. ставки застройщикам КРТ с 2027 года",
+      "current": {
+        "meta": {
+          "generated_by": "llm:deepseek/deepseek-v4.1-flash",
+          "iterations": 2,
+          "quality_pass": 1.0,
+          "seconds": null,
+          "rub": null
+        },
+        "glm": {
+          "personalization": 4,
+          "depth": 4,
+          "grounding": 3,
+          "bank_view": 4,
+          "actionability": 4
+        },
+        "kimi": {
+          "personalization": 4,
+          "depth": 3,
+          "grounding": 2,
+          "bank_view": 3,
+          "actionability": 3
+        }
+      },
+      "deepseek_only": {
+        "meta": {
+          "generated_by": "llm:deepseek/deepseek-v4.1-flash",
+          "iterations": 2,
+          "quality_pass": 1.0,
+          "seconds": 41.4,
+          "rub": 2.63
+        },
+        "glm": {
+          "personalization": 4,
+          "depth": 4,
+          "grounding": 4,
+          "bank_view": 5,
+          "actionability": 4
+        },
+        "kimi": {
+          "personalization": 4,
+          "depth": 3,
+          "grounding": 4,
+          "bank_view": 3,
+          "actionability": 3
+        }
+      }
+    },
+    {
+      "key": "ev-08fa7d4956|U_74328|ceo",
+      "title": "Новосибирская область вводит субсидию до 3 п.п. по кредитам застройщиков КРТ с 2027 года",
+      "current": {
+        "meta": {
+          "generated_by": "llm:deepseek/deepseek-v4.1-flash",
+          "iterations": 2,
+          "quality_pass": 1.0,
+          "seconds": null,
+          "rub": null
+        },
+        "glm": {
+          "personalization": 4,
+          "depth": 3,
+          "grounding": 2,
+          "bank_view": 4,
+          "actionability": 4
+        },
+        "kimi": {
+          "personalization": 4,
+          "depth": 3,
+          "grounding": 3,
+          "bank_view": 4,
+          "actionability": 3
+        }
+      },
+      "deepseek_only": {
+        "meta": {
+          "generated_by": "llm:deepseek/deepseek-v4.1-flash",
+          "iterations": 2,
+          "quality_pass": 1.0,
+          "seconds": 37.1,
+          "rub": 3.03
+        },
+        "glm": {
+          "personalization": 4,
+          "depth": 4,
+          "grounding": 4,
+          "bank_view": 5,
+          "actionability": 4
+        },
+        "kimi": {
+          "personalization": 4,
+          "depth": 3,
+          "grounding": 3,
+          "bank_view": 3,
+          "actionability": 4
+        }
+      }
+    },
+    {
+      "key": "ev-08fa7d4956|U_74328|cfo",
+      "title": "Новосибирская область вводит субсидию до 3 п.п. по кредитам застройщиков КРТ с 2027 года",
+      "current": {
+        "meta": {
+          "generated_by": "llm:deepseek/deepseek-v4.1-flash",
+          "iterations": 1,
+          "quality_pass": 1.0,
+          "seconds": null,
+          "rub": null
+        },
+        "glm": {
+          "personalization": 4,
+          "depth": 4,
+          "grounding": 4,
+          "bank_view": 3,
+          "actionability": 4
+        },
+        "kimi": {
+          "personalization": 4,
+          "depth": 3,
+          "grounding": 3,
+          "bank_view": 3,
+          "actionability": 4
+        }
+      },
+      "deepseek_only": {
+        "meta": {
+          "generated_by": "llm:deepseek/deepseek-v4.1-flash",
+          "iterations": 2,
+          "quality_pass": 1.0,
+          "seconds": 45.5,
+          "rub": 2.85
+        },
+        "glm": {
+          "personalization": 4,
+          "depth": 4,
+          "grounding": 3,
+          "bank_view": 4,
+          "actionability": 4
+        },
+        "kimi": {
+          "personalization": 4,
+          "depth": 3,
+          "grounding": 3,
+          "bank_view": 4,
+          "actionability": 3
+        }
+      }
+    },
+    {
+      "key": "ev-08fa7d4956|U_74328|owner",
+      "title": "Новосибирская область вводит субсидию до 3 п.п. по кредитам застройщиков КРТ с 2027 года",
+      "current": {
+        "meta": {
+          "generated_by": "llm:deepseek/deepseek-v4.1-flash",
+          "iterations": 2,
+          "quality_pass": 1.0,
+          "seconds": null,
+          "rub": null
+        },
+        "glm": {
+          "personalization": 4,
+          "depth": 4,
+          "grounding": 3,
+          "bank_view": 3,
+          "actionability": 4
+        },
+        "kimi": {
+          "personalization": 3,
+          "depth": 3,
+          "grounding": 2,
+          "bank_view": 2,
+          "actionability": 4
+        }
+      },
+      "deepseek_only": {
+        "meta": {
+          "generated_by": "llm:deepseek/deepseek-v4.1-flash",
+          "iterations": 2,
+          "quality_pass": 1.0,
+          "seconds": 41.6,
+          "rub": 4.1
+        },
+        "glm": {
+          "personalization": 5,
+          "depth": 4,
+          "grounding": 5,
+          "bank_view": 5,
+          "actionability": 4
+        },
+        "kimi": {
+          "personalization": 4,
+          "depth": 3,
+          "grounding": 3,
+          "bank_view": 4,
+          "actionability": 3
+        }
+      }
+    },
+    {
+      "key": "ev-08fa7d4956|U_74328|treasurer",
+      "title": "Новосибирская область субсидирует до 3 п.п. ставки застройщикам КРТ с 2027 года",
+      "current": {
+        "meta": {
+          "generated_by": "llm:deepseek/deepseek-v4.1-flash",
+          "iterations": 2,
+          "quality_pass": 1.0,
+          "seconds": null,
+          "rub": null
+        },
+        "glm": {
+          "personalization": 4,
+          "depth": 4,
+          "grounding": 3,
+          "bank_view": 4,
+          "actionability": 4
+        },
+        "kimi": {
+          "personalization": 4,
+          "depth": 3,
+          "grounding": 2,
+          "bank_view": 4,
+          "actionability": 3
+        }
+      },
+      "deepseek_only": {
+        "meta": {
+          "generated_by": "llm:deepseek/deepseek-v4.1-flash",
+          "iterations": 2,
+          "quality_pass": 1.0,
+          "seconds": 39.2,
+          "rub": 0.0
+        },
+        "glm": {
+          "personalization": 4,
+          "depth": 4,
+          "grounding": 5,
+          "bank_view": 5,
+          "actionability": 4
+        },
+        "kimi": {
+          "personalization": 4,
+          "depth": 3,
+          "grounding": 4,
+          "bank_view": 3,
+          "actionability": 3
+        }
+      }
+    },
+    {
+      "key": "ev-08fa7d4956|U_75142|cfo",
+      "title": "Субсидия застройщикам Новосибирской области: для компании в Москве эффект косвенный, прямой связи с событием нет",
+      "current": {
+        "meta": {
+          "generated_by": "llm:deepseek/deepseek-v4.1-flash",
+          "iterations": 2,
+          "quality_pass": 1.0,
+          "seconds": null,
+          "rub": null
+        },
+        "glm": {
+          "personalization": 4,
+          "depth": 4,
+          "grounding": 3,
+          "bank_view": 4,
+          "actionability": 3
+        },
+        "kimi": {
+          "personalization": 4,
+          "depth": 3,
+          "grounding": 2,
+          "bank_view": 3,
+          "actionability": 2
+        }
+      },
+      "deepseek_only": {
+        "meta": {
+          "generated_by": "llm:deepseek/deepseek-v4.1-flash",
+          "iterations": 2,
+          "quality_pass": 1.0,
+          "seconds": 40.6,
+          "rub": 0.0
+        },
+        "glm": {
+          "personalization": 5,
+          "depth": 4,
+          "grounding": 4,
+          "bank_view": 5,
+          "actionability": 4
+        },
+        "kimi": {
+          "personalization": 4,
+          "depth": 3,
+          "grounding": 3,
+          "bank_view": 3,
+          "actionability": 3
+        }
+      }
+    }
+  ]
+}
