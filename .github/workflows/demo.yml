@@ -53,6 +53,8 @@ jobs:
           fi
           if [ "${{ inputs.video }}" = "true" ] && [ "${{ inputs.target }}" = "stand" ]; then
             for i in 1 2 3; do timeout 180 sudo apt-get install -y -qq ffmpeg >/dev/null && break; echo "повтор установки ffmpeg ($i)"; done
+            # запись видео в Playwright использует собственную сборку ffmpeg (небольшая загрузка, без apt)
+            for i in 1 2 3; do timeout 120 python -m playwright install ffmpeg && break; echo "повтор установки ffmpeg Playwright ($i)"; done
           fi
       - name: Адрес стенда
         if: inputs.target == 'stand'
