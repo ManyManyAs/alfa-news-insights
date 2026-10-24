@@ -224,6 +224,7 @@ async function init() {
   $("#analyzeSubmit").onclick = analyzeNews;
   document.querySelectorAll("[data-example]").forEach((b) => b.onclick = () => { $("#analyzeUrl").value = ""; $("#analyzeText").value = ANALYZE_EXAMPLES[+b.dataset.example]; $("#analyzeText").focus(); });
   bindCmd();
+  document.querySelectorAll(".feed-tools .seg").forEach(bindHScroll);
   bindFeedKeys();
   bindInstall();
   applyHomeLayout();
@@ -590,11 +591,16 @@ async function loadBank() {
   const pts = (d.rate_path && d.rate_path.points) || [];
   let spark = "";
   if (pts.length > 1) {
-    const vals = pts.map((p) => p[1]), lo = Math.min(...vals) - 0.5, hi = Math.max(...vals) + 0.5, W = 260, H = 70;
-    const xy = pts.map((p, i) => [12 + i * (W - 24) / (pts.length - 1), H - 14 - (p[1] - lo) / (hi - lo) * (H - 28)]);
-    spark = `<svg viewBox="0 0 ${W} ${H}" class="spark" role="img" aria-label="Прогноз ключевой ставки">
-      <polyline points="${xy.map((p) => p.join(",")).join(" ")}" fill="none" stroke="var(--accent)" stroke-width="2.5"/>
-      ${xy.map((p, i) => `<circle cx="${p[0]}" cy="${p[1]}" r="3.5" fill="var(--accent)"/><text x="${p[0]}" y="${p[1] - 7}" text-anchor="middle">${String(pts[i][1]).replace(".", ",")}%</text><text x="${p[0]}" y="${H - 1}" text-anchor="middle" class="lbl">${esc(pts[i][0])}</text>`).join("")}</svg>`;
+    // траектория ставки на всю ширину карточки: подписи значений и дат читаются без увеличения
+    const vals = pts.map((p) => p[1]), lo = Math.min(...vals) - 0.6, hi = Math.max(...vals) + 0.6, W = 560, H = 150, px = 34, top = 30, bot = 30;
+    const xy = pts.map((p, i) => [px + i * (W - 2 * px) / (pts.length - 1), top + (hi - p[1]) / (hi - lo) * (H - top - bot)]);
+    let dpath = `M${xy[0][0]} ${xy[0][1].toFixed(1)}`;
+    for (let i = 0; i < xy.length - 1; i++) { const mx = (xy[i][0] + xy[i + 1][0]) / 2; dpath += ` C${mx} ${xy[i][1].toFixed(1)} ${mx} ${xy[i + 1][1].toFixed(1)} ${xy[i + 1][0]} ${xy[i + 1][1].toFixed(1)}`; }
+    spark = `<svg viewBox="0 0 ${W} ${H}" class="bank-traj" role="img" aria-label="Прогноз ключевой ставки: ${pts.map((p) => `${p[0]} — ${String(p[1]).replace(".", ",")}%`).join(", ")}">
+      <path d="${dpath} L${xy[xy.length - 1][0]} ${H - bot} L${xy[0][0]} ${H - bot} Z" class="bt-area"/>
+      <line x1="${px}" x2="${W - px}" y1="${H - bot}" y2="${H - bot}" class="bt-base"/>
+      <path d="${dpath}" class="bt-line"/>
+      ${xy.map((p, i) => `<circle cx="${p[0]}" cy="${p[1].toFixed(1)}" r="5" class="bt-dot"/><text x="${p[0]}" y="${(p[1] - 11).toFixed(1)}" text-anchor="middle" class="bt-v">${String(pts[i][1]).replace(".", ",")}%</text><text x="${p[0]}" y="${H - 9}" text-anchor="middle" class="bt-d">${esc(pts[i][0])}</text>`).join("")}</svg>`;
   }
   renderTicker(d, by);
   $("#bankCard").innerHTML = `<div class="eyebrow">Позиция Альфа-Банка</div>
@@ -1463,16 +1469,15 @@ function effectChart(list) {
   const k25 = fin ? neg.monthly.findIndex((v) => Math.abs(v) >= fin * 0.25) : -1;
   const when = k25 >= 0 ? ` · ощутимо (четверть итога) — к ${esc(months[k25] || "")}` : "";
   return `<div class="effect-chart"><div class="ec-head">Как накапливается эффект по месяцам${when}</div>
-    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Накопленный эффект по трём сценариям за 12 месяцев">
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Накопленный эффект по трём сценариям за 12 месяцев. Наведите — суммы по месяцам"
+      data-ec="${esc(JSON.stringify({ W, H, L, R, T, B, lo, hi, months, s: ok.map((sc) => ({ n: sc.name, v: sc.monthly })) }))}">
       ${ticks.map((v) => `<line x1="${L}" x2="${W - R}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" class="${Math.abs(v) < 1e-6 ? "ec-zero" : "ec-grid"}"/><text x="${L - 8}" y="${(y(v) + 4).toFixed(1)}" class="ec-ax" text-anchor="end">${v === 0 ? "0" : esc(rub(v))}</text>`).join("")}
       ${months.map((m, k) => k % 2 === 0 || k === 11 ? `<text x="${x(k).toFixed(1)}" y="${H - 10}" class="ec-ax" text-anchor="middle">${esc(m)}</text>` : "").join("")}
       ${startMark}${lines.join("")}
-      ${months.map((m, k) => {
-        const w = (W - L - R) / 12, tip = `${m}: ` + SCEN_ORDER.map((n) => ok.find((sc) => sc.name === n)).filter(Boolean)
-          .map((sc) => `${SCEN_SHORT[sc.name].toLowerCase()} ${rub(sc.monthly[k])}`).join(" · ");
-        return `<g class="ec-hit"><line x1="${x(k).toFixed(1)}" x2="${x(k).toFixed(1)}" y1="${T}" y2="${H - B}"/><rect x="${(x(k) - w / 2).toFixed(1)}" y="${T}" width="${w.toFixed(1)}" height="${H - T - B}"><title>${esc(tip)}</title></rect></g>`;
-      }).join("")}
+      <line class="ec-guide" x1="0" x2="0" y1="${T}" y2="${H - B}" visibility="hidden"/>
+      ${ok.map((sc) => `<circle class="ec-dot" data-s="${sc.name}" r="5" fill="${col[sc.name]}" stroke="var(--surface)" stroke-width="2" visibility="hidden"/>`).join("")}
     </svg>
+    <div class="ec-tip" hidden></div>
     <div class="ec-legend">${SCEN_ORDER.filter((n) => ok.find((s) => s.name === n)).map((n) => `<span><i class="${n}"></i>${SCEN_SHORT[n]}</span>`).join("")}</div></div>`;
 }
 // Из чего складывается итог: рычаг × сценарий, под рычагом — через что он действует на компанию

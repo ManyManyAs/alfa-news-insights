@@ -44,7 +44,7 @@ function sparkSvg(vals, cls = "") {
   const pts = vals.map((v, i) => [i * step, h - 2 - (v / max) * (h - 4)]);
   const line = pts.map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join("");
   const last = pts[pts.length - 1];
-  return `<svg class="spark ${cls}" viewBox="0 0 ${w} ${h}" aria-hidden="true"><path d="${line}L${w} ${h}L0 ${h}Z" class="sp-area"/><path d="${line}" class="sp-line"/><circle cx="${last[0]}" cy="${last[1]}" r="2.4" class="sp-dot"/></svg>`;
+  return `<svg class="mspark ${cls}" viewBox="0 0 ${w} ${h}" aria-hidden="true"><path d="${line}L${w} ${h}L0 ${h}Z" class="sp-area"/><path d="${line}" class="sp-line"/><circle cx="${last[0]}" cy="${last[1]}" r="2.4" class="sp-dot"/></svg>`;
 }
 function renderSparks() {
   if (!state.feed) return;
@@ -73,7 +73,7 @@ function renderSparks() {
   }
   if (state.nextDate) {
     const n = state.nextDate.n, k = Math.max(0, Math.min(1, 1 - n / 90)), r = 9, c = 2 * Math.PI * r;
-    put("[data-strip=calendar]", `<svg class="spark ring" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="${r}" class="rg-bg"/><circle cx="12" cy="12" r="${r}" class="rg-fg" stroke-dasharray="${(c * k).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 12 12)"/></svg>`, `До даты ${n} дн.`);
+    put("[data-strip=calendar]", `<svg class="mspark ring" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="${r}" class="rg-bg"/><circle cx="12" cy="12" r="${r}" class="rg-fg" stroke-dasharray="${(c * k).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 12 12)"/></svg>`, `До даты ${n} дн.`);
   }
 }
 

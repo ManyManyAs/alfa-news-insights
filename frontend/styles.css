@@ -8,10 +8,14 @@
 @font-face { font-family: "Inter"; src: url("/static/fonts/Inter-Bold.woff") format("woff"); font-weight: 700; font-display: swap; }
 /* Styrene A — фирменный шрифт Альфа-Банка (файлы от организаторов). В нём нет кириллицы, поэтому он задаёт только цифры,
    знаки и пробелы в заголовках и крупных числах (unicode-range); буквы — Inter Display. */
-@font-face { font-family: "Styrene A"; src: url("/static/fonts/StyreneAWeb-Regular.woff2") format("woff2"); font-weight: 400; font-display: swap; unicode-range: U+0020-0040, U+00A0, U+2009, U+2212, U+20BD; }
-@font-face { font-family: "Styrene A"; src: url("/static/fonts/StyreneAWeb-Medium.woff2") format("woff2"); font-weight: 500; font-display: swap; unicode-range: U+0020-0040, U+00A0, U+2009, U+2212, U+20BD; }
-@font-face { font-family: "Styrene A"; src: url("/static/fonts/StyreneAWeb-Bold.woff2") format("woff2"); font-weight: 700; font-display: swap; unicode-range: U+0020-0040, U+00A0, U+2009, U+2212, U+20BD; }
-@font-face { font-family: "Styrene A"; src: url("/static/fonts/StyreneAWeb-Black.woff2") format("woff2"); font-weight: 900; font-display: swap; unicode-range: U+0020-0040, U+00A0, U+2009, U+2212, U+20BD; }
+@font-face { font-family: "Styrene A"; src: url("/static/fonts/StyreneAWeb-Regular.woff2") format("woff2"); font-weight: 400; font-display: swap; unicode-range: U+0020-007E, U+00A0-00FF, U+2009, U+2010-2015, U+2018-201E, U+2026, U+2116, U+2212, U+20AC, U+20BD; }
+@font-face { font-family: "Styrene A"; src: url("/static/fonts/StyreneAWeb-Medium.woff2") format("woff2"); font-weight: 500; font-display: swap; unicode-range: U+0020-007E, U+00A0-00FF, U+2009, U+2010-2015, U+2018-201E, U+2026, U+2116, U+2212, U+20AC, U+20BD; }
+@font-face { font-family: "Styrene A"; src: url("/static/fonts/StyreneAWeb-Bold.woff2") format("woff2"); font-weight: 700; font-display: swap; unicode-range: U+0020-007E, U+00A0-00FF, U+2009, U+2010-2015, U+2018-201E, U+2026, U+2116, U+2212, U+20AC, U+20BD; }
+@font-face { font-family: "Styrene A"; src: url("/static/fonts/StyreneAWeb-Black.woff2") format("woff2"); font-weight: 900; font-display: swap; unicode-range: U+0020-007E, U+00A0-00FF, U+2009, U+2010-2015, U+2018-201E, U+2026, U+2116, U+2212, U+20AC, U+20BD; }
+/* Styrene B — основной текст: латиница, цифры и знаки; кириллицы в файлах организаторов нет, русские буквы — Inter */
+@font-face { font-family: "Styrene B"; src: url("/static/fonts/StyreneB-Regular.woff") format("woff"); font-weight: 400; font-display: swap; unicode-range: U+0020-007E, U+00A0-00FF, U+2009, U+2010-2015, U+2018-201E, U+2026, U+2116, U+2212, U+20AC, U+20BD; }
+@font-face { font-family: "Styrene B"; src: url("/static/fonts/StyreneB-Medium.woff") format("woff"); font-weight: 500 600; font-display: swap; unicode-range: U+0020-007E, U+00A0-00FF, U+2009, U+2010-2015, U+2018-201E, U+2026, U+2116, U+2212, U+20AC, U+20BD; }
+@font-face { font-family: "Styrene B"; src: url("/static/fonts/StyreneB-Bold.woff") format("woff"); font-weight: 700 900; font-display: swap; unicode-range: U+0020-007E, U+00A0-00FF, U+2009, U+2010-2015, U+2018-201E, U+2026, U+2116, U+2212, U+20AC, U+20BD; }
 @font-face { font-family: "Inter Display"; src: url("/static/fonts/InterDisplay-Bold.woff") format("woff"); font-weight: 700; font-display: swap; }
 @font-face { font-family: "Inter Display"; src: url("/static/fonts/InterDisplay-ExtraBold.woff") format("woff"); font-weight: 800; font-display: swap; }
 
@@ -29,7 +33,7 @@
   --shadow-lift: 0 2px 4px rgba(16, 18, 22, .05), 0 16px 40px rgba(16, 18, 22, .10);
   --sidebar: #ffffff; --sidebar-ink: #3d424a; --side-strong: #0b0b0d; --side-hover: #f2f3f5; --side-active: #eef0f3; --side-sep: #646a74;
   --top-bg: rgba(255, 255, 255, .92);
-  --font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font: "Styrene B", "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --display: "Styrene A", "Inter Display", "Inter", system-ui, sans-serif;
   --ease: cubic-bezier(.2, .8, .2, 1);
 }
@@ -1541,12 +1545,12 @@ dialog:has(.doc-dlg) { width: min(820px, 94vw); }
 
 /* мини-графики в плитках */
 .hs-spark { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; color: var(--muted); font-size: 11px; flex: none; }
-.spark { width: 64px; height: 22px; overflow: visible; }
-.spark .sp-line { fill: none; stroke: var(--muted); stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; }
-.spark .sp-area { fill: var(--soft2); }
-.spark .sp-dot { fill: var(--muted); }
-.spark.risk .sp-line { stroke: var(--risk); } .spark.risk .sp-dot { fill: var(--risk); } .spark.risk .sp-area { fill: var(--risk-bg); }
-.spark.ring { width: 26px; height: 26px; }
+.mspark { width: 64px; height: 22px; overflow: visible; }
+.mspark .sp-line { fill: none; stroke: var(--muted); stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; }
+.mspark .sp-area { fill: var(--soft2); }
+.mspark .sp-dot { fill: var(--muted); }
+.mspark.risk .sp-line { stroke: var(--risk); } .mspark.risk .sp-dot { fill: var(--risk); } .mspark.risk .sp-area { fill: var(--risk-bg); }
+.mspark.ring { width: 26px; height: 26px; }
 .ring .rg-bg { fill: none; stroke: var(--soft2); stroke-width: 3; } .ring .rg-fg { fill: none; stroke: var(--watch); stroke-width: 3; stroke-linecap: round; }
 .hs-prog { width: 64px; height: 5px; border-radius: 3px; background: var(--soft2); overflow: hidden; display: block; }
 .hs-prog i { display: block; height: 100%; background: var(--opp); border-radius: 3px; }
@@ -1811,7 +1815,7 @@ button.cite { border: 0; font: inherit; cursor: pointer; }
 :root[data-contrast="more"] :focus-visible { outline: 3px solid var(--red) !important; outline-offset: 2px; }
 :root[data-contrast="more"] .pill, :root[data-contrast="more"] .cite, :root[data-contrast="more"] .btn.ghost { box-shadow: inset 0 0 0 1.5px currentColor; }
 :root[data-contrast="more"] .link-btn { text-decoration: underline; }
-@media (forced-colors: active) { .spark .sp-area, .e-art .a-soft { fill: none; } .kb-col, .df-wrap, .act-prev { border: 1px solid CanvasText; } }
+@media (forced-colors: active) { .mspark .sp-area, .e-art .a-soft { fill: none; } .kb-col, .df-wrap, .act-prev { border: 1px solid CanvasText; } }
 
 /* единые скелетоны: ширина строк разная, как у настоящего текста */
 .skeleton.sm { height: 64px; }
@@ -1913,3 +1917,37 @@ button.cite { border: 0; font: inherit; cursor: pointer; }
 .cp-body b { font-size: 14.5px; line-height: 1.35; } .cp-body p { margin: 0; color: var(--ink2); line-height: 1.45; }
 .cp-cta { color: var(--red-ink); font-weight: 600; font-size: 13px; }
 .cal-list-h { margin: 22px 0 4px; font-size: 16px; color: var(--ink2); }
+
+/* ============================== Правки 24.10, вечер ============================== */
+/* полосы прокрутки в цветах темы: тонкие, без белых «рельсов» в тёмной теме */
+:root { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
+* { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--muted) 55%, transparent) transparent; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 45%, transparent); border-radius: 8px; border: 2px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--muted) 70%, transparent); background-clip: content-box; }
+::-webkit-scrollbar-button { display: none; height: 0; width: 0; }
+
+/* вкладки ленты: прокрутка колесом и перетаскиванием, затухание у края, если есть ещё вкладки */
+.feed-tools .seg { cursor: grab; }
+.feed-tools .seg.dragging { cursor: grabbing; user-select: none; }
+.feed-tools .seg.ov-r { -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent); mask-image: linear-gradient(90deg, #000 85%, transparent); }
+.feed-tools .seg.ov-l { -webkit-mask-image: linear-gradient(90deg, transparent, #000 15%); mask-image: linear-gradient(90deg, transparent, #000 15%); }
+.feed-tools .seg.ov-l.ov-r { -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent); mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent); }
+
+/* деньги при наведении на график накопления */
+.effect-chart { position: relative; }
+.effect-chart svg[data-ec] { cursor: crosshair; touch-action: pan-y; }
+.ec-guide { stroke: var(--ink2); stroke-width: 1; stroke-dasharray: 3 3; }
+.ec-tip { position: absolute; z-index: 5; min-width: 190px; display: grid; gap: 4px; padding: 10px 12px; border-radius: 12px; background: var(--surface); box-shadow: 0 10px 30px rgba(0, 0, 0, .22), 0 0 0 1px var(--line); pointer-events: none; font-size: 13px; }
+.ec-tip[hidden] { display: none; }
+.ec-tr { display: grid; grid-template-columns: 10px 1fr auto; gap: 8px; align-items: center; }
+.ec-tr i { width: 10px; height: 10px; border-radius: 3px; } .ec-tr b { font-variant-numeric: tabular-nums; }
+
+/* макропрогноз банка: траектория ставки крупно */
+.bank-traj { width: 100%; height: auto; display: block; margin: 8px 0 12px; }
+.bt-area { fill: var(--red); opacity: .08; } .bt-base { stroke: var(--line); stroke-width: 1.5; }
+.bt-line { fill: none; stroke: var(--red); stroke-width: 3; stroke-linecap: round; }
+.bt-dot { fill: var(--surface); stroke: var(--red); stroke-width: 3; }
+.bt-v { font: 800 15px var(--display); fill: var(--ink); } .bt-d { font: 600 12px var(--font); fill: var(--ink2); }

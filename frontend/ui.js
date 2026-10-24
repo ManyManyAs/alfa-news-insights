@@ -80,3 +80,54 @@ function bindInstall() {
   b.onclick = async () => { if (!installEvt) return; installEvt.prompt(); const r = await installEvt.userChoice; if (r.outcome === "accepted") b.hidden = true; installEvt = null; track("pwa_install"); };
 }
 registerSW();
+
+// ---------------------------------------------------------------- деньги при наведении на график накопления эффекта
+const EC_LABEL = { negative: "Негативный", base: "Базовый", positive: "Позитивный" };
+const EC_COL = { negative: "var(--risk)", base: "var(--watch)", positive: "var(--opp)" };
+function ecHide(svg) {
+  const box = svg.closest(".effect-chart"), tip = box && box.querySelector(".ec-tip");
+  svg.querySelectorAll(".ec-guide, .ec-dot").forEach((el) => el.setAttribute("visibility", "hidden"));
+  if (tip) tip.hidden = true;
+}
+function ecMove(svg, clientX) {
+  let d = svg._ec;
+  if (!d) { try { d = svg._ec = JSON.parse(svg.dataset.ec); } catch (e) { return; } }
+  const r = svg.getBoundingClientRect(), px = (clientX - r.left) / r.width * d.W, step = (d.W - d.L - d.R) / 12;
+  const k = Math.max(0, Math.min(11, Math.round((px - d.L) / step - 1)));
+  const x = d.L + (k + 1) * step, y = (v) => d.T + (d.hi - v) * (d.H - d.T - d.B) / (d.hi - d.lo);
+  const g = svg.querySelector(".ec-guide");
+  g.setAttribute("x1", x); g.setAttribute("x2", x); g.setAttribute("visibility", "visible");
+  d.s.forEach((s) => { const c = svg.querySelector(`.ec-dot[data-s="${s.n}"]`); if (c) { c.setAttribute("cx", x); c.setAttribute("cy", y(s.v[k])); c.setAttribute("visibility", "visible"); } });
+  const box = svg.closest(".effect-chart"), tip = box.querySelector(".ec-tip");
+  tip.innerHTML = `<b>${esc(d.months[k] || "")}</b><span class="muted small">накоплено с начала</span>` + ["negative", "base", "positive"].map((n) => d.s.find((s) => s.n === n)).filter(Boolean)
+    .map((s) => `<div class="ec-tr"><i style="background:${EC_COL[s.n]}"></i><span>${EC_LABEL[s.n]}</span><b style="color:${EC_COL[s.n]}">${s.n === "base" && !s.v[k] ? "0 ₽" : rub(s.v[k])}</b></div>`).join("");
+  tip.hidden = false;
+  const br = box.getBoundingClientRect(), sx = r.left - br.left + x / d.W * r.width, w = tip.offsetWidth;
+  let left = sx + 14;
+  if (left + w > br.width - 4) left = sx - w - 14;
+  tip.style.left = Math.max(4, left) + "px";
+  tip.style.top = (r.top - br.top + 10) + "px";
+}
+document.addEventListener("pointermove", (e) => {
+  const svg = e.target.closest && e.target.closest(".effect-chart svg[data-ec]");
+  if (svg) { ecMove(svg, e.clientX); state.ecSvg = svg; } else if (state.ecSvg) { ecHide(state.ecSvg); state.ecSvg = null; }
+});
+
+// ---------------------------------------------------------------- горизонтальные полосы фильтров: колесо мыши и перетаскивание
+function bindHScroll(el) {
+  if (!el || el.dataset.hs) return;
+  el.dataset.hs = "1";
+  const edge = () => { el.classList.toggle("ov-l", el.scrollLeft > 2); el.classList.toggle("ov-r", el.scrollLeft + el.clientWidth < el.scrollWidth - 2); };
+  el.addEventListener("wheel", (e) => {
+    if (el.scrollWidth <= el.clientWidth || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+    e.preventDefault(); el.scrollLeft += e.deltaY;
+  }, { passive: false });
+  let x0 = null, s0 = 0, moved = false;
+  el.addEventListener("pointerdown", (e) => { if (e.pointerType !== "mouse" || el.scrollWidth <= el.clientWidth) return; x0 = e.clientX; s0 = el.scrollLeft; moved = false; });
+  addEventListener("pointermove", (e) => { if (x0 == null) return; const dx = e.clientX - x0; if (Math.abs(dx) > 4) { moved = true; el.scrollLeft = s0 - dx; el.classList.add("dragging"); } });
+  addEventListener("pointerup", () => { x0 = null; setTimeout(() => el.classList.remove("dragging"), 0); });
+  el.addEventListener("click", (e) => { if (moved) { e.stopPropagation(); e.preventDefault(); moved = false; } }, true);
+  el.addEventListener("scroll", edge, { passive: true });
+  new ResizeObserver(edge).observe(el);
+  edge();
+}
