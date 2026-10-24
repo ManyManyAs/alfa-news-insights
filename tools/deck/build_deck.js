@@ -160,7 +160,7 @@ async function main() {
   // ---------- 5. Агент
   s = pres.addSlide({ masterName: "Контент", sectionTitle: "Продукт" });
   s.addText("Агент собран командой: план, инструменты, черновик, критик, правка", { placeholder: "title" });
-  const steps = [["План", "Qwen"], ["Инструменты", "правила, allowlist"], ["Черновик", "DeepSeek"], ["Критик", "GLM — другая модель"],
+  const steps = [["План", "DeepSeek"], ["Инструменты", "правила, allowlist"], ["Черновик", "DeepSeek"], ["Самопроверка", "DeepSeek, судьи — GLM и Kimi"],
     ["Правка", "только по делу"], ["Очистка", "без тех. id"]];
   steps.forEach(([h, m], i) => {
     const x = 0.6 + i * 2.05;

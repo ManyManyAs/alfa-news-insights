@@ -152,7 +152,7 @@ const THINK = { relevance: "Оцениваю, насколько событие 
   finalize: "Собираю итог", limit: "Завершаю без модели — чтобы не ждать" };
 function thinkText(name) {
   if (THINK[name]) return THINK[name];
-  if (name.startsWith("critique:llm")) return "Второй взгляд: другая модель проверяет разбор";
+  if (name.startsWith("critique:llm")) return "Второй взгляд: модель перепроверяет разбор по чек-листу";
   if (name.startsWith("critique:rules")) return "Проверяю факты, числа и ссылки";
   if (name.startsWith("tool:search_bank_analytics")) return "Ищу позицию Альфа-Банка";
   return "Анализирую";
