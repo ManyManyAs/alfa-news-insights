@@ -60,5 +60,6 @@ jobs:
               live = sum(1 for i in items if (i.get("trust") or "") != "demo")
               print(f"::notice title=Персона {u['label'][:30]}::лента {len(items)} (живых {live}); деньги: рычагов {len(m.get('levers', []))}, "
                     f"событий {m.get('events_used')} из {m.get('candidates')}, ИИ {json.dumps(m.get('ai'), ensure_ascii=False)[:160]}, "
-                    f"пересмотров {len(m.get('revisions', []))}")
+                    f"пересмотров {len(m.get('revisions', []))}; отсеяно: "
+                    + " | ".join(f"{r['lever']}: {r['title'][:60]} — {r['why'][:110]}" for r in m.get("rejected", [])[:3]))
           EOF

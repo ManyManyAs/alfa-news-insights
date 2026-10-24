@@ -171,6 +171,7 @@ def money_view(p, role, ranked: list, mat: dict, importance_level, cached_insigh
     verdict, ai = ai_check(p, role, cands)
     levers: dict[str, dict] = {}
     used: set[str] = set()
+    rejected: list[dict] = []
     for c in cands:
         if verdict is None:  # без модели — прежний отбор правилами: только средняя и высокая важность
             ok, info = c["level"] >= 2, {"direction": "unclear", "strength": 1, "why": c["reason"]}
@@ -178,6 +179,9 @@ def money_view(p, role, ranked: list, mat: dict, importance_level, cached_insigh
             info = verdict.get(c["key"]) or {}
             ok = bool(info.get("relevant"))
         if not ok:
+            if verdict is not None and len(rejected) < 8 and c["event_id"] not in {x["event_id"] for x in rejected}:
+                rejected.append({"event_id": c["event_id"], "title": c["title"], "lever": LEVER_TITLE.get(c["lever"], c["lever_title"]),
+                                 "why": (info.get("why") or "модель не нашла связи с деньгами компании")})
             continue
         used.add(c["event_id"])
         lv = levers.setdefault(c["lever"], {"lever": c["lever"], "title": LEVER_TITLE.get(c["lever"], c["lever_title"]),
@@ -205,7 +209,7 @@ def money_view(p, role, ranked: list, mat: dict, importance_level, cached_insigh
         log.exception("Чувствительность не посчитана")
     return {"up": round(up), "down": round(down), "protect": round(sum(v["down"] for v in rows if v["action"])), "levers": rows,
             "events_used": len(used), "candidates": len({c["event_id"] for c in cands}),
-            "dropped": len({c["event_id"] for c in cands} - used), "ai": ai,
+            "dropped": len({c["event_id"] for c in cands} - used), "ai": ai, "rejected": rejected,
             "sensitivity": [{"lever": s["lever"], "title": s["title"], "effect_rub": s["effect_rub"]} for s in sens],
             "revisions": bank_revisions(p),
             "share_up": round(up / revenue, 4) if revenue else None, "share_down": round(down / revenue, 4) if revenue else None}
