@@ -13,11 +13,10 @@ from app.knowledge.bank import get_knowledge
 from app.llm.client import LLMUnavailable, get_llm
 from app.security.guard import UNTRUSTED_NOTICE, guard_output, sanitize_untrusted
 
-
 # Вопрос не по теме (стихи, погода, код…) — честный отказ без обращения к модели: чат отвечает только по разбору,
 # данным компании и аналитике банка. Деловое слово в вопросе отказ отменяет («стих про ставку ЦБ» — уже по теме).
-OFFTOPIC_RE = re.compile(r"(погод|анекдот|шутк|\bстих|рецепт|гороскоп|фильм|сериал|футбол|хоккей|песн|напиши\s+(?:код|программ|сочинени|эссе)"
-                         r"|\bpython\b|javascript|переведи|кто\s+ты|расскажи\s+о\s+себе)", re.I)
+OFFTOPIC_RE = re.compile(r"(погод|анекдот|шутк|\bстих|рецепт|гороскоп|фильм|сериал|футбол|хоккей|песн"
+                         r"|напиши\s+(?:код|программ|сочинени|эссе)|\bpython\b|javascript|переведи|кто\s+ты|расскажи\s+о\s+себе)", re.I)
 BUSINESS_RE = re.compile(r"(компан|бизнес|ставк|курс|риск|банк|деньг|рубл|кредит|налог|пошлин|санкц|выручк|долг|поставщ|покупат|событ"
                          r"|новост|сценар|прогноз|действ|импорт|экспорт|зарплат|\bцен|лизинг|инфляц|аренд|договор)", re.I)
 REFUSAL = ("Я отвечаю только по этому разбору, данным вашей компании и аналитике Альфа-Банка — на такой вопрос ответить не могу. "
@@ -229,10 +228,11 @@ def answer_feed_stream(q: str, cards: list[dict], profile: CompanyProfile, role_
         return
     llm = get_llm()
     if llm.enabled:
-        ctx = {"company": profile.llm_view(), "role": role_title, "events": [{k: v for k, v in c.items() if k != "event_id"} for c in cards],
+        ctx = {"company": profile.llm_view(), "role": role_title,
+               "events": [{k: v for k, v in c.items() if k != "event_id"} for c in cards],
                "bank_search": get_knowledge().search(q_clean, k=3)}
-        msgs = [{"role": "system", "content": FEED_SYSTEM.format(notice=UNTRUSTED_NOTICE)},
-                {"role": "user", "content": f"<context>{json.dumps(ctx, ensure_ascii=False)[:20000]}</context>\n<user_question>{q_clean}</user_question>"}]
+        user_msg = f"<context>{json.dumps(ctx, ensure_ascii=False)[:20000]}</context>\n<user_question>{q_clean}</user_question>"
+        msgs = [{"role": "system", "content": FEED_SYSTEM.format(notice=UNTRUSTED_NOTICE)}, {"role": "user", "content": user_msg}]
         try:
             it = _stream_llm(msgs, {profile.uid})
             next(it)

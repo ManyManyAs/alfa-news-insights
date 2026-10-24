@@ -935,7 +935,7 @@ def chat_feed(req: FeedChatRequest, request: Request, user: str = Depends(curren
     cards = [{"n": k + 1, "event_id": it["event_id"], "title": it["title"], "date": (it["published_at"] or "")[:10],
               "effect": it["effect"], "importance": it["imp"]["label"], "summary": it["summary"] or "",
               "why": "; ".join(r.get("why", "") for r in it["reasons"][:2] if r.get("why"))} for k, it in enumerate(items)]
-    role_title = role_titles().get(req.role or "", None)
+    role_title = role_titles().get(req.role or "")
     return StreamingResponse((_sse(e) for e in answer_feed_stream(req.question, cards, p, role_title)),
                              media_type="text/event-stream", headers=SSE_HEADERS)
 
