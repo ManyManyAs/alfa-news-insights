@@ -1817,3 +1817,10 @@ button.cite { border: 0; font: inherit; cursor: pointer; }
 .skeleton.sm { height: 64px; }
 #opsBox:empty::before { content: ""; display: block; height: 180px; border-radius: var(--radius-m); background: linear-gradient(90deg, var(--sk1) 25%, var(--sk2) 50%, var(--sk1) 75%); background-size: 200% 100%; animation: sk 1.2s linear infinite; }
 .cmd-btn { flex: none; min-width: 38px; }
+
+/* ============================== Этап 10: тур для жюри ============================== */
+.tour-prog { height: 3px; margin: 10px -2px -4px; border-radius: 2px; background: var(--soft2); overflow: hidden; display: none; }
+#tour.auto .tour-prog { display: block; }
+.tour-prog i { display: block; height: 100%; width: 100%; background: var(--red); transform-origin: left; transform: scaleX(0); }
+@keyframes tourProg { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.tour-pop .row { flex-wrap: wrap; } .tour-pop .row > span { display: flex; flex-wrap: wrap; gap: 6px; }
