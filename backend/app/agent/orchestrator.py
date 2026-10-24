@@ -156,11 +156,14 @@ def _context_for_llm(ctx: AgentContext) -> str:
     mem["role"] = ctx.role
     mem["today"] = datetime.now(MSK).date().isoformat()
     mem["allowed_sources"] = allowed_sources(ctx)
+    from app.agent.review import kind_brief
+
+    mem["event_type"] = kind_brief(ctx.event)
     mem["calc_baseline_forecasts"] = baseline_forecasts(mem)
     if extra := brief_theses(mem):  # тезисы, на которые ссылается общий разбор события, — с текстом
         mem["brief_bank_theses"] = extra
     # служебные поля — в начало: при обрезке длинного контекста теряются хвостовые данные, а не список допустимых ссылок
-    head = ("allowed_sources", "today", "role", "calc_baseline_forecasts", "brief_bank_theses")
+    head = ("allowed_sources", "today", "role", "event_type", "calc_baseline_forecasts", "brief_bank_theses")
     mem = {**{k: mem[k] for k in head if k in mem}, **{k: v for k, v in mem.items() if k not in head}}
     return "<context>\n" + json.dumps(mem, ensure_ascii=False, default=str)[:24000] + "\n</context>"
 
@@ -382,7 +385,8 @@ def _profile_label(sid: str, p: CompanyProfile) -> str:
 def decide_revise(ins: Insight, ctx: AgentContext, issues: list[str], tracer: Tracer) -> bool:
     """Нужна ли правка моделью и хватает ли на неё времени и денег. Решение и причина — в трассировке."""
     # суммы не из калькулятора и пересказ заголовка правилами не исправить — нужна правка моделью
-    llm_issues = [i for i in issues if i.startswith(("LLM-критик", "Суммы — только из калькулятора", "Главный вывод не повторяет"))
+    llm_issues = [i for i in issues if i.startswith(("LLM-критик", "Суммы — только из калькулятора", "Главный вывод не повторяет",
+                                                     "Есть конкретика"))
                   or (i.startswith("Числа позиции банка") and "сверьте" in i)]
     no_bank = any("аналитику банка" in i or "Позиция банка" in i for i in issues)
     elapsed = time.perf_counter() - ctx.memory["_t0"]
@@ -419,7 +423,9 @@ def emit_draft(ins: Insight, ctx: AgentContext, tracer: Tracer) -> None:
         d.sources = build_sources(d, ctx)
         d.trace_id = tracer.trace_id
         d.relevance = {"score": ctx.scored.score, "reasons": ctx.scored.reasons}
-        tracer._emit({"type": "draft", "insight": humanize_insight(ensure_scenarios(d)).model_dump()})
+        from app.agent.review import review
+
+        tracer._emit({"type": "draft", "insight": review(humanize_insight(ensure_scenarios(d)), ctx.event).model_dump()})
     except Exception:  # черновик — удобство, он не должен ломать разбор
         log.exception("Не удалось отдать черновик разбора")
 

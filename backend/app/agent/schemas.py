@@ -20,6 +20,10 @@ class Claim(BaseModel):
     kind: ClaimKind = "ai_inference"
     sources: list[str] = Field(default_factory=list)
     confidence: Literal["high", "medium", "low"] = "medium"
+    # считается при выдаче (app/agent/review.py), модель это не заполняет:
+    support: list[str] = Field(default_factory=list)  # факт: издания, в тексте которых он есть
+    as_of: str | None = None  # позиция банка: дата материала
+    stale: bool = False  # позиция банка: материалу больше квартала
 
 
 class Action(Claim):
@@ -114,3 +118,5 @@ class Insight(BaseModel):
     # 3 — существенно. Влияет на ранжирование ленты и на виджет главной (None — разбор по правилам, без оценки)
     materiality: int | None = None
     materiality_why: str = ""
+    # проверяемость разбора (app/agent/review.py, при выдаче): тип события и чек-лист, цифры рядом, что нового в сюжете
+    review: dict = Field(default_factory=dict)

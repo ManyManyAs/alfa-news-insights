@@ -354,6 +354,34 @@ def foreign_profile_sources(ins: Insight, ctx: AgentContext) -> list[str]:
                    if s.startswith(("profile:", "graph:", "peers:")) and s not in allowed})
 
 
+def has_specifics(ins: Insight) -> bool:
+    """В объяснении «почему важно» и последствиях есть хотя бы одно число — иначе вывод читается как общий совет."""
+    claims = ins.why_it_matters + ins.consequences.risks + ins.consequences.opportunities
+    return any(re.search(r"\d", c.text) for c in claims)
+
+
+def add_specifics(ins: Insight, ctx: AgentContext) -> None:
+    """Модель не дала ни одного числа: добавляем проверяемый пункт с числом — из черновика правил (доли графа платежей,
+    даты) или сумму негативного сценария калькулятора. Ничего не выдумывается: оба источника детерминированы."""
+    from app.agent.scenario import money
+
+    base = draft_rules(ctx)
+    pick = next((c for c in base.why_it_matters + base.consequences.risks + base.consequences.opportunities
+                 if re.search(r"\d", c.text) and c.sources), None)
+    if pick is None:
+        neg = next((s for s in ins.scenarios or base.scenarios if s.name == "negative" and s.total_rub and not s.negligible), None)
+        if neg is None:
+            # суммы нет — точкой отсчёта служит числовой прогноз Альфа-Банка по главному фактору события
+            fc = next((f for f in (headline_forecast(x) for x in ctx.scored.matched_factors) if f), None)
+            if fc:
+                ins.why_it_matters.append(Claim(text=f"Точка отсчёта для плана — {fc['text'][0].lower()}{fc['text'][1:]}",
+                                                kind="bank_view", sources=[fc["ref"]], confidence="high"))
+            return
+        pick = Claim(text=f"По оценке сервиса, при отклонении от прогноза банка ({neg.assumptions}) — {money(neg.total_rub)} "
+                          "за 12 месяцев к плану; расчёт — в блоке сценариев", kind="ai_inference", sources=["calc:scenario"])
+    ins.why_it_matters.append(pick)
+
+
 def _tokens(s: str) -> set[str]:
     return {w for w in re.findall(r"[а-яёa-z0-9]{4,}", (s or "").lower())}
 
@@ -426,6 +454,9 @@ def critique_rules(ins: Insight, ctx: AgentContext) -> tuple[list[QualityCheck],
         check("Числа позиции банка совпадают с материалом", not mism,
               "; ".join(f"«{r}» нет в {', '.join(x for x in c.sources if x.startswith('bank:'))}"
                         + (f" — это число из {alt}" if alt else " — сверьте число или ссылку") for c, r, alt in mism[:3]))
+        check("Есть конкретика: цифры и факты", has_specifics(ins),
+              "в «почему важно» и «последствиях» нет ни одного числа — добавьте число из новости, профиля, графа платежей "
+              "или calc:scenario (ставка, доля, сумма, дата)")
         foreign = foreign_profile_sources(ins, ctx)
         check("Ссылки на профиль — из списка контекста", not foreign,
               f"нет в allowed_sources: {', '.join(foreign[:4])} — используйте id из списка")
@@ -482,6 +513,11 @@ def repair_rules(ins: Insight, ctx: AgentContext) -> Insight:
                 c.sources = [*c.sources, alt]
             elif not alt:
                 c.confidence = "low"
+        if not has_specifics(ins):
+            try:
+                add_specifics(ins, ctx)
+            except Exception:  # дополнение — не повод ломать правку
+                pass
         foreign = set(foreign_profile_sources(ins, ctx))
         if foreign:
             okved = f"profile:OKVED={ctx.profile.okved[:2]}"
