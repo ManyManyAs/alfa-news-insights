@@ -1064,3 +1064,88 @@ body.logged-out .layout, body.logged-out .topbar { display: none; }
 .ec-hit rect { fill: transparent; cursor: crosshair; }
 .ec-hit line { stroke: var(--ink); stroke-opacity: 0; stroke-width: 1; pointer-events: none; }
 .ec-hit:hover line { stroke-opacity: .25; }
+
+/* =====================================================================================================
+   Стиль 2 (24.10): минимализм делового интернет-банка — тонкие линии вместо теней, спокойные заголовки,
+   красный только как акцент (действие, активный пункт, риск). Плотная, но воздушная сетка 8 px.
+   ===================================================================================================== */
+:root { --radius: 16px; --radius-m: 14px; --radius-s: 10px; --bg: #f3f4f6; --line: #e5e7eb;
+  --shadow: none; --shadow-lift: 0 10px 28px rgba(16, 18, 22, .08); --hair: 1px solid var(--line); }
+:root[data-theme="dark"] { --line: #26282d; --shadow-lift: 0 10px 28px rgba(0, 0, 0, .45); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --line: #26282d; --shadow-lift: 0 10px 28px rgba(0, 0, 0, .45); } }
+
+/* поверхности: одна тонкая линия, без тени; интерактивные — мягкий подъём при наведении */
+.card, .insight, .feed-item, .hs-tile, .fc-card, .empty, .qa, .bk-hero ~ .bk-grid .card { border: var(--hair); }
+.feed-item:hover, .hs-tile:hover, .qa:hover { box-shadow: var(--shadow-lift); }
+.hs-tile:hover { transform: none; }
+.card { padding: 20px 22px; }
+
+/* типографика: меньше крика — заголовки 700, подписи серые, красный — только смысловой */
+h2 { font-size: 22px; font-weight: 750; }
+.page-head h2 { font-size: 30px; font-weight: 800; }
+.eyebrow { color: var(--muted); font-size: 11px; letter-spacing: .07em; }
+.focus-card .eyebrow, .bk-hero .eyebrow, .hero .eyebrow { color: var(--red-ink); }
+.widget-head h2 { font-size: 20px; }
+.radar-widget::before { display: none; }
+.focus-card { border: var(--hair); box-shadow: inset 3px 0 0 var(--red); }
+.w-item { background: transparent; border: var(--hair); }
+.w-item:hover { transform: none; background: var(--soft); box-shadow: none; }
+
+/* знак в шапке: плоский, без тени; официальный логотип (frontend/brand/logo.svg) — без подложки */
+.brand-mark { box-shadow: none; border-radius: 10px; width: 34px; height: 34px; }
+.brand-mark.official { background: none; border-radius: 0; }
+.brand-mark.official img { width: 100%; height: 100%; object-fit: contain; display: block; }
+
+/* тёмный блок радара: компактный, целиком помещается в первый экран вместе с «Делами по радару» */
+.hero { min-height: 0; height: clamp(400px, calc(100vh - var(--top-h, 64px) - 220px), 460px); padding: 28px 36px 0; border-radius: 22px; margin-bottom: 16px; }
+.hero-copy { padding-bottom: 22px; align-self: center; }
+.hero h1 { font-size: clamp(28px, 2.6vw, 40px); max-width: 18ch; margin: 14px 0 10px; letter-spacing: -.03em; }
+.hero-sub { font-size: 14.5px; margin-bottom: 16px; line-height: 1.5; }
+.hero-stats { gap: 8px; margin-bottom: 16px; max-width: 520px; }
+.hs { padding: 9px 12px; border-radius: 12px; }
+.hs b { font-size: 24px; }
+.hs span { font-size: 12px; }
+.hero-cta .btn-lg { padding: 10px 16px; font-size: 14.5px; border-radius: 12px; }
+.hero-globe { min-height: 0; margin: -28px -36px 0 -20px; }
+.globe-legend { bottom: 50px; }
+.globe-hint { top: 50px; }
+.ticker { margin: 0 -36px; height: 42px; }
+@media (max-width: 1200px) {
+  .hero { height: auto; padding: 26px 24px 0; }
+  .hero-globe { min-height: 360px; margin: 0 -24px; }
+  .ticker { margin: 0 -24px; }
+}
+@media (max-width: 640px) { .hero { padding: 22px 16px 0; } .hero-globe { min-height: 300px; margin: 0 -16px; } .ticker { margin: 0 -16px; } .hero h1 { font-size: 30px; } }
+
+/* «Дела по радару» и быстрые действия — как сводка и ряд кнопок на главной интернет-банка */
+.home-strip { margin: 0 0 12px; }
+.quick { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 8px; margin: 0 0 20px; }
+.qa { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px 6px 12px; background: var(--surface); border-radius: var(--radius-m);
+  font: inherit; font-size: 12.5px; font-weight: 600; color: var(--ink); cursor: pointer; text-align: center; line-height: 1.25; transition: box-shadow .2s, border-color .2s; }
+.qa-i { width: 40px; height: 40px; border-radius: 50%; background: var(--soft2); color: var(--ink2); display: grid; place-items: center; transition: background .2s, color .2s; }
+.qa-i svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.qa:hover .qa-i { background: var(--red); color: #fff; }
+@media (max-width: 1100px) { .quick { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (max-width: 640px) {
+  .quick { display: flex; overflow-x: auto; scrollbar-width: none; margin: 0 -16px 16px; padding: 0 16px; }
+  .quick::-webkit-scrollbar { display: none; }
+  .qa { flex: 0 0 92px; }
+}
+
+/* мини-карточки на главной: ближайшие даты и мои действия */
+.mini-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+.mini-head h3 { font-size: 16px; margin: 0; }
+.link-more { border: 0; background: none; color: var(--muted); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; padding: 0; white-space: nowrap; }
+.link-more:hover { color: var(--red-ink); }
+.mini-list { display: flex; flex-direction: column; }
+.mini-row { display: grid; grid-template-columns: 58px minmax(0, 1fr); column-gap: 10px; align-items: start; text-align: left; border: 0; border-top: var(--hair); background: none;
+  color: var(--ink); font: inherit; padding: 10px 0; cursor: pointer; }
+.mini-row:first-child { border-top: 0; }
+.mini-row:hover .mini-t { color: var(--red-ink); }
+.mini-date { grid-row: span 2; font-size: 12.5px; font-weight: 700; background: var(--soft2); border-radius: 8px; padding: 4px 6px; text-align: center; white-space: nowrap; }
+.mini-dot { grid-row: span 2; width: 8px; height: 8px; border-radius: 50%; background: var(--opp); margin: 7px 0 0 4px; }
+.mini-t { font-size: 14px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+.mini-s { font-size: 12.5px; color: var(--muted); }
+.mini-row:has(.mini-dot) { grid-template-columns: 16px minmax(0, 1fr); }
+.mini-empty { font-size: 13.5px; color: var(--muted); padding: 6px 0 2px; }
+.skeleton.sm { height: 64px; }

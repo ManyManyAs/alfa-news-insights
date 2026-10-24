@@ -1075,4 +1075,6 @@ if FRONTEND.exists():
         for name in sorted(set(re.findall(r"/static/([\w.-]+\.(?:js|css))", html))):
             v = hashlib.sha1((FRONTEND / name).read_bytes()).hexdigest()[:10]
             html = html.replace(f"/static/{name}", f"/static/{name}?v={v}")
+        if (FRONTEND / "brand" / "logo.svg").exists():  # официальный логотип из брендбука (frontend/brand/README.md)
+            html = html.replace('<body class="logged-out">', '<body class="logged-out" data-logo="1">', 1)
         return HTMLResponse(html, headers={"Cache-Control": "no-cache"})

@@ -109,6 +109,10 @@ async def shots(b):
         await login(pg)
         await asyncio.sleep(2)
         await pg.screenshot(path=OUT / "00_globe.png")
+        # первый экран: тёмный блок радара целиком и «Дела по радару» видны без прокрутки (ноутбук 1440×900)
+        strip = await pg.evaluate("() => { const r = document.querySelector('#homeStrip').getBoundingClientRect(); return Math.round(r.top); }")
+        if strip > 900 - 60:
+            raise AssertionError(f"«Дела по радару» ниже первого экрана: top={strip} px")
         await pg.wait_for_selector("#focusCard .focus-main", timeout=30000)
         # «Дела по радару» и виджет ленты под тёмным блоком с глобусом
         await pg.evaluate("document.querySelector('#homeStrip').scrollIntoView({block: 'start'}); scrollBy(0, -80)")
