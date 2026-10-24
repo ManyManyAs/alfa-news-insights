@@ -124,6 +124,7 @@ jobs:
           echo "::notice title=warmup итог::$(grep -c '^insight|' warmup.log) разборов в журнале; $(grep -c '| llm' warmup.log) моделью"
           grep -E "LLM-судья|Потрачено" warmup.log >> "$GITHUB_STEP_SUMMARY" || true
           { grep -E "LLM-судья|Потрачено|Остановлено|Модель недоступна" warmup.log || true; } | while read -r l; do echo "::notice title=warmup::$l"; done
+          { grep -E "^(screen|hidden) \|" warmup.log | head -9 || true; } | while read -r l; do echo "::notice title=ИИ-сито и неочевидное::$l"; done
       - name: Два судьи на готовых разборах
         if: inputs.task == 'judges' || inputs.task == 'all'
         run: |
