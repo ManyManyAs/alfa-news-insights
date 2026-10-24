@@ -99,7 +99,7 @@ function calendarStrip(items, today, until) {
   for (let d = new Date(t0.getFullYear(), t0.getMonth() + 1, 1); d <= t1; d = new Date(d.getFullYear(), d.getMonth() + 1, 1)) months.push(d);
   return `<div class="cal-strip" role="img" aria-label="Ключевые даты на 90 дней">
     <div class="cs-line"></div>
-    ${months.map((d) => `<span class="cs-month" style="left:${pos(d).toFixed(1)}%">${d.toLocaleDateString("ru-RU", { month: "short" })}</span>`).join("")}
+    ${months.filter((d) => pos(d) > 7).map((d) => `<span class="cs-month" style="left:${pos(d).toFixed(1)}%">${d.toLocaleDateString("ru-RU", { month: "short" })}</span>`).join("")}
     <span class="cs-today" style="left:0">сегодня</span>
     ${items.map((x, i) => `<button class="cs-dot ${x.kind}" style="left:${pos(x.date).toFixed(1)}%" data-cs="${i}" title="${esc(`${fmtDate(x.date)} — ${x.title}`)}" aria-label="${esc(`${fmtDate(x.date)} — ${x.title}`)}"></button>`).join("")}
   </div>`;
