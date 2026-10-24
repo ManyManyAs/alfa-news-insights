@@ -1085,6 +1085,12 @@ function claims(list) {
     <span class="kind">${KIND[c.kind] || c.kind}</span>${esc(c.text)}${c.owner || c.due ? `<div class="act-meta">${c.owner ? `<span class="am-owner">${ico("user")} ${esc(c.owner)}</span>` : ""}${c.due ? `<span class="am-due">${ico("clock")} ${esc(c.due)}</span>` : ""}</div>` : ""}<div>${srcTags(c.sources)}${c.kind !== "fact" ? `<span class="conf ${c.confidence}" title="${esc(CONF_DEF[c.confidence] || "")}">${CONF[c.confidence] || ""}</span>` : ""}</div></div>`).join("") || `<div class="muted small">нет данных</div>`;
 }
 
+// Первые n утверждений раздела видны сразу, остальные — по кнопке «ещё»: меньше текста на первом экране разбора
+function claimsShort(list, n) {
+  const l = list || [];
+  if (l.length <= n + 1) return claims(l);
+  return `${claims(l.slice(0, n))}<details class="more-claims"><summary>Ещё ${l.length - n}</summary>${claims(l.slice(n))}</details>`;
+}
 const SCEN_CLASS = { base: "watch", negative: "risk", positive: "opportunity" };
 const SCEN_SHORT = { negative: "Негативный", base: "Базовый", positive: "Позитивный" };
 const SCEN_ORDER = ["negative", "base", "positive"];
@@ -1273,13 +1279,13 @@ function renderInsight(tab) {
     body = `
       <details class="impact-wrap" open><summary>Карта влияния: как событие доходит до вашей компании</summary>${impactMap(i)}</details>
       <div class="kinds"><span class="k-fact" title="Подтверждено новостью или документом">Факт</span><span class="k-assumption" title="Прогноз или мнение из источника — не факт">Предположение источника</span><span class="k-bank_view" title="Тезис или прогноз из аналитики Альфа-Банка со ссылкой на документ и страницу">Позиция Альфа-Банка</span><span class="k-ai_inference" title="Вывод модели, не официальная позиция банка">Вывод сервиса (AI) — не позиция банка</span></div>
-      <div class="q"><h4><span class="n">1</span>Что произошло</h4>${claims(i.what_happened)}</div>
-      <div class="q"><h4><span class="n">2</span>Почему это важно для вашей компании</h4>${claims(i.why_it_matters)}</div>
+      <div class="q"><h4><span class="n">1</span>Что произошло</h4>${claimsShort(i.what_happened, 2)}</div>
+      <div class="q"><h4><span class="n">2</span>Почему это важно для вашей компании</h4>${claimsShort(i.why_it_matters, 2)}</div>
       <div class="q"><h4><span class="n">3</span>Возможные последствия</h4>
-        <div class="cols"><div><b class="bad small">Риски</b>${claims(i.consequences.risks)}</div><div><b class="ok small">Возможности</b>${claims(i.consequences.opportunities)}</div></div>
-        <b class="small muted">Что повлияет на развитие ситуации</b>${claims(i.consequences.drivers)}
+        <div class="cols"><div><b class="bad small">Риски</b>${claimsShort(i.consequences.risks, 2)}</div><div><b class="ok small">Возможности</b>${claimsShort(i.consequences.opportunities, 2)}</div></div>
+        <b class="small muted">Что повлияет на развитие ситуации</b>${claimsShort(i.consequences.drivers, 1)}
         ${(i.scenarios || []).length ? `<div class="effect-block"><div class="sub-h">Эффект для компании за 12 месяцев</div>${scenarioCards(i.scenarios, false, moneyOff(i))}</div>` : ""}
-        ${(i.what_could_change || []).length ? `<div class="sub-h">Что может изменить вывод</div>${claims(i.what_could_change)}` : ""}
+        ${(i.what_could_change || []).length ? `<div class="sub-h">Что может изменить вывод</div>${claimsShort(i.what_could_change, 1)}` : ""}
         ${whatIfBlock()}</div>
       <div class="q"><h4><span class="n">4</span>Что можно сделать</h4>${actionsBlock(i.actions)}
         ${i.products.map((p) => `<div class="product"><span class="lbl">${esc(p.label)}</span><br><b>${esc(PRODUCT_RU[p.product] || p.product)}</b> — ${esc(p.why)}
@@ -1289,9 +1295,10 @@ function renderInsight(tab) {
         <div class="bv-card"><div class="bv-head"><span class="bv-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 10 12 4l9 6M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18"/></svg></span><div><b>Позиция Альфа-Банка</b><div class="muted small">тезисы и прогнозы из аналитики банка — со ссылкой на документ и страницу</div></div></div>
         ${(i.bank_view || []).length ? claims(i.bank_view) : `<div class="muted small">В аналитике банка нет материалов по этой теме — сервис не придумывает позицию за банк.</div>`}</div></div>
       <div class="q"><h4><span class="n">6</span>На чём основан вывод</h4>
-        <div class="small muted">Каждое утверждение выше помечено типом и источником. Автоматическая проверка разбора (${i.iterations} ${plural(i.iterations, "проход", "прохода", "проходов")}):</div>
-        <ul class="quality">${i.quality.map((c) => `<li class="${c.passed ? "ok" : "bad"}">${c.passed ? "✓" : "✗"} ${esc(CHECK_RU[c.name] || c.name)}${c.passed ? "" : " — " + esc(cleanRefs(c.detail))}</li>`).join("")}</ul>
-        <div class="muted small scale">Шкала уверенности: ${Object.values(CONF_DEF).map(esc).join(" · ")}. Эффект: «риск» — событие ухудшает показатели компании, «возможность» — улучшает, «отслеживать» — влияние неоднозначно или ещё не наступило.</div>
+        <div class="qa-sum"><span class="qa-ring ${allOk ? "ok" : "warn"}">${i.quality.filter((c) => c.passed).length}/${i.quality.length}</span>
+          <div><b>${allOk ? "Самопроверка пройдена" : "Самопроверка: есть замечания"}</b><div class="muted small">Каждое утверждение помечено типом и источником · ${i.iterations} ${plural(i.iterations, "проход", "прохода", "проходов")} проверки</div></div></div>
+        <details class="qa-details"><summary>Все проверки</summary><ul class="quality">${i.quality.map((c) => `<li class="${c.passed ? "ok" : "bad"}">${c.passed ? "✓" : "✗"} ${esc(CHECK_RU[c.name] || c.name)}${c.passed ? "" : " — " + esc(cleanRefs(c.detail))}</li>`).join("")}</ul>
+        <div class="muted small scale">Шкала уверенности: ${Object.values(CONF_DEF).map(esc).join(" · ")}. Эффект: «риск» — событие ухудшает показатели компании, «возможность» — улучшает, «отслеживать» — влияние неоднозначно или ещё не наступило.</div></details>
       </div>
       <div class="feedback">Полезно? <button class="btn ghost small" data-fb="1" aria-label="Полезно">${ico("like")}</button><button class="btn ghost small" data-fb="-1" aria-label="Не полезно">${ico("dislike")}</button>
         <span id="fbReasons" hidden>Что не так?
