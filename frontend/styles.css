@@ -6,11 +6,12 @@
 @font-face { font-family: "Inter"; src: url("/static/fonts/Inter-Medium.woff") format("woff"); font-weight: 500; font-display: swap; }
 @font-face { font-family: "Inter"; src: url("/static/fonts/Inter-SemiBold.woff") format("woff"); font-weight: 600; font-display: swap; }
 @font-face { font-family: "Inter"; src: url("/static/fonts/Inter-Bold.woff") format("woff"); font-weight: 700; font-display: swap; }
-/* Styrene A — фирменный шрифт Альфа-Банка для заголовков (брендбук: акциденция); использование разрешено организаторами */
-@font-face { font-family: "Styrene A"; src: url("/static/fonts/StyreneAWeb-Regular.woff2") format("woff2"); font-weight: 400; font-display: swap; }
-@font-face { font-family: "Styrene A"; src: url("/static/fonts/StyreneAWeb-Medium.woff2") format("woff2"); font-weight: 500; font-display: swap; }
-@font-face { font-family: "Styrene A"; src: url("/static/fonts/StyreneAWeb-Bold.woff2") format("woff2"); font-weight: 700; font-display: swap; }
-@font-face { font-family: "Styrene A"; src: url("/static/fonts/StyreneAWeb-Black.woff2") format("woff2"); font-weight: 900; font-display: swap; }
+/* Styrene A — фирменный шрифт Альфа-Банка (файлы от организаторов). В нём нет кириллицы, поэтому он задаёт только цифры,
+   знаки и пробелы в заголовках и крупных числах (unicode-range); буквы — Inter Display. */
+@font-face { font-family: "Styrene A"; src: url("/static/fonts/StyreneAWeb-Regular.woff2") format("woff2"); font-weight: 400; font-display: swap; unicode-range: U+0020-0040, U+00A0, U+2009, U+2212, U+20BD; }
+@font-face { font-family: "Styrene A"; src: url("/static/fonts/StyreneAWeb-Medium.woff2") format("woff2"); font-weight: 500; font-display: swap; unicode-range: U+0020-0040, U+00A0, U+2009, U+2212, U+20BD; }
+@font-face { font-family: "Styrene A"; src: url("/static/fonts/StyreneAWeb-Bold.woff2") format("woff2"); font-weight: 700; font-display: swap; unicode-range: U+0020-0040, U+00A0, U+2009, U+2212, U+20BD; }
+@font-face { font-family: "Styrene A"; src: url("/static/fonts/StyreneAWeb-Black.woff2") format("woff2"); font-weight: 900; font-display: swap; unicode-range: U+0020-0040, U+00A0, U+2009, U+2212, U+20BD; }
 @font-face { font-family: "Inter Display"; src: url("/static/fonts/InterDisplay-Bold.woff") format("woff"); font-weight: 700; font-display: swap; }
 @font-face { font-family: "Inter Display"; src: url("/static/fonts/InterDisplay-ExtraBold.woff") format("woff"); font-weight: 800; font-display: swap; }
 
