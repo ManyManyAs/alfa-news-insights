@@ -12,10 +12,11 @@
 @font-face { font-family: "Styrene A"; src: url("/static/fonts/StyreneAWeb-Medium.woff2") format("woff2"); font-weight: 500; font-display: swap; unicode-range: U+0020-007E, U+00A0-00FF, U+2009, U+2010-2015, U+2018-201E, U+2026, U+2116, U+2212, U+20AC, U+20BD; }
 @font-face { font-family: "Styrene A"; src: url("/static/fonts/StyreneAWeb-Bold.woff2") format("woff2"); font-weight: 700; font-display: swap; unicode-range: U+0020-007E, U+00A0-00FF, U+2009, U+2010-2015, U+2018-201E, U+2026, U+2116, U+2212, U+20AC, U+20BD; }
 @font-face { font-family: "Styrene A"; src: url("/static/fonts/StyreneAWeb-Black.woff2") format("woff2"); font-weight: 900; font-display: swap; unicode-range: U+0020-007E, U+00A0-00FF, U+2009, U+2010-2015, U+2018-201E, U+2026, U+2116, U+2212, U+20AC, U+20BD; }
-/* Styrene B — основной текст: латиница, цифры и знаки; кириллицы в файлах организаторов нет, русские буквы — Inter */
-@font-face { font-family: "Styrene B"; src: url("/static/fonts/StyreneB-Regular.woff") format("woff"); font-weight: 400; font-display: swap; unicode-range: U+0020-007E, U+00A0-00FF, U+2009, U+2010-2015, U+2018-201E, U+2026, U+2116, U+2212, U+20AC, U+20BD; }
-@font-face { font-family: "Styrene B"; src: url("/static/fonts/StyreneB-Medium.woff") format("woff"); font-weight: 500 600; font-display: swap; unicode-range: U+0020-007E, U+00A0-00FF, U+2009, U+2010-2015, U+2018-201E, U+2026, U+2116, U+2212, U+20AC, U+20BD; }
-@font-face { font-family: "Styrene B"; src: url("/static/fonts/StyreneB-Bold.woff") format("woff"); font-weight: 700 900; font-display: swap; unicode-range: U+0020-007E, U+00A0-00FF, U+2009, U+2010-2015, U+2018-201E, U+2026, U+2116, U+2212, U+20AC, U+20BD; }
+/* Styrene B LC — фирменный шрифт на весь интерфейс: латиница и кириллица (файлы организаторов, подмножество fontTools) */
+@font-face { font-family: "Styrene B"; src: url("/static/fonts/StyreneBLC-Regular.woff") format("woff"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Styrene B"; src: url("/static/fonts/StyreneBLC-Medium.woff") format("woff"); font-weight: 500 600; font-display: swap; }
+@font-face { font-family: "Styrene B"; src: url("/static/fonts/StyreneBLC-Bold.woff") format("woff"); font-weight: 700; font-display: swap; }
+@font-face { font-family: "Styrene B"; src: url("/static/fonts/StyreneBLC-Black.woff") format("woff"); font-weight: 800 900; font-display: swap; }
 @font-face { font-family: "Inter Display"; src: url("/static/fonts/InterDisplay-Bold.woff") format("woff"); font-weight: 700; font-display: swap; }
 @font-face { font-family: "Inter Display"; src: url("/static/fonts/InterDisplay-ExtraBold.woff") format("woff"); font-weight: 800; font-display: swap; }
 
@@ -34,7 +35,7 @@
   --sidebar: #ffffff; --sidebar-ink: #3d424a; --side-strong: #0b0b0d; --side-hover: #f2f3f5; --side-active: #eef0f3; --side-sep: #646a74;
   --top-bg: rgba(255, 255, 255, .92);
   --font: "Styrene B", "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --display: "Styrene A", "Inter Display", "Inter", system-ui, sans-serif;
+  --display: "Styrene B", "Inter Display", "Inter", system-ui, sans-serif;
   --ease: cubic-bezier(.2, .8, .2, 1);
 }
 :root[data-theme="dark"] {
