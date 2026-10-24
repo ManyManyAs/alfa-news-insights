@@ -51,7 +51,7 @@ function moneyMini(i) {
 
 function botTools(k) {
   return `<div class="msg-tools" data-k="${k}"><button class="link-btn" data-style="simple">Объясни проще</button><button class="link-btn" data-style="owner">Для собственника</button>
-    <button class="link-btn" data-totask>＋ в мои действия</button><span class="msg-rate"><button class="icon-btn sm" data-rate="1" title="Полезный ответ" aria-label="Полезный ответ">${ico("like")}</button><button class="icon-btn sm" data-rate="-1" title="Неточный ответ" aria-label="Неточный ответ">${ico("dislike")}</button></span></div>`;
+    <button class="link-btn" data-totask>+ в мои действия</button><span class="msg-rate"><button class="icon-btn sm" data-rate="1" title="Полезный ответ" aria-label="Полезный ответ">${ico("like")}</button><button class="icon-btn sm" data-rate="-1" title="Неточный ответ" aria-label="Неточный ответ">${ico("dislike")}</button></span></div>`;
 }
 function drawMsg(m, k) {
   const i = state.insight;
@@ -141,7 +141,7 @@ function compareEvents(a, b) {
   const short = (x) => esc(x.title.length > 70 ? x.title.slice(0, 70) + "…" : x.title);
   return `<table class="cmp-t"><thead><tr><th></th><th>Это событие</th><th>Другое</th></tr></thead><tbody>
     <tr><td></td><td><b>${short(A)}</b></td><td><button class="link-btn" data-cmp-open="${esc(B.event_id)}">${short(B)}</button></td></tr>
-    ${rows.map(([t, f]) => `<tr><td class="muted small">${t}</td><td>${esc(f(A))}</td><td>${esc(f(B))}</td></tr>`).join("")}</tbody></table>
+    ${rows.map(([t, f]) => `<tr><td class="muted small">${t}</td><td>${f === moneyCell ? f(A) : esc(f(A))}</td><td>${f === moneyCell ? f(B) : esc(f(B))}</td></tr>`).join("")}</tbody></table>
     <div class="cmp-verdict">${win ? `${ico("spark")} Важнее сейчас: <b>${win === A ? "это событие" : "другое"}</b> — ${esc(why)}.` : "По правилам сервиса события равнозначны — решайте по срокам."}</div>
     <p class="muted small">Сравнение по тем же правилам, что у ленты и «Денег на кону», без модели.</p>`;
 }

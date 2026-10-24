@@ -37,8 +37,10 @@ def off_topic(q: str) -> bool:
 
 def _rub(v: float) -> str:
     a = abs(v)
-    t = f"{a / 1e9:.1f} млрд ₽" if a >= 1e9 else f"{a / 1e6:.1f} млн ₽" if a >= 1e6 else f"{a / 1e3:.0f} тыс. ₽"
-    return ("−" if v < 0 else "+" if v > 0 else "") + t.replace(".", ",")
+    if a < 500:
+        return "0 ₽"
+    num, unit = (f"{a / 1e9:.1f}", "млрд ₽") if a >= 1e9 else (f"{a / 1e6:.1f}", "млн ₽") if a >= 1e6 else (f"{a / 1e3:.0f}", "тыс. ₽")
+    return ("−" if v < 0 else "+") + num.replace(".", ",") + " " + unit
 
 
 def money_answer(ins: Insight) -> str | None:
@@ -49,8 +51,8 @@ def money_answer(ins: Insight) -> str | None:
     if all(s.negligible for s in sc):
         return "По расчёту калькулятора заметного денежного эффекта для компании нет — суммы не приводим."
     order = {"negative": 0, "base": 1, "positive": 2}
-    lines = [f"• {s.title}: {_rub(s.total_rub)} за 12 месяцев" + (f" [{s.sources[0]}]" if s.sources else "")
-             for s in sorted(sc, key=lambda s: order[s.name]) if not s.negligible]
+    lines = [f"• {s.title}: {_rub(s.total_rub) if s.total_rub or s.name != 'base' else '0 ₽ к плану'} за 12 месяцев"
+             + (f" [{s.sources[0]}]" if s.sources else "") for s in sorted(sc, key=lambda s: order[s.name]) if not s.negligible]
     return "Эффект для компании по расчёту калькулятора (не модели):\n" + "\n".join(lines)
 
 
@@ -58,8 +60,23 @@ def _fmt(claims, label: str) -> str:
     return "\n".join(f"• {c.text} [{', '.join(c.sources)}]" for c in claims) or f"{label}: нет данных."
 
 
-def answer_rules(q: str, ins: Insight, profile: CompanyProfile) -> dict:
+def styled_rules(style: str, ins: Insight) -> str:
+    """«Для собственника» и «проще» без модели: те же факты разбора, короче и другим порядком."""
+    sc = {s.name: s for s in ins.scenarios}
+    neg, pos = sc.get("negative"), sc.get("positive")
+    money = (f"негативный сценарий {_rub(neg.total_rub)}, позитивный {_rub(pos.total_rub)} за 12 месяцев (калькулятор)"
+             if neg and pos and not neg.negligible else "заметного влияния на прибыль по расчёту нет")
+    risk = ins.consequences.risks[0].text if ins.consequences.risks else "существенных рисков разбор не нашёл"
+    act = ins.actions[0].text if ins.actions else "действий не требуется — достаточно следить за развитием"
+    if style == "owner":
+        return f"Для собственника, коротко:\n• Деньги: {money}.\n• Главный риск: {risk}\n• Решение: {act}"
+    return f"Если просто: {ins.takeaway.text}\nЧто это значит в деньгах: {money}.\nЧто сделать: {act}"
+
+
+def answer_rules(q: str, ins: Insight, profile: CompanyProfile, style: str | None = None) -> dict:
     ql = q.lower()
+    if style in STYLE:
+        return {"answer": styled_rules(style, ins), "mode": "rules"}
     if MONEY_RE.search(q) and (m := money_answer(ins)):
         return {"answer": m, "mode": "rules"}
     if any(w in ql for w in ("источник", "первоисточ", "ссылк", "откуда")):
@@ -181,7 +198,7 @@ def answer_stream(q: str, ins: Insight, profile: CompanyProfile, style: str | No
             return
         except (LLMUnavailable, StopIteration):
             pass
-    res = answer_rules(q_clean, ins, profile)
+    res = answer_rules(q_clean, ins, profile, style)
     yield {"type": "meta", "mode": res["mode"], "security_flags": flags, "attach": attach}
     yield {"type": "delta", "text": res["answer"]}
     yield {"type": "done"}
@@ -215,7 +232,9 @@ def feed_answer_rules(q: str, cards: list[dict]) -> str:
     hit = [c for c in cards if any(w[:5] in (c["title"] + " " + c.get("summary", "")).lower() for w in words)]
     pick = hit[:4] or [c for c in cards if c["effect"] == "risk"][:4] or cards[:4]
     head = "По вашему вопросу в ленте:" if hit else "Главное в ленте для компании по важности:"
-    return head + "\n" + "\n".join(f"• {c['title']} — {c['importance']} важность; {c['why']} [ev:{c['n']}]" for c in pick)
+    why = lambda c: c["why"].split(";")[0].strip()  # noqa: E731
+    return head + "\n" + "\n".join(f"• **{c['title']}** — важность {c['importance']}" + (f": {why(c)}" if c["why"] else "") + f" [ev:{c['n']}]"
+                                     for c in pick)
 
 
 def answer_feed_stream(q: str, cards: list[dict], profile: CompanyProfile, role_title: str | None) -> Iterator[dict]:
