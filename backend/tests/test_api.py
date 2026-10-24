@@ -136,8 +136,8 @@ def test_money_ai_filters_irrelevant_events(client, demo, monkeypatch):
     def fake(p, role, cands):
         seen["n"] = len(cands)
         keep = cands[0]["key"] if cands else None
-        return ({c["key"]: {"key": c["key"], "relevant": c["key"] == keep, "direction": "worse", "strength": 3,
-                            "why": "Проверка: событие дорожит кредит компании"} for c in cands},
+        return ({c["key"]: {"key": c["key"], "n": i + 1, "relevant": c["key"] == keep, "direction": "worse", "strength": 3,
+                            "why": "Проверка: событие дорожит кредит компании"} for i, c in enumerate(cands)},
                 {"used": True, "model": "test"})
 
     monkeypatch.setattr(money, "ai_check", fake)
