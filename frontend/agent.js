@@ -87,7 +87,7 @@ function impExplain(it) {
 async function renderOps(box) {
   if (!box) return;
   let p = null, b = null;
-  try { [p, b] = await Promise.all([api("/api/proof"), api("/api/llm/budget")]); } catch (e) { return; }
+  try { [p, b] = await Promise.all([api("/api/proof"), api("/api/llm/budget")]); } catch (e) { box.innerHTML = `<p class="muted small">Данные для команды банка сейчас недоступны.</p>`; return; }
   const n2 = (x) => x == null ? "—" : Number(x).toFixed(2).replace(".", ",");
   // бюджет: темп с последнего сброса (03:00 МСК) и прогноз на конец бюджетных суток
   const now = new Date(), msk = new Date(now.getTime() + (now.getTimezoneOffset() + 180) * 6e4);

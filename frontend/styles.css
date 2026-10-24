@@ -1781,3 +1781,39 @@ button.cite { border: 0; font: inherit; cursor: pointer; }
 .ms-row { display: flex; gap: 22px; margin: 8px 0; } .ms-row div { display: grid; } .ms-row b { font: 700 24px var(--display); }
 .ms-rej { list-style: none; margin: 4px 0; padding: 0; display: grid; gap: 4px; font-size: 13px; }
 .ms-rej li { display: grid; gap: 1px; padding: 4px 0; border-bottom: 1px solid var(--line); }
+
+/* ============================== Этап 9: дизайн, доступность, телефон ============================== */
+/* переходы между экранами: короткий кроссфейд, без рывков */
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: .22s; animation-timing-function: var(--ease); }
+/* клавиатура в ленте */
+.feed-item.kb-focus, .feed-item:focus-visible { outline: 2px solid var(--red); outline-offset: 2px; }
+/* свайпы на телефоне: подсказка цветом края */
+.feed-item { transition: transform .18s var(--ease); touch-action: pan-y; }
+.feed-item.sw-right { box-shadow: inset 4px 0 0 var(--opp); }
+.feed-item.sw-left { box-shadow: inset -4px 0 0 var(--risk); opacity: .8; }
+/* установка как приложение */
+.install-btn[hidden] { display: none; }
+@media (max-width: 900px) { .install-btn { display: none; } }
+/* фирменный PDF: знак Альфа-Банка в шапке печати */
+.ph-brand { display: inline-flex; align-items: center; gap: 8px; }
+.ph-mark { display: inline-block; width: 14px; height: 20px; color: #ef3124; }
+.ph-mark svg { width: 100%; height: 100%; display: block; }
+@media print {
+  .ph-mark { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .pill.risk, .pill.opportunity, .pill.watch, .df-add, .df-del, .cm-bar i { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .crumbs, .msg-tools, .imp-x summary, .ev-history .link-btn, .kb-btns { display: none !important; }
+  a[href^="http"]::after { content: " (" attr(href) ")"; font-size: 9px; color: #666; word-break: break-all; }
+}
+
+/* высокая контрастность: темнее вторичный текст, заметнее границы и фокус */
+:root[data-contrast="more"] { --muted: #2f3238; --ink2: #0b0b0d; --line: #8a9099; --soft: #eceef1; --soft2: #dfe2e6; --hair: 1.5px solid #6b717a; }
+:root[data-contrast="more"][data-theme="dark"] { --muted: #d7dae0; --ink2: #ffffff; --line: #7c828c; --soft: #232429; --soft2: #2e3036; --hair: 1.5px solid #8e949e; }
+:root[data-contrast="more"] :focus-visible { outline: 3px solid var(--red) !important; outline-offset: 2px; }
+:root[data-contrast="more"] .pill, :root[data-contrast="more"] .cite, :root[data-contrast="more"] .btn.ghost { box-shadow: inset 0 0 0 1.5px currentColor; }
+:root[data-contrast="more"] .link-btn { text-decoration: underline; }
+@media (forced-colors: active) { .spark .sp-area, .e-art .a-soft { fill: none; } .kb-col, .df-wrap, .act-prev { border: 1px solid CanvasText; } }
+
+/* единые скелетоны: ширина строк разная, как у настоящего текста */
+.skeleton.sm { height: 64px; }
+#opsBox:empty::before { content: ""; display: block; height: 180px; border-radius: var(--radius-m); background: linear-gradient(90deg, var(--sk1) 25%, var(--sk2) 50%, var(--sk1) 75%); background-size: 200% 100%; animation: sk 1.2s linear infinite; }
+.cmd-btn { flex: none; min-width: 38px; }

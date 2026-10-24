@@ -146,7 +146,8 @@ async def shots(b):
 
     async def s_trace():
         await pg.click("#insightPanel .tab[data-tab=trace]")
-        await asyncio.sleep(2.5)
+        await pg.wait_for_selector("#traceBox .ag-flow", timeout=20000)  # этап 8: схема шагов агента
+        await asyncio.sleep(1)
         await pg.locator("#insightPanel .tabs").scroll_into_view_if_needed()
         await pg.screenshot(path=OUT / "06_trace.png")
 
@@ -161,6 +162,10 @@ async def shots(b):
         await wait_js(pg, "document.querySelector('#metricsBox').innerText.length > 100", 60)
         await asyncio.sleep(2)
         await pg.screenshot(path=OUT / "08_quality.png")
+        await pg.wait_for_selector("#opsBox .ops-card", timeout=20000)  # этап 8: бюджет, безопасность, модели
+        await pg.locator("#opsBox").scroll_into_view_if_needed()
+        await asyncio.sleep(0.5)
+        await pg.screenshot(path=OUT / "27_agent_ops.png")
 
     async def s_tasks():
         await pg.click("#insightPanel .tab[data-tab=analysis]")
@@ -281,6 +286,20 @@ async def shots(b):
         await pg.locator("#tasksBox .req-card").scroll_into_view_if_needed()
         await pg.screenshot(path=OUT / "26_requests.png")
 
+    async def s_stage9():
+        # этап 9: клавиатура в ленте (j — следующая карточка), высокая контрастность, манифест приложения
+        await pg.evaluate("show('radar')")
+        await pg.locator("#feedList .feed-item >> nth=0").focus()
+        await pg.keyboard.press("j")
+        await wait_js(pg, "document.querySelector('#feedList .feed-item.kb-focus')", 5)
+        await pg.evaluate("toggleContrast()")
+        await asyncio.sleep(0.6)
+        await pg.screenshot(path=OUT / "28_contrast.png")
+        await pg.evaluate("toggleContrast()")
+        ok = await pg.evaluate("async () => (await fetch('/static/manifest.webmanifest')).ok")
+        if not ok:
+            raise AssertionError("манифест приложения недоступен")
+
     async def s_stage6():
         # этап 6: «для собственника», сравнение двух событий, вопрос по всей ленте с главной
         await pg.evaluate("show('radar')")
@@ -304,7 +323,7 @@ async def shots(b):
 
     for name, fn in [("вход", s_login), ("главная", s_home), ("лента и разбор", s_insight), ("сценарии", s_scen),
                      ("чат", s_chat), ("трассировка", s_trace), ("мои действия", s_tasks), ("календарь", s_calendar), ("прогнозы банка", s_forecasts), ("дайджест", s_digest), ("качество и бюджет", s_quality),
-                     ("разделы банка", s_bank), ("уведомления", s_bell), ("тур по сервису", s_tour), ("ширины экрана", s_widths), ("этап 5: навигация", s_stage5), ("этап 6: чат", s_stage6), ("этап 7: действия", s_stage7)]:
+                     ("разделы банка", s_bank), ("уведомления", s_bell), ("тур по сервису", s_tour), ("ширины экрана", s_widths), ("этап 5: навигация", s_stage5), ("этап 6: чат", s_stage6), ("этап 7: действия", s_stage7), ("этап 9: доступность", s_stage9)]:
         await step(name, fn())
     await ctx.close()
 

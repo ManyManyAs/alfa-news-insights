@@ -1,4 +1,9 @@
-// Service worker Бизнес-радара: показывает push-уведомления (новый риск, дайджест недели) и открывает радар по клику.
+// Service worker Бизнес-радара: push-уведомления (новый риск, дайджест недели) и работа без сети —
+// оболочка приложения и последняя загруженная лента открываются офлайн (этап 9). При выходе кэш данных удаляется.
+const SHELL = "br-shell-v1", API = "br-api";
+// данные, которые имеет смысл показать без сети: кто я, профиль компании, лента, прогнозы банка
+const API_OFFLINE = [/^\/api\/me$/, /^\/api\/companies\/[^/]+$/, /^\/api\/feed$/, /^\/api\/bank\/forecasts$/, /^\/api\/demo-users$/, /^\/api\/money$/];
+
 self.addEventListener("push", (event) => {
   let d = {};
   try { d = event.data ? event.data.json() : {}; } catch (e) { d = { title: "Бизнес-радар", body: event.data ? event.data.text() : "" }; }
@@ -16,4 +21,39 @@ self.addEventListener("notificationclick", (event) => {
   }));
 });
 self.addEventListener("install", () => self.skipWaiting());
-self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));
+self.addEventListener("activate", (e) => e.waitUntil((async () => {
+  for (const k of await caches.keys()) if (k.startsWith("br-shell-") && k !== SHELL) await caches.delete(k);
+  await self.clients.claim();
+})()));
+
+// сеть — первой; без сети — последняя сохранённая копия. Статика с ?v= неизменна — из кэша сразу.
+async function networkFirst(req, cacheName) {
+  const cache = await caches.open(cacheName);
+  try {
+    const res = await fetch(req);
+    if (res.ok) cache.put(req, res.clone());
+    return res;
+  } catch (e) {
+    const hit = await cache.match(req);
+    if (hit) return hit;
+    throw e;
+  }
+}
+async function cacheFirst(req) {
+  const cache = await caches.open(SHELL);
+  const hit = await cache.match(req);
+  if (hit) return hit;
+  const res = await fetch(req);
+  if (res.ok) cache.put(req, res.clone());
+  return res;
+}
+self.addEventListener("fetch", (event) => {
+  const req = event.request;
+  if (req.method !== "GET") return;
+  const url = new URL(req.url);
+  if (url.origin !== self.location.origin) return;
+  if (url.pathname === "/api/auth/logout") return;
+  if (url.pathname.startsWith("/static/") && url.searchParams.get("v")) return event.respondWith(cacheFirst(req));
+  if (url.pathname === "/" || url.pathname === "/index.html") return event.respondWith(networkFirst(req, SHELL));
+  if (API_OFFLINE.some((r) => r.test(url.pathname))) return event.respondWith(networkFirst(req, API));
+});
