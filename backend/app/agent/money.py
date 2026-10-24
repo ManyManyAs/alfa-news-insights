@@ -18,14 +18,24 @@ import logging
 from pydantic import BaseModel, Field
 
 from app.agent.humanize import humanize_text
-from app.agent.scenario import Inputs, bank_baseline, calc
+from app.agent.scenario import Inputs, bank_baseline, buffers, calc
 from app.agent.scenario import scenarios as scenario_set
 from app.security.guard import UNTRUSTED_NOTICE, guard_output, sanitize_untrusted
 
 log = logging.getLogger(__name__)
 
+# что клиент может ввести о своей компании («мои цифры»); шоки сценариев сюда не входят
+USER_FIELDS = ("revenue_rub", "debt_rub", "floating_share", "deposits_rub", "import_rub", "export_rub", "pass_through",
+               "payroll_rub", "margin", "purchases_rub")
 LEVER_TITLE = {"rate": "Ставка по кредитам и депозитам", "fx": "Курс рубля", "wages": "Зарплаты и ФОТ",
                "demand": "Спрос и выручка", "costs": "Цены закупок"}
+# Сколько закрывает инструмент банка (этап 2 плана): допущение о доле, которую закрывает типовое решение.
+# ставка — фиксация ставки по плавающей части долга закрывает отклонение целиком; курс — форвард на половину
+# ближайших платежей; закупки — фиксированные цены у ключевых поставщиков на половину объёма. Зарплаты и спрос
+# инструментом банка не закрываются — для них показываем только действие.
+PROTECT_SHARE = {"rate": (1.0, "фиксация ставки по плавающей части долга"),
+                 "fx": (0.5, "форвард на половину валютных платежей"),
+                 "costs": (0.5, "фиксированные цены на половину закупок")}
 PROTECT_ACTIONS = {
     "rate": "зафиксировать ставку по части кредитов или рефинансировать долг",
     "fx": "захеджировать валютные платежи (форвард на ближайшие поставки)",
@@ -68,8 +78,9 @@ def _company_line(p) -> str:
             f"продукты банка: {prods}; страны ВЭД: {fts}")
 
 
-def candidates(p, role, ranked: list, mat: dict, importance_level, cached_insight) -> list[dict]:
-    """События ленты с денежным эффектом по калькулятору: (событие, рычаг, минус, плюс)."""
+def candidates(p, role, ranked: list, mat: dict, importance_level, cached_insight, user: Inputs | None = None) -> list[dict]:
+    """События ленты с денежным эффектом по калькулятору: (событие, рычаг, минус, плюс).
+    user — «мои цифры» клиента (долг, импорт, ФОТ…): тогда суммы пересчитываются, а не берутся из кэша разбора."""
     out = []
     for s in ranked[:25]:
         if importance_level(s.score, mat.get(s.event.id))["level"] < 1:
@@ -78,8 +89,8 @@ def candidates(p, role, ranked: list, mat: dict, importance_level, cached_insigh
         if ins is not None and ins.materiality is not None and ins.materiality == 0:
             continue
         cls = s.event.classification
-        sc = ([x.model_dump() for x in ins.scenarios] if ins and ins.scenarios else
-              scenario_set(p, s.matched_factors, reasons=s.reasons, effective_dates=cls.effective_dates, regions=cls.regions,
+        sc = ([x.model_dump() for x in ins.scenarios] if ins and ins.scenarios and user is None else
+              scenario_set(p, s.matched_factors, user, reasons=s.reasons, effective_dates=cls.effective_dates, regions=cls.regions,
                            countries=cls.countries))
         if not sc or sc[0].get("negligible"):
             continue
@@ -137,7 +148,7 @@ def horizon_year(today=None) -> int:
     return today.year + 1 if today.month >= 7 else today.year
 
 
-def bank_revisions(p) -> list[dict]:
+def bank_revisions(p, user: Inputs | None = None) -> list[dict]:
     """Что уже изменилось по факту: Альфа-Банк пересмотрел прогноз — сколько это для компании за 12 месяцев к плану,
     составленному по прежнему прогнозу. Числа прогноза — из материалов банка (ссылка на документ и страницу), сумма —
     калькулятор. Это не догадка по новости, а разница двух опубликованных прогнозов банка."""
@@ -155,7 +166,8 @@ def bank_revisions(p) -> list[dict]:
         r = (f or {}).get("revision")
         if not r or not r.get("from"):
             continue
-        res = calc(p, Inputs(**shock(r)), None, 0)
+        own = {k: v for k, v in (user.model_dump() if user else {}).items() if v is not None and k in USER_FIELDS}
+        res = calc(p, Inputs(**{**own, **shock(r)}), None, 0)
         row = next((x for x in res["rows"] if x["lever"] == lever), None)
         if not row or abs(row["effect_rub"]) < 1000:
             continue
@@ -167,8 +179,33 @@ def bank_revisions(p) -> list[dict]:
     return out
 
 
-def money_view(p, role, ranked: list, mat: dict, importance_level, cached_insight, revenue) -> dict:
-    cands = candidates(p, role, ranked, mat, importance_level, cached_insight)
+def peers_line(p) -> dict | None:
+    """Через какие рычаги деньги похожих компаний зависят от макрофона: доли продуктов в группе — факт из данных банка."""
+    from app.data.peers import peer_stats
+
+    st = peer_stats(p.peer_key)
+    if not st or not st.get("n"):
+        return None
+    pr = st.get("products") or {}
+    rows = []
+    for lever, key, title in (("rate", "CL_PRODUCT_LOA_MARK", "кредит"), ("fx", "FTS_FLAG", "ВЭД"),
+                              ("wages", "CL_PRODUCT_ZPP_MARK", "зарплатный проект")):
+        if key in pr:
+            have = key in p.products or (key == "FTS_FLAG" and p.fts)
+            rows.append({"lever": lever, "title": title, "peers_share": pr[key], "has": bool(have)})
+    return {"n": st["n"], "rows": rows} if rows else None
+
+
+def user_inputs(numbers: dict | None) -> Inputs | None:
+    """«Мои цифры» клиента → параметры калькулятора; пусто — оценки по профилю."""
+    clean = {k: v for k, v in (numbers or {}).items() if k in USER_FIELDS and v is not None}
+    return Inputs(**clean) if clean else None
+
+
+def money_view(p, role, ranked: list, mat: dict, importance_level, cached_insight, revenue, user: Inputs | None = None) -> dict:
+    if user is not None and user.revenue_rub:
+        revenue = user.revenue_rub
+    cands = candidates(p, role, ranked, mat, importance_level, cached_insight, user)
     verdict, ai = ai_check(p, role, cands)
     levers: dict[str, dict] = {}
     used: set[str] = set()
@@ -200,6 +237,9 @@ def money_view(p, role, ranked: list, mat: dict, importance_level, cached_insigh
     rows = sorted((v for v in levers.values() if v["down"] or v["up"]), key=lambda v: -(abs(v["down"]) + v["up"]))
     for v in rows:
         v["action"] = PROTECT_ACTIONS.get(v["lever"], "")
+        if v["lever"] in PROTECT_SHARE and v["down"]:
+            share, how = PROTECT_SHARE[v["lever"]]
+            v["protect"] = {"how": how, "before": round(v["down"]), "after": round(v["down"] * (1 - share)), "share": share}
         v["events"] = sorted(v["events"], key=lambda e: -e["strength"])[:4]
         v["tilt"] = "worse" if v["worse"] > v["better"] else "better" if v["better"] > v["worse"] else "even"
     down = sum(v["down"] for v in rows)
@@ -207,12 +247,13 @@ def money_view(p, role, ranked: list, mat: dict, importance_level, cached_insigh
     # чувствительность: к чему компания чувствительна, даже когда событий с деньгами нет
     sens = []
     try:
-        sens = scenario_set(p, ["key_rate", "fx_rub", "labor_market"])[0].get("sensitivity", [])
+        sens = scenario_set(p, ["key_rate", "fx_rub", "labor_market"], user)[0].get("sensitivity", [])
     except Exception:  # чувствительность — справка, не должна ломать карточку
         log.exception("Чувствительность не посчитана")
     return {"up": round(up), "down": round(down), "protect": round(sum(v["down"] for v in rows if v["action"])), "levers": rows,
             "events_used": len(used), "candidates": len({c["event_id"] for c in cands}),
             "dropped": len({c["event_id"] for c in cands} - used), "ai": ai, "rejected": rejected,
             "sensitivity": [{"lever": s["lever"], "title": s["title"], "effect_rub": s["effect_rub"]} for s in sens],
-            "revisions": bank_revisions(p),
+            "revisions": bank_revisions(p, user), "buffers": buffers(p, user), "peers": peers_line(p),
+            "user_numbers": bool(user and any(getattr(user, k) is not None for k in USER_FIELDS)),
             "share_up": round(up / revenue, 4) if revenue else None, "share_down": round(down / revenue, 4) if revenue else None}

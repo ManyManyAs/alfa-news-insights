@@ -19,6 +19,7 @@ from app.agent.chat import answer, answer_stream
 from app.agent.orchestrator import cached_insight, get_or_create_insight
 from app.agent.scenario import MARGIN, bank_baseline, business_levers, relevant_levers, start_month
 from app.agent.scenario import Inputs as ScenarioInputs
+from app.agent.scenario import buffers as scenario_buffers
 from app.agent.scenario import calc as scenario_calc
 from app.agent.scenario import defaults as scenario_defaults
 from app.agent.scenario import scenarios as scenario_set
@@ -574,7 +575,7 @@ def scenario(req: ScenarioRequest, user: str = Depends(current_user)):
     return {"result": res, "defaults": {**defaults, "margin": MARGIN}, "estimated": estimated,
             "levers": relevant_levers(factors, spec) if factors else ["rate", "fx", "wages"], "baseline": bank_baseline(),
             "business": spec, "start_month": start, "months": sc[0]["months"],
-            "base_params": sc[0]["params"], "scenarios": sc}
+            "base_params": sc[0]["params"], "scenarios": sc, "buffers": scenario_buffers(p, req.inputs)}
 
 
 ROLE_FOCUS = {
@@ -631,6 +632,27 @@ def money_at_stake(company_id: str, role: str | None = None, user: str = Depends
     p = authorized_profile(company_id, user)
     rev = p.revenue if not p.revenue_suspicious else None
     return money_view(p, role, cached_rank(p, role, 30), ai_materiality(p.uid, role), importance_level, cached_insight, rev)
+
+
+class MoneyRequest(BaseModel):
+    company_id: str
+    role: str | None = None
+    numbers: dict[str, float | None] = Field(default_factory=dict)
+
+
+@app.post("/api/money")
+def money_at_stake_mine(req: MoneyRequest, user: str = Depends(current_user)):
+    """То же по «моим цифрам» клиента (долг, импорт, ФОТ…): числа приходят в теле запроса и нигде не сохраняются."""
+    from app.agent.money import money_view, user_inputs
+
+    p = authorized_profile(req.company_id, user)
+    try:
+        own = user_inputs(req.numbers)
+    except ValueError as e:
+        raise HTTPException(422, f"Некорректные цифры: {e}") from e
+    rev = p.revenue if not p.revenue_suspicious else None
+    return money_view(p, req.role, cached_rank(p, req.role, 30), ai_materiality(p.uid, req.role), importance_level,
+                      cached_insight, rev, own)
 
 
 @app.get("/api/stories/{story_id}")

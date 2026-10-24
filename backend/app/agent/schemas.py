@@ -61,6 +61,7 @@ class ScenarioRow(BaseModel):
     effect_rub: float
     formula: str = ""
     basis: str = ""
+    calc: str = ""  # формула с подставленными числами: «−162,4 млн ₽ × 50% × 1,0 п.п. = −812 тыс. ₽»
 
 
 class Scenario(BaseModel):

@@ -83,7 +83,7 @@ function moneyBars(levers) {
         <div class="mb-half pos">${uw ? `<i style="width:${uw.toFixed(1)}%"></i><em>${rub(v.up)}</em>` : ""}</div>
       </div>
       <div class="mb-sigs">${evs.slice(0, 2).map(sig).join("")}${evs.length > 2 ? `<details class="more-claims"><summary>Ещё ${evs.length - 2}</summary>${evs.slice(2).map(sig).join("")}</details>` : ""}
-        ${v.action ? `<div class="ml-act">Как ограничить: ${esc(v.action)}</div>` : ""}</div>
+        ${v.action ? `<div class="ml-act">Как ограничить: ${esc(v.action)}${v.protect ? `<span class="ml-prot" title="${esc(`Допущение: ${v.protect.how} закрывает ${Math.round(v.protect.share * 100)}% отклонения`)}"><s>${rub(v.protect.before)}</s> → <b>${rub(v.protect.after)}</b><i>${esc(v.protect.how)}</i></span>` : ""}</div>` : ""}</div>
     </div>`;
   }).join("")}<div class="mb-axis"><span>минус к плану</span><span>прогноз банка = 0</span><span>плюс к плану</span></div></div>`;
 }
