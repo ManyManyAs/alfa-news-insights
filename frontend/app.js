@@ -1258,7 +1258,8 @@ function moneyLine(i, sc, lo, hi) {
   if (moneyOff(i)) return `<div class="sh-range"><span class="sh-note">Деньги: заметного влияния на прибыль за 12 месяцев не ожидаем — суммы не показываем.</span></div>`;
   const neg = sc.negative, pos = sc.positive;
   const main = (neg && neg.rows.length ? neg.rows : pos.rows).slice().sort((a, b) => Math.abs(b.effect_rub) - Math.abs(a.effect_rub))[0];
-  return `<div class="sh-range">${stakeBar(lo, hi)}Что на кону за 12 месяцев: от <b class="${lo < 0 ? "neg" : ""}">${rub(lo)}</b> до <b class="${hi > 0 ? "pos" : ""}">${rub(hi)}</b>
+  const sym = lo < 0 && hi > 0 && Math.abs(lo + hi) <= 0.02 * Math.max(-lo, hi);
+  return `<div class="sh-range">${stakeBar(lo, hi)}${sym ? `<div class="sh-sym">Плюс и минус равны, потому что сценарии симметричны: рычаг отклоняется от прогноза банка на одинаковую величину в обе стороны (например, ставка ±1 п.п.), а связь с компанией линейная.</div>` : ""}Что на кону за 12 месяцев: от <b class="${lo < 0 ? "neg" : ""}">${rub(lo)}</b> до <b class="${hi > 0 ? "pos" : ""}">${rub(hi)}</b>
     <span class="sh-note">если всё пойдёт по прогнозу Альфа-Банка — без изменений к плану${main ? " · главный рычаг — " + esc(main.title.replace(/^./, (c) => c.toLowerCase())) : ""}${sc.base.start_month ? " · начнётся с " + esc((sc.base.months || [])[sc.base.start_month] || "") : ""} · расчёт — в подробном разборе</span></div>`;
 }
 // Новость и позиция банка расходятся — показываем наверху оба взгляда, без выбора «кто прав»
