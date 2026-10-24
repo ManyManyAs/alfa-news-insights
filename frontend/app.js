@@ -553,13 +553,13 @@ async function loadProfile() {
   state.factors = factors; state.exposures = exposures; state.profile = p;
   renderRadar();
   renderHero();
-  const money = (v) => v == null ? "нет данных" : (v >= 1e9 ? (v / 1e9).toFixed(1) + " млрд ₽" : (v / 1e6).toFixed(1) + " млн ₽");
+  const money = (v) => v == null ? "нет данных" : (v >= 1e9 ? (v / 1e9).toFixed(1) + " млрд ₽" : (v / 1e6).toFixed(1) + " млн ₽").replace(".", ",");
   const products = { CL_PRODUCT_RKO_MARK: "РКО", CL_PRODUCT_LOA_MARK: "Кредит", CL_PRODUCT_LEA_MARK: "Лизинг", CL_PRODUCT_DEP_MARK: "Депозит", CL_PRODUCT_ZPP_MARK: "Зарплатный проект", CL_PRODUCT_GAR_MARK: "Гарантии", FACTORING_MARK: "Факторинг", FTS_FLAG: "ВЭД" };
   $("#profileCard").innerHTML = `
     <div class="eyebrow">Профиль, на котором строится персонализация</div>
     <h3>${esc(p.okved_name)}</h3>
     <dl>
-      <dt>ОКВЭД</dt><dd>${esc(p.okved)}</dd>
+      <dt>Код отрасли</dt><dd>${esc(p.okved)} <span class="muted small">по ОКВЭД</span></dd>
       <dt>Регион</dt><dd>${esc(p.region || "—")}</dd>
       <dt>Выручка</dt><dd>${p.revenue_suspicious ? "недостоверна" : money(p.revenue)}</dd>
       <dt>Сотрудники</dt><dd>${esc(p.workers || "—")}</dd>
