@@ -77,9 +77,24 @@ function reportJsError(msg, src) {
   track("js_error", { meta: { msg: String(msg).slice(0, 160), src: String(src || "").replace(location.origin, "").slice(0, 80) } });
 }
 addEventListener("error", (e) => { if (e.message) reportJsError(e.message, `${e.filename || ""}:${e.lineno || 0}`); });
-addEventListener("unhandledrejection", (e) => { const r = e.reason || {}; if (!(r.status && r.status < 500)) reportJsError(r.message || r, "promise"); });
+addEventListener("unhandledrejection", (e) => { const r = e.reason || {}; if (r.network) return; if (!(r.status && r.status < 500)) reportJsError(r.message || r, "promise"); });
 addEventListener("pagehide", flushTrack);
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") flushTrack(); });
+
+// Состояние связи: полоса сверху, пока нет сети; когда связь вернулась — тихо обновляем данные
+function netState(ok) {
+  let bar = document.getElementById("netBar");
+  if (!ok && !bar) {
+    bar = document.createElement("div"); bar.id = "netBar"; bar.setAttribute("role", "status");
+    bar.textContent = "Нет связи с сервером — показаны последние загруженные данные";
+    document.body.appendChild(bar);
+  }
+  if (bar) bar.classList.toggle("on", !ok);
+  if (ok && netState.lost && state.user) { netState.lost = false; reload(); }
+  if (!ok) netState.lost = true;
+}
+addEventListener("offline", () => netState(false));
+addEventListener("online", () => { netState.lost = true; netState(true); });
 
 // Сессия — в HttpOnly-cookie: браузер отправляет её сам, JS её не видит
 function apiError(status, text) {
@@ -91,7 +106,16 @@ function apiError(status, text) {
   return err;
 }
 async function api(path, opts = {}) {
-  const r = await fetch(path, { credentials: "same-origin", ...opts, headers: { "Content-Type": "application/json", ...(opts.headers || {}) } });
+  let r;
+  try {
+    r = await fetch(path, { credentials: "same-origin", ...opts, headers: { "Content-Type": "application/json", ...(opts.headers || {}) } });
+  } catch (e) {  // сеть пропала или сервер перезапускается: понятное сообщение вместо «Failed to fetch»
+    netState(false);
+    const err = new Error("Нет связи с сервером. Проверьте интернет — данные обновятся сами, когда связь вернётся.");
+    err.status = 0; err.network = true;
+    throw err;
+  }
+  netState(true);
   if (!r.ok) throw apiError(r.status, await r.text());
   return r.json();
 }
@@ -1081,6 +1105,11 @@ function effectChart(list) {
       ${ticks.map((v) => `<line x1="${L}" x2="${W - R}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" class="${Math.abs(v) < 1e-6 ? "ec-zero" : "ec-grid"}"/><text x="${L - 8}" y="${(y(v) + 4).toFixed(1)}" class="ec-ax" text-anchor="end">${v === 0 ? "0" : esc(rub(v))}</text>`).join("")}
       ${months.map((m, k) => k % 2 === 0 || k === 11 ? `<text x="${x(k).toFixed(1)}" y="${H - 10}" class="ec-ax" text-anchor="middle">${esc(m)}</text>` : "").join("")}
       ${startMark}${lines.join("")}
+      ${months.map((m, k) => {
+        const w = (W - L - R) / 12, tip = `${m}: ` + SCEN_ORDER.map((n) => ok.find((sc) => sc.name === n)).filter(Boolean)
+          .map((sc) => `${SCEN_SHORT[sc.name].toLowerCase()} ${rub(sc.monthly[k])}`).join(" · ");
+        return `<g class="ec-hit"><line x1="${x(k).toFixed(1)}" x2="${x(k).toFixed(1)}" y1="${T}" y2="${H - B}"/><rect x="${(x(k) - w / 2).toFixed(1)}" y="${T}" width="${w.toFixed(1)}" height="${H - T - B}"><title>${esc(tip)}</title></rect></g>`;
+      }).join("")}
     </svg>
     <div class="ec-legend">${SCEN_ORDER.filter((n) => ok.find((s) => s.name === n)).map((n) => `<span><i class="${n}"></i>${SCEN_SHORT[n]}</span>`).join("")}</div></div>`;
 }

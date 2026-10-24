@@ -225,6 +225,11 @@ async def shots(b):
         await pg.evaluate("applyTheme('dark')")
         await asyncio.sleep(1.5)
         await pg.screenshot(path=OUT / "09_home_dark.png")
+        await pg.evaluate("document.querySelector('#homeStrip').scrollIntoView({block: 'start'}); scrollBy(0, -80)")
+        await asyncio.sleep(0.8)
+        await pg.screenshot(path=OUT / "09b_home_dark_strip.png")
+        await open_first_insight(pg)
+        await pg.screenshot(path=OUT / "09c_insight_dark.png")
 
     await step("тёмная тема", s_dark())
     await ctx.close()
