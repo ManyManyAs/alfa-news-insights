@@ -59,9 +59,15 @@ function renderSparks() {
     if (!s) { s = document.createElement("span"); s.className = "hs-spark"; tile.appendChild(s); }
     s.innerHTML = html; s.title = label;
   };
-  const risks = byDay((x) => x.effect === "risk");
-  put("[data-strip=radar]", sparkSvg(risks, "risk"), `Риски по дням за неделю: ${risks.join(", ")}`);
-  if (state.tasks) {
+  // за неделю тихо — показываем недели (8 недель), иначе линия у нуля ничего не говорит
+  let risks = byDay((x) => x.effect === "risk"), unit = "по дням за неделю";
+  if (!risks.some(Boolean)) {
+    unit = "по неделям за 2 месяца";
+    risks = Array.from({ length: 8 }, (_, k) => { const d1 = new Date(+today + 864e5 - (7 - k) * 7 * 864e5), d0 = new Date(+d1 - 7 * 864e5);
+      return state.feed.filter((x) => x.effect === "risk" && x.published_at && new Date(x.published_at) >= d0 && new Date(x.published_at) < d1).length; });
+  }
+  put("[data-strip=radar]", sparkSvg(risks, "risk"), `Риски ${unit}: ${risks.join(", ")}`);
+  if (state.tasks && state.tasks.length) {
     const all = state.tasks.length, done = state.tasks.filter((t) => t.status !== "open").length;
     put("[data-strip=tasks]", `<span class="hs-prog" aria-hidden="true"><i style="width:${all ? Math.round(done / all * 100) : 0}%"></i></span><small>${done} из ${all} готово</small>`, `Выполнено ${done} из ${all}`);
   }
@@ -114,7 +120,7 @@ function openCmd() {
   let d = document.getElementById("cmdk");
   if (!d) {
     d = document.createElement("dialog"); d.id = "cmdk"; d.setAttribute("aria-label", "Поиск по сервису");
-    d.innerHTML = `<div class="cmd"><label class="cmd-in">${ico("search")}<input id="cmdInput" type="search" placeholder="Событие, раздел, действие или вопрос к аналитике банка" autocomplete="off" aria-controls="cmdList"><kbd>Esc</kbd></label>
+    d.innerHTML = `<div class="cmd"><label class="cmd-in">${ico("search")}<input id="cmdInput" type="text" placeholder="Событие, раздел, действие или вопрос к аналитике банка" autocomplete="off" aria-controls="cmdList"><kbd>Esc</kbd></label>
       <ul class="cmd-list" id="cmdList" role="listbox"></ul><div class="cmd-bank" id="cmdBank"></div>
       <div class="cmd-foot muted small"><span><kbd>↑</kbd><kbd>↓</kbd> выбрать</span><span><kbd>Enter</kbd> открыть</span><span><kbd>Ctrl</kbd>+<kbd>K</kbd> в любом месте</span></div></div>`;
     document.body.appendChild(d);
@@ -127,6 +133,7 @@ function openCmd() {
       if (e.key === "ArrowDown") { e.preventDefault(); state.cmdSel = (state.cmdSel + 1) % Math.max(1, n); drawCmd(false); }
       else if (e.key === "ArrowUp") { e.preventDefault(); state.cmdSel = (state.cmdSel - 1 + n) % Math.max(1, n); drawCmd(false); }
       else if (e.key === "Enter") { e.preventDefault(); runCmd(state.cmdSel); }
+      else if (e.key === "Escape") { e.preventDefault(); d.close(); }
     };
   }
   state.cmdSel = 0;

@@ -239,6 +239,7 @@ async def shots(b):
         await asyncio.sleep(1.5)
         await pg.screenshot(path=OUT / "18_search.png")
         await pg.keyboard.press("Escape")
+        await wait_js(pg, "!document.querySelector('#cmdk[open]')", 5)
         await pg.click("#homeSetupBtn")
         await pg.wait_for_selector("#actionDialog[open] .hs-setup", timeout=10000)
         await pg.screenshot(path=OUT / "19_home_setup.png")
