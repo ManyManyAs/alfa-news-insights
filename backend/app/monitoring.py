@@ -16,7 +16,8 @@ from app.storage import db
 ALLOWED = {
     "home_view", "widget_click", "feed_view", "card_open", "preview_ready", "draft_ready", "insight_ready", "source_click",
     "action_open", "chat_question", "whatif_open", "digest_view", "tour_start", "tour_finish", "map_hover",
-    "detail_open", "detail_close", "cmd_open", "cmd_run", "globe_place", "home_setup", "onboard_step", "chat_rating",
+    "detail_open", "detail_close",
+    "cmd_open", "cmd_run", "globe_place", "home_setup", "onboard_step", "chat_rating", "trace_export",  # этапы 5–8
     "js_error",  # ошибка в браузере: только текст ошибки и файл:строка, без данных пользователя
 }
 

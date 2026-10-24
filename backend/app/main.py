@@ -488,10 +488,14 @@ def importance_level(score: float, mat: tuple[int, str] | None) -> dict:
     от модели не превращается в «высокую». Понизить — может всегда.
     """
     rules = 3 if score >= IMPORTANCE_HIGH else 2 if score >= IMPORTANCE_MID else 1
+    # «почему такая важность» (этап 8): оценка по профилю, пороги и что сделала поправка модели
+    base = {"rules_level": rules, "rules_label": IMPORTANCE_RU[rules], "score": round(score, 3),
+            "thresholds": {"mid": IMPORTANCE_MID, "high": IMPORTANCE_HIGH}}
     if mat is None:
-        return {"level": rules, "label": IMPORTANCE_RU[rules], "source": "profile", "why": ""}
+        return {"level": rules, "label": IMPORTANCE_RU[rules], "source": "profile", "why": "", **base}
     level = min(int(mat[0]), rules + 1)
-    return {"level": level, "label": IMPORTANCE_RU[level], "source": "ai", "why": mat[1] or ""}
+    return {"level": level, "label": IMPORTANCE_RU[level], "source": "ai", "why": mat[1] or "", "ai_level": int(mat[0]),
+            "capped": int(mat[0]) > rules + 1, **base}
 
 
 def ai_materiality(company_uid: str, role: str | None) -> dict[str, tuple[int, str]]:
@@ -1146,12 +1150,22 @@ def proof():
             return {}
 
     judges, red, base = read("docs/llm/judges.json"), read("docs/llm/redteam_live.json"), read("docs/quality/baseline.json")
+    ds = read("docs/llm/deepseek_only.json")
     ov = (judges.get("agreement") or {}).get("overall") or {}
     rows = red.get("results") or []
+
+    def variant(v: dict) -> dict:
+        return {"glm": (v.get("glm") or {}).get("overall"), "kimi": (v.get("kimi") or {}).get("overall"),
+                "grounding": [(v.get(j) or {}).get("axes", {}).get("grounding") for j in ("glm", "kimi")],
+                "seconds_p50": v.get("seconds_p50"), "rub_mean": v.get("rub_mean")}
     return {
         "judges": {"glm": ov.get("glm"), "kimi": ov.get("kimi"), "n": (judges.get("agreement") or {}).get("n"),
                    "run_at": (judges.get("run_at") or "")[:10]},
-        "redteam": {"passed": sum(1 for r in rows if r.get("passed")), "total": len(rows), "run_at": (red.get("run_at") or "")[:10]},
+        "redteam": {"passed": sum(1 for r in rows if r.get("passed")), "total": len(rows), "run_at": (red.get("run_at") or "")[:10],
+                    "attacks": [{"title": r.get("title"), "kind": r.get("kind"), "passed": bool(r.get("passed")),
+                                 "checks": len(r.get("checks") or {})} for r in rows]},
+        "models": ({"n": ds.get("n_pairs"), "run_at": (ds.get("run_at") or "")[:10], "mixed": variant(ds.get("current") or {}),
+                    "deepseek": variant(ds.get("deepseek_only") or {})} if ds else None),
         "offline": {"p3": (base.get("relevance") or {}).get("p3"), "recall5": base.get("retrieval_recall5"),
                     "f1": (base.get("classification") or {}).get("f1"),
                     "critical10": (base.get("relevance") or {}).get("critical_recall10")},

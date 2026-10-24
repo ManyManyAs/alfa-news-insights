@@ -283,3 +283,12 @@ def test_task_kanban_and_request_statuses(client, demo):
     assert me["status"] == "accepted" and me["product"] == "Кредит"
     assert client.patch(f"/api/actions/{me['id']}", headers=h, json={"company_id": cid, "status": "resolved"}).status_code == 200
     assert next(x for x in client.get(f"/api/actions?company_id={cid}", headers=h).json()["items"] if x["id"] == me["id"])["status"] == "resolved"
+
+
+def test_importance_explained_and_proof_details(client, demo):
+    """Этап 8: у важности — оценка по профилю и пороги; «Как мы проверяли» — список атак red-team и сравнение моделей."""
+    h, cid = {"X-User-Id": demo["user_id"]}, demo["primary_company"]
+    imp = client.get(f"/api/feed?company_id={cid}", headers=h).json()["items"][0]["imp"]
+    assert {"rules_level", "score", "thresholds"} <= set(imp) and imp["level"] <= imp["rules_level"] + 1
+    p = client.get("/api/proof").json()
+    assert isinstance(p["redteam"]["attacks"], list)

@@ -326,7 +326,7 @@ function show(view, sub) {
   document.querySelectorAll(".nav-item[data-view]").forEach((n) => n.classList.toggle("active", n.dataset.view === view
     && (view !== "bank" || n.dataset.bank === (sub || state.bank || "accounts"))));
   if (view === "bank") openBank(sub || state.bank || "accounts");
-  if (view === "metrics") { loadMetrics(); renderProof($("#proofBox")); }
+  if (view === "metrics") { loadMetrics(); renderProof($("#proofBox")); renderOps($("#opsBox")); }
   if (view === "sources") loadSources();
   if (view === "digest") { loadDigest(); track("digest_view"); }
   if (view === "forecasts") loadForecasts();
@@ -1662,6 +1662,7 @@ function renderInsight(tab) {
       <span class="muted small">${state.pending === state.current ? "<span class='pending-dot' aria-hidden='true'></span>Черновик ИИ готов · агент проверяет факты и уточняет разбор" : i.generated_by.startsWith("llm") ? "Разбор подготовлен ИИ и проверен на ошибки" : "Быстрый разбор по профилю компании"} · ${allOk ? "<span class='ok'>✓ самопроверка пройдена</span>" : "<span title='Подробности — в блоке «На чём основан вывод»'>самопроверка: есть замечания</span>"}</span></div>
       <span class="ins-actions"><button class="btn ghost small" id="pdfBtn" title="Сохранить разбор в PDF через печать браузера">${ico("doc")} PDF</button><button class="btn ghost small" id="refreshBtn" title="Пересобрать разбор заново">Пересчитать</button></span></div>
     <h2 style="margin-top:8px">${esc(i.headline)}</h2>
+    ${impExplain((state.feed || []).find((x) => x.event_id === state.current))}
     ${shortBlock(i)}
     ${divergenceBlock(i)}
     ${state.detail ? storyDelta(i) + numbersBlock(i) : ""}
@@ -1757,11 +1758,13 @@ async function loadTaskCount() {
 async function loadTrace(traceId) {
   const { steps } = await api(`/api/trace/${traceId}`);
   $("#traceBox").classList.remove("loading");
-  $("#traceBox").innerHTML = `<p class="muted small">Как агент пришёл к выводу: какие данные он взял, какие модели и проверки участвовали, сколько это заняло и стоило.</p>`
-    + traceTimeline(steps) + `<details class="trace-raw"><summary>Технические детали: вход и выход каждого шага</summary>` + steps.map((s) => `<div class="trace-step">
+  $("#traceBox").innerHTML = `<div class="tr-head"><p class="muted small">Как агент пришёл к выводу: какие данные он взял, какие модели и проверки участвовали, сколько это заняло и стоило.</p>
+    <button class="btn ghost small" id="traceExport">${ico("doc")} Выгрузить JSON</button></div>`
+    + agentGraph(steps) + draftDiff(steps, state.insight) + traceTimeline(steps) + `<details class="trace-raw"><summary>Технические детали: вход и выход каждого шага</summary>` + steps.map((s) => `<div class="trace-step">
     <div><span class="k">${esc(s.kind)}</span> <b>${s.step_no}. ${esc(s.name)}</b>
     <span class="muted small">${s.model ? "· " + esc(s.model) : ""} · ${s.duration_ms} мс${s.tokens_in ? ` · ${s.tokens_in}/${s.tokens_out} ток. · ${(+s.cost_rub).toFixed(3)} ₽` : ""}</span></div>
     <details><summary class="small muted">вход/выход</summary><pre>${esc(JSON.stringify({ input: s.input, output: s.output }, null, 2))}</pre></details></div>`).join("") + `</details>`;
+  $("#traceExport").onclick = () => { exportTrace(traceId, steps); track("trace_export"); };
 }
 
 // ---------------------------------------------------------------- чат
