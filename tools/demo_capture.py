@@ -184,6 +184,10 @@ async def shots(b):
         await pg.click(".nav-item[data-view=calendar]")
         await pg.wait_for_selector("#calendarBox .cal-item, #calendarBox .card", timeout=20000)
         await asyncio.sleep(0.5)
+        if await pg.locator("#calendarBox [data-cgday]").count():  # превью события при наведении на день
+            await pg.hover("#calendarBox [data-cgday] >> nth=0")
+            await pg.wait_for_selector("#calendarBox .cg-pop:not([hidden])", timeout=5000)
+            await asyncio.sleep(0.4)
         await pg.screenshot(path=OUT / "14_calendar.png")
 
     async def s_forecasts():

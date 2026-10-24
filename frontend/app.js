@@ -1032,7 +1032,13 @@ function toggleBell(open) {
 function fillFactorFilter() {
   const seen = new Map();
   state.feed.forEach((it) => it.reasons.forEach((r) => { if (!["country", "industry", "region"].includes(r.factor)) seen.set(r.factor, r.factor_title); }));
-  $("#fFactor").innerHTML = `<option value="">Все факторы</option>` + [...seen].map(([k, v]) => `<option value="${esc(k)}">${esc(v)}</option>`).join("");
+  // главные для бизнеса темы — сверху в постоянном порядке (ставка, кредит, инфляция, налоги, курс), остальные — как в ленте
+  const TOP_F = ["key_rate", "credit_conditions", "inflation", "tax_regulation", "fx_rub"];
+  const list = [...seen].filter(([k]) => k !== "watch").sort((a, b) => {
+    const ia = TOP_F.indexOf(a[0]), ib = TOP_F.indexOf(b[0]);
+    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+  });
+  $("#fFactor").innerHTML = `<option value="">Все факторы</option>` + list.map(([k, v]) => `<option value="${esc(k)}">${esc(v)}</option>`).join("");
   $("#fFactor").value = seen.has(filters.factor) ? filters.factor : "";
 }
 function visibleFeed() {
@@ -1903,21 +1909,9 @@ async function loadDigest() {
       ${d.bank_revisions.length ? `<div class="sub-h">Альфа-Банк пересмотрел прогнозы</div><ul class="dg-list">${d.bank_revisions.map((x) => `<li>${esc(x.text)}</li>`).join("")}</ul>` : ""}
     </div>
     <div class="dg-side">
-      <div class="card email">
-        <div class="muted small">Предпросмотр письма</div>
-        <div class="em-head"><div><b>Альфа-Бизнес · Бизнес-радар</b></div><div class="muted small">Тема: ${esc(d.quiet ? `${d.period === "day" ? "Спокойный день" : "Спокойная неделя"} для вашего бизнеса` : `${d.top.length} ${plural(d.top.length, "событие", "события", "событий")} ${per}: ${d.top[0] ? d.top[0].title.slice(0, 60) : ""}`)}</div></div>
-        <div class="em-body"><p>Здравствуйте! Подборка ${per} для роли «${esc(d.role_title)}».</p>
-          <ol>${d.top.slice(0, 3).map((t) => `<li><b>${esc(t.title)}</b><br><span class="muted">${esc(t.why)}</span></li>`).join("")}</ol>
-          <p><button type="button" class="em-btn btn" id="digestOpen">Открыть Бизнес-радар</button></p>
-          <p class="muted small">Это демонстрация: письмо не отправляется.</p></div>
-      </div>
       ${pushCard()}
-      <div class="card push"><div class="muted small">Предпросмотр push</div>
-        <div class="push-n"><b>Альфа-Бизнес</b><div>${esc(d.top[0] ? `${EFFECT[d.top[0].effect][0].toUpperCase() + EFFECT[d.top[0].effect].slice(1)}: ${d.top[0].title}` : "Важных событий нет")}</div></div></div>
     </div>`;
   bindCards(box);
-  const open = document.getElementById("digestOpen");
-  if (open) open.onclick = () => show("radar");
   bindPush();
 }
 
@@ -2158,14 +2152,15 @@ async function loadCalendar() {
     const mth = month(x.date);
     if (mth !== cur) { html += `${cur ? "</ul>" : ""}<h3 class="cal-month">${esc(mth[0].toUpperCase() + mth.slice(1))}</h3><ul class="cal">`; cur = mth; }
     const d = new Date(x.date), n = days(x.date), [label, cls] = CAL_KIND[x.kind];
-    html += `<li class="cal-item ${x.event_id || x.task ? "link" : ""}" ${x.event_id ? `data-cev="${esc(x.event_id)}"` : x.task ? `data-ctask="1"` : ""} tabindex="${x.event_id || x.task ? 0 : -1}">
+    html += `<li class="cal-item ${x.event_id || x.task ? "link" : ""}" data-cdate="${esc(x.date)}" ${x.event_id ? `data-cev="${esc(x.event_id)}"` : x.task ? `data-ctask="1"` : ""} tabindex="${x.event_id || x.task ? 0 : -1}">
       <div class="cal-date"><b>${d.getDate()}</b><span>${d.toLocaleDateString("ru-RU", { weekday: "short" })}</span></div>
       <div class="cal-body"><span class="pill ${cls}">${label}</span><span class="muted small">${n === 0 ? "сегодня" : `через ${n} ${plural(n, "день", "дня", "дней")}`}</span>
         <b>${esc(x.title)}</b>${x.note ? `<div class="muted small">${esc(x.note)}</div>` : ""}</div></li>`;
   }
-  box.innerHTML = items.length ? `<div class="card cal-card">${calendarStrip(items, c.today, c.until)}${html}</ul>
+  box.innerHTML = items.length ? `<div class="card cal-card"><div class="cal-grids" id="calGrids"></div><h3 class="cal-list-h">События по датам</h3>${html}</ul>
       <p class="muted small">Даты заседаний — <a href="${esc(c.source_url)}" target="_blank" rel="noopener">календарь Банка России</a>. Сроки действий — из «Моих действий».</p></div>`
     : `<div class="card"><p class="muted">В ближайшие ${c.horizon_days} дней ключевых дат нет.</p></div>`;
+  const cg = document.getElementById("calGrids"); if (cg) renderCalGrids(cg, items, c.today);
   box.querySelectorAll("[data-cs]").forEach((b) => b.onclick = () => {
     const li = box.querySelectorAll(".cal-item")[+b.dataset.cs];
     if (li) { li.scrollIntoView({ behavior: "smooth", block: "center" }); li.classList.add("flash"); setTimeout(() => li.classList.remove("flash"), 1400); }
@@ -2235,9 +2230,17 @@ function rateMarketCard(rm) {
 function revTimeline(fcs) {
   const rv = fcs.filter((f) => f.revision && f.period >= "2026").sort((a, b) => String(b.revision.to_date).localeCompare(String(a.revision.to_date)));
   if (!rv.length) return "";
-  return `<div class="card rt-card"><div class="eyebrow">Хронология пересмотров</div><ol class="rt">${rv.slice(0, 8).map((f) => `<li class="${f.revision.direction}">
-    <span class="rt-d">${fmtDate(f.revision.to_date)}</span><span class="rt-t">${esc(f.title)}, ${esc(f.period)}</span>
-    <span class="rt-v">${fmtVal(f.revision.from, f.unit)} <i>${f.revision.direction === "up" ? "↗" : "↘"}</i> <b>${fmtVal(f.revision.to, f.unit)}</b></span></li>`).join("")}</ol></div>`;
+  const list = rv.slice(0, 8), up = list.filter((f) => f.revision.direction === "up").length;
+  // насколько изменился прогноз относительно прежнего значения — длина полоски (п.п. для процентов, % для остального)
+  const delta = (f) => { const r = f.revision; return f.unit.startsWith("%") ? r.to - r.from : (r.to - r.from) / Math.abs(r.from || 1) * 100; };
+  const dtxt = (f) => { const d = delta(f), v = String(Math.round(Math.abs(d) * 10) / 10).replace(".", ","); return `${d > 0 ? "+" : "−"}${v}${f.unit.startsWith("%") ? " п.п." : "%"}`; };
+  const max = Math.max(...list.map((f) => Math.abs(delta(f))), 0.1);
+  return `<div class="card rt-card"><div class="rt-head"><div class="eyebrow">Хронология пересмотров</div>
+    <span class="muted small">${list.length} ${plural(list.length, "пересмотр", "пересмотра", "пересмотров")}: ${up} вверх · ${list.length - up} вниз</span></div>
+    <ol class="rt">${list.map((f) => `<li class="${f.revision.direction}">
+      <span class="rt-d">${fmtDate(f.revision.to_date)}</span>
+      <span class="rt-t">${esc(f.title)}<small>${esc(f.period)} г. · было ${fmtVal(f.revision.from, f.unit)} (${fmtDate(f.revision.from_date)})</small></span>
+      <span class="rt-v"><b>${fmtVal(f.revision.to, f.unit)}</b><span class="rt-bar"><i style="width:${Math.max(8, Math.abs(delta(f)) / max * 100).toFixed(0)}%"></i></span><em>${f.revision.direction === "up" ? "↗" : "↘"} ${dtxt(f)}</em></span></li>`).join("")}</ol></div>`;
 }
 const DOC_TYPE = { macro: "Макроэкономика", debt_market: "Долговой рынок", commodities: "Сырьё", equity_sector: "Отрасли и акции" };
 function libraryBlock(lib) {
@@ -2318,14 +2321,32 @@ async function updateRevBadge() {
   if (state.feed) updateBadge();
 }
 function stepChart(f) {
-  const h = f.history || [];
+  // история прогноза по датам выхода материалов; без изменений (одно и то же число) график не рисуем — там нечего показать
+  const h = (f.history || []).filter((x) => x && x.value != null);
   if (h.length < 2) return "";
-  const vals = h.map((x) => x.value), lo = Math.min(...vals), hi = Math.max(...vals), W = 220, H = 54, pad = 10;
-  const sx = (i) => pad + i * (W - 2 * pad) / (h.length - 1), sy = (v) => hi === lo ? H / 2 : H - pad - (v - lo) / (hi - lo) * (H - 2 * pad);
-  const pts = h.map((x, i) => `${sx(i)},${sy(x.value)}`).join(" ");
+  const vals = h.map((x) => x.value), lo = Math.min(...vals), hi = Math.max(...vals);
+  if (hi === lo) return `<div class="fc-flat muted small">${ico("info")} Банк не менял прогноз: ${fmtVal(hi, f.unit)} в ${h.length} ${plural(h.length, "материале", "материалах", "материалах")}</div>`;
+  const W = 240, H = 74, px = 14, top = 16, bot = 18;
+  const t = h.map((x) => +new Date(x.date)), t0 = Math.min(...t), t1 = Math.max(...t);
+  const sx = (i) => t1 === t0 ? px + i * (W - 2 * px) / (h.length - 1) : px + (t[i] - t0) / (t1 - t0) * (W - 2 * px);
+  const span = hi - lo, sy = (v) => top + (1 - (v - lo) / span) * (H - top - bot);
+  const P = h.map((x, i) => [sx(i), sy(x.value)]);
+  // плавная кривая (сплайн Катмулла — Рома) через точки, без выбросов за пределы значений
+  let d = `M${P[0][0].toFixed(1)} ${P[0][1].toFixed(1)}`;
+  for (let i = 0; i < P.length - 1; i++) {
+    const p0 = P[i - 1] || P[i], p1 = P[i], p2 = P[i + 1], p3 = P[i + 2] || p2, k = 1 / 6;
+    const c1 = [p1[0] + (p2[0] - p0[0]) * k, Math.min(Math.max(p1[1] + (p2[1] - p0[1]) * k, top), H - bot)];
+    const c2 = [p2[0] - (p3[0] - p1[0]) * k, Math.min(Math.max(p2[1] - (p3[1] - p1[1]) * k, top), H - bot)];
+    d += ` C${c1[0].toFixed(1)} ${c1[1].toFixed(1)} ${c2[0].toFixed(1)} ${c2[1].toFixed(1)} ${p2[0].toFixed(1)} ${p2[1].toFixed(1)}`;
+  }
+  const last = P.length - 1, col = h[last].value > h[0].value ? "var(--risk)" : "var(--opp)";
   return `<svg viewBox="0 0 ${W} ${H}" class="fc-spark" role="img" aria-label="История прогноза: ${h.map((x) => fmtVal(x.value, f.unit) + " (" + fmtDate(x.date) + ")").join(", ")}">
-    <polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2"/>
-    ${h.map((x, i) => `<circle cx="${sx(i)}" cy="${sy(x.value)}" r="3" fill="var(--accent)"><title>${fmtDate(x.date)}: ${fmtVal(x.value, f.unit)}</title></circle>`).join("")}</svg>`;
+    <path d="${d} L${P[last][0].toFixed(1)} ${H - bot} L${P[0][0].toFixed(1)} ${H - bot} Z" fill="${col}" opacity=".1"/>
+    <path d="${d}" fill="none" stroke="${col}" stroke-width="2.2" stroke-linecap="round"/>
+    ${P.map(([x, y], i) => `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${i === last ? 3.6 : 2.6}" fill="${i === last ? col : "var(--surface)"}" stroke="${col}" stroke-width="1.6"><title>${fmtDate(h[i].date)}: ${fmtVal(h[i].value, f.unit)}</title></circle>`).join("")}
+    <text x="${P[0][0].toFixed(1)}" y="${(P[0][1] - 6).toFixed(1)}" class="fc-lbl" text-anchor="start">${esc(fmtVal(h[0].value, f.unit))}</text>
+    <text x="${P[last][0].toFixed(1)}" y="${(P[last][1] - 6).toFixed(1)}" class="fc-lbl end" text-anchor="end">${esc(fmtVal(h[last].value, f.unit))}</text>
+    <text x="${px}" y="${H - 3}" class="fc-dt">${esc(fmtDate(h[0].date))}</text><text x="${W - px}" y="${H - 3}" class="fc-dt" text-anchor="end">${esc(fmtDate(h[last].date))}</text></svg>`;
 }
 async function loadForecasts() {
   const box = $("#forecastsBox");
@@ -2358,7 +2379,7 @@ async function loadForecasts() {
       <p class="muted small">Число у пункта меню «Прогнозы банка» — пересмотры, которых вы ещё не видели; после открытия этого раздела оно пропадает. Сценарии в разборах строятся от последнего прогноза банка: «база» — это он.</p></div>` : ""}
     <h3 class="fc-h">Темы, к которым чувствительна компания</h3>
     <div class="fc-grid">${rel.map(card).join("") || `<p class="muted">Нет прогнозов банка по темам компании.</p>`}</div>
-    <details class="fc-more"><summary>Остальные прогнозы банка (${other.length})</summary><div class="fc-grid">${other.map(card).join("")}</div></details>
+    <details class="fc-more"><summary>Остальные прогнозы банка (${other.length}) <span class="fc-why">— темы, к которым компания по данным профиля не чувствительна: нет связи через кредиты, ВЭД, отрасль или контрагентов</span></summary><div class="fc-grid">${other.map(card).join("")}</div></details>
     <p class="muted small">${d.theses_count} тезисов и ${d.forecasts.length} прогнозов из ${(d.documents || []).length} аналитических материалов Альфа-Банка.</p>`;
   bindForecasts(box);
   markRevsSeen(revs);
