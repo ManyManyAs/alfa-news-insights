@@ -195,3 +195,22 @@ def test_money_bank_revisions_are_facts_with_source(client, demo):
     h = {"X-User-Id": demo["user_id"]}
     m = client.get(f"/api/money?company_id={demo['primary_company']}&role={demo['role']}", headers=h).json()
     assert "revisions" in m
+
+
+def test_money_with_my_numbers_and_numeric_formulas(client, demo):
+    """Этап 2: «мои цифры» пересчитывают деньги на кону; у строк калькулятора — формула с подставленными числами;
+    запас прочности — тем же калькулятором."""
+    h, cid = {"X-User-Id": demo["user_id"]}, demo["primary_company"]
+    base = client.get(f"/api/money?company_id={cid}&role={demo['role']}", headers=h).json()
+    assert "buffers" in base and not base["user_numbers"]
+    mine = client.post("/api/money", headers=h, json={"company_id": cid, "role": demo["role"],
+                                                      "numbers": {"debt_rub": 0, "deposits_rub": 0, "revenue_rub": 1e9}}).json()
+    assert mine["user_numbers"]
+    assert all(b["lever"] != "rate" for b in mine["buffers"])  # без долга ставка не съест выручку
+    bad = client.post("/api/money", headers=h, json={"company_id": cid, "numbers": {"floating_share": 5}})
+    assert bad.status_code == 422
+    r = client.post("/api/scenario", headers=h, json={"company_id": cid, "inputs": {"debt_rub": 100e6, "floating_share": 0.5, "deposits_rub": 0,
+                                                                                   "rate_delta_pp": 1.0}}).json()
+    rate = next(x for x in r["result"]["rows"] if x["lever"] == "rate")
+    assert rate["calc"].startswith("−100,0 млн ₽ × 50% × 1,0 п.п.") and rate["effect_rub"] == -500_000
+    assert any(b["lever"] == "rate" and b["value"] > 0 for b in r["buffers"]) or not r["defaults"].get("revenue_rub")

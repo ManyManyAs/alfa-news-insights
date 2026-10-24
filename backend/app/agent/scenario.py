@@ -27,7 +27,7 @@ from app.knowledge.bank import get_knowledge
 
 AVG_MONTHLY_WAGE = 95_000  # ₽, оценка средней зарплаты для ФОТ по численности (явно помечается как оценка)
 PAYROLL_TAXES = 1.3  # страховые взносы
-CALC_VERSION = 5  # меняется вместе с формулами: разборы в кэше и снапшоте пересчитываются при чтении
+CALC_VERSION = 6  # меняется вместе с формулами: разборы в кэше и снапшоте пересчитываются при чтении
 MARGIN = 0.25  # маржинальный доход с рубля выручки (оценка: какая часть изменения выручки доходит до прибыли)
 PURCHASES_SHARE = 0.6  # закупки ≈ 60% выручки (оценка)
 RATE_FACTORS = {"key_rate", "credit_conditions", "bond_market"}
@@ -234,17 +234,24 @@ def calc(p: CompanyProfile, inp: Inputs, spec: dict | None = None, start: int = 
         dep = (v["deposits_rub"] or 0) * inp.rate_delta_pp / 100
         rows.append({"lever": "rate", "title": "Ставка по кредитам и депозитам", "effect_rub": round(debt + dep),
                      "formula": f"−долг × доля под плавающей ставкой × ({num(inp.rate_delta_pp)} п.п. к прогнозу банка)"
-                                + (" + доход по депозитам" if dep else ""), "basis": "кредиты и депозиты компании"})
+                                + (" + доход по депозитам" if dep else ""), "basis": "кредиты и депозиты компании",
+                     "calc": f"−{_m(v['debt_rub'])} × {_share(v['floating_share'])} × {_d(inp.rate_delta_pp)} п.п."
+                             + (f" + {_m(v['deposits_rub'])} × {_d(inp.rate_delta_pp)} п.п." if dep else "")
+                             + f" = {_eq(round(debt + dep))}"})
     if v["import_rub"] or v["export_rub"]:
         imp = -(v["import_rub"] or 0) * inp.fx_change_pct / 100 * (1 - (v["pass_through"] or 0))
         exp = (v["export_rub"] or 0) * inp.fx_change_pct / 100
         rows.append({"lever": "fx", "title": "Курс рубля", "effect_rub": round(imp + exp),
                      "formula": f"−импорт × ({num(inp.fx_change_pct, 0)}% к прогнозу курса) × (1 − доля, переносимая в цены)"
-                                + (" + выручка экспорта" if exp else ""), "basis": "внешнеторговые платежи"})
+                                + (" + выручка экспорта" if exp else ""), "basis": "внешнеторговые платежи",
+                     "calc": f"−{_m(v['import_rub'])} × {_d(inp.fx_change_pct)}% × (1 − {_share(v['pass_through'])})"
+                             + (f" + {_m(v['export_rub'])} × {_d(inp.fx_change_pct)}%" if exp else "") + f" = {_eq(round(imp + exp))}"})
     if v["payroll_rub"] and (inp.wage_growth_pct is not None or inp.planned_wage_growth_pct is not None):
-        rows.append({"lever": "wages", "title": "Зарплаты", "effect_rub": round(-v["payroll_rub"] * (wage - planned) / 100),
+        w_eff = round(-v["payroll_rub"] * (wage - planned) / 100)
+        rows.append({"lever": "wages", "title": "Зарплаты", "effect_rub": w_eff,
                      "formula": f"−ФОТ × (рост {num(wage)}% − {num(planned)}% заложено в бюджет по прогнозу банка)",
-                     "basis": "фонд оплаты труда"})
+                     "basis": "фонд оплаты труда",
+                     "calc": f"−{_m(v['payroll_rub'])} × ({_d(wage)}% − {_d(planned)}%) = {_eq(w_eff)}"})
     spec = spec or {}
     rev = v["revenue_rub"]
     active = (12 - start) / 12
@@ -256,19 +263,24 @@ def calc(p: CompanyProfile, inp: Inputs, spec: dict | None = None, start: int = 
         rows.append({"lever": "demand", "title": f"Выручка: {_low(sp['title'])}", "effect_rub": round(eff),
                      "formula": f"выручка × {sp['share']:.0%} × ({num(inp.demand_change_pct, 1)}% спроса для компании) "
                                 f"× {margin:.0%} маржинальность" + (f" × {12 - start} мес. из 12" if start else ""),
-                     "basis": sp["basis"]})
+                     "basis": sp["basis"],
+                     "calc": f"{_m(rev)} × {sp['share']:.0%} × {_d(inp.demand_change_pct)}% × {margin:.0%}"
+                             + (f" × {12 - start}/12" if start else "") + f" = {_eq(round(eff))}"})
     if "costs" in spec and inp.cost_change_pct is not None and purchases:
         sp = spec["costs"]
         eff = -purchases * sp["share"] * inp.cost_change_pct / 100 * (1 - (v["pass_through"] or 0)) * active
         rows.append({"lever": "costs", "title": f"Закупки: {_low(sp['title'])}", "effect_rub": round(eff),
                      "formula": f"−закупки × {sp['share']:.0%} × ({num(inp.cost_change_pct, 1)}% цен) × (1 − перенос в цены)"
-                                + (f" × {12 - start} мес. из 12" if start else ""), "basis": sp["basis"]})
+                                + (f" × {12 - start} мес. из 12" if start else ""), "basis": sp["basis"],
+                     "calc": f"−{_m(purchases)} × {sp['share']:.0%} × {_d(inp.cost_change_pct)}% × (1 − {_share(v['pass_through'])})"
+                             + (f" × {12 - start}/12" if start else "") + f" = {_eq(round(eff))}"})
     if "tax" in spec and inp.tax_change_pp is not None and rev:
         sp = spec["tax"]
         eff = -rev * inp.tax_change_pp / 100 * active
         rows.append({"lever": "tax", "title": "Налоговая нагрузка", "effect_rub": round(eff),
                      "formula": f"−выручка × ({num(inp.tax_change_pp, 1)} п.п.)" + (f" × {12 - start} мес. из 12" if start else ""),
-                     "basis": sp["basis"]})
+                     "basis": sp["basis"], "calc": f"−{_m(rev)} × {_d(inp.tax_change_pp)} п.п." + (f" × {12 - start}/12" if start else "")
+                                                   + f" = {_eq(round(eff))}"})
     if spec and rev and ("demand" in spec or "costs" in spec):
         est.append(f"маржинальность {margin:.0%}" + (f", закупки ≈ {PURCHASES_SHARE:.0%} выручки" if "costs" in spec else ""))
     total = sum(r["effect_rub"] for r in rows)
@@ -439,6 +451,52 @@ def _assumptions(params: dict, base: dict, spec: dict | None = None) -> str:
         v = params["cost_change_pct"]
         parts.append("цены закупок — как в плане" if not v else f"цены закупок {_pct(v)} к плану (тенденция из новости)")
     return "; ".join(parts)
+
+
+def _m(v: float | None) -> str:
+    """Сумма без знака для формулы с подставленными числами: «162,4 млн ₽»."""
+    return money(abs(v or 0)).lstrip("+−") if v else "0 ₽"
+
+
+def _d(x: float | None) -> str:
+    """Число для подстановки в формулу: «1,0», «−1,0» (настоящий минус)."""
+    v = x or 0
+    return ("−" if v < 0 else "") + num(abs(v))
+
+
+def _eq(v: float) -> str:
+    return "0 ₽" if abs(v) < 500 else money(v)
+
+
+def _share(x: float | None) -> str:
+    return f"{(x or 0):.0%}"
+
+
+def buffers(p: CompanyProfile, user: Inputs | None = None) -> list[dict]:
+    """Запас прочности: насколько рычаг должен отклониться от прогноза банка, чтобы съесть 1% выручки за год.
+    Те же формулы и оценки профиля, что у калькулятора; без выручки не считаем."""
+    d, _ = defaults(p)
+    u = (user or Inputs()).model_dump()
+    v = {k: (u.get(k) if u.get(k) is not None else d.get(k)) for k in
+         ("revenue_rub", "debt_rub", "floating_share", "import_rub", "pass_through", "payroll_rub")}
+    rev = v["revenue_rub"]
+    if not rev:
+        return []
+    one = rev * 0.01
+    out = []
+    exposure = (v["debt_rub"] or 0) * (v["floating_share"] or 0)
+    if exposure:
+        out.append({"lever": "rate", "title": "Ставка", "value": round(one / exposure * 100, 1), "unit": "п.п.",
+                    "text": "ключевая ставка выше прогноза банка", "basis": f"1% выручки = {money(one).lstrip('+')}; "
+                    f"плавающая часть долга {money(exposure).lstrip('+')}"})
+    imp = (v["import_rub"] or 0) * (1 - (v["pass_through"] or 0)) if p.fts else 0
+    if imp:
+        out.append({"lever": "fx", "title": "Курс", "value": round(one / imp * 100, 1), "unit": "%",
+                    "text": "рубль слабее прогноза банка", "basis": f"импорт без переноса в цены {money(imp).lstrip('+')}"})
+    if v["payroll_rub"]:
+        out.append({"lever": "wages", "title": "Зарплаты", "value": round(one / v["payroll_rub"] * 100, 1), "unit": "п.п.",
+                    "text": "рост зарплат быстрее прогноза банка", "basis": f"ФОТ {money(v['payroll_rub']).lstrip('+')}"})
+    return out
 
 
 def _low(t: str) -> str:

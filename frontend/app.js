@@ -336,7 +336,11 @@ async function loadMoney() {
   const box = $("#moneyCard");
   if (!box) return;
   let m;
-  try { m = await api(`/api/money?${q({ company_id: state.company, role: state.role })}`); } catch (e) { box.innerHTML = ""; return; }
+  const mine = myNums();
+  try {
+    m = mine ? await api("/api/money", { method: "POST", body: JSON.stringify({ company_id: state.company, role: state.role, numbers: mine }) })
+      : await api(`/api/money?${q({ company_id: state.company, role: state.role })}`);
+  } catch (e) { box.innerHTML = ""; return; }
   state.money = m;
   if (state.feed) { renderWidget(); renderFocus(); }
   const pr = (x) => (x == null ? "" : ` · ${pctRev(x)} выручки`);
@@ -346,29 +350,149 @@ async function loadMoney() {
   const how = `<details class="howcalc"><summary>Как считаем</summary><p class="muted small">Модель для каждого события решает, двигает ли оно рычаг этой компании (ставку, курс, зарплаты, спрос, цены закупок), в какую сторону и насколько сильно. Суммы модель не считает: их даёт калькулятор — умеренное отклонение рычага от прогноза Альфа-Банка (ставка ±1 п.п., курс +10/−5%, зарплаты +3/−2 п.п.). Одна причина считается один раз, по самой сильной новости. Если всё пойдёт по прогнозу банка, план не меняется.</p>${(m.rejected || []).length ? `<div class="sub-h">ИИ не учёл — и почему</div><ul class="rej">${m.rejected.map((r) => `<li><b>${esc(r.title)}</b><span class="muted small"> · ${esc(r.lever)}: ${esc(r.why)}</span></li>`).join("")}</ul>` : ""}</details>`;
   const revs = m.revisions || [];
   const revSum = revs.reduce((t, r) => t + r.effect_rub, 0);
+  const numsBtn = `<button class="nums-chip ${mine ? "on" : ""}" data-nums="1" title="Долг, импорт, ФОТ — суммы пересчитаются по вашим данным">${ico("doc")} ${mine ? "По вашим цифрам · изменить" : "По оценкам профиля · ввести свои цифры"}</button>`;
+  const extra = moneyExtras(m);
   if (!m.levers.length) {
-    box.innerHTML = `<div class="eyebrow">Деньги на кону · 12 месяцев</div>
+    box.innerHTML = `<div class="eyebrow">Деньги на кону · 12 месяцев ${numsBtn}</div>
       <h3>${revs.length ? "Что уже изменилось для денег компании" : "Событий, которые заметно меняют деньги, сейчас нет"}</h3>
       ${revs.length ? `<div class="money-tiles one"><div class="mt ${revSum < 0 ? "down" : "up"}"><span>Пересмотр прогноза банка</span><b>${rub(revSum)}</b><i>за 12 месяцев к плану по прежнему прогнозу</i></div></div>` : ""}
       ${revisionRows(revs)}
       <p class="muted small">${revs.length ? "Новостей ленты с заметным денежным эффектом сейчас нет — по ним план менять не нужно." : "Это тоже ответ: по текущей ленте менять план не нужно."}</p>
       <details class="howcalc"><summary>К чему чувствительна компания</summary>${sensitivityBars(m.sensitivity)}</details>
+      ${extra}
       <div class="money-ai">${aiLine}</div>${how}`;
-    box.querySelectorAll("[data-money-ev]").forEach((b) => b.onclick = () => { show("radar"); openInsight(b.dataset.moneyEv, false, "money"); });
+    bindMoneyCard(box);
     return;
   }
-  box.innerHTML = `<div class="eyebrow">Деньги на кону · 12 месяцев</div>
+  box.innerHTML = `<div class="eyebrow">Деньги на кону · 12 месяцев ${numsBtn}</div>
     <h3>Что события из ленты могут дать и сколько могут стоить</h3>
     <div class="money-tiles">
-      <div class="mt up"><span>Возможный плюс</span><b>${rub(m.up)}</b><i>${pr(m.share_up).slice(3)}</i></div>
-      <div class="mt down"><span>Возможный минус</span><b>${rub(m.down)}</b><i>${pr(m.share_down).slice(3)}</i></div>
+      <div class="mt up"><span>Возможный плюс</span><b>${rub(m.up)}</b><i>${pr(m.share_up).slice(3)}</i>${shareGauge(m.share_up)}</div>
+      <div class="mt down"><span>Возможный минус</span><b>${rub(m.down)}</b><i>${pr(m.share_down).slice(3)}</i>${shareGauge(m.share_down)}</div>
     </div>
     ${moneyBars(m.levers)}
     <div class="money-ai">${aiLine}</div>
     ${revisionRows(revs)}
     <details class="howcalc"><summary>К чему ещё чувствительна компания</summary>${sensitivityBars(m.sensitivity)}</details>
+    ${extra}
     ${how}`;
+  bindMoneyCard(box);
+}
+function bindMoneyCard(box) {
   box.querySelectorAll("[data-money-ev]").forEach((b) => b.onclick = () => { show("radar"); openInsight(b.dataset.moneyEv, false, "money"); });
+  box.querySelectorAll("[data-nums]").forEach((b) => b.onclick = openNumbers);
+}
+// Запас прочности и сравнение с похожими компаниями — под карточкой «Деньги на кону»
+function moneyExtras(m) {
+  const bf = m.buffers || [], pe = m.peers;
+  const n = (v) => String(v).replace(".", ",");
+  const buf = bf.length ? `<div class="buffers"><div class="sub-h">Запас прочности: что съест 1% выручки за год</div>
+    <div class="bf-tiles">${bf.map((b) => `<div class="bf" title="${esc(b.basis)}"><b>${b.lever === "fx" ? "" : "+"}${n(b.value)} ${esc(b.unit)}</b><span>${esc(b.text)}</span></div>`).join("")}</div>
+    <div class="muted small">Чем больше число, тем устойчивее компания к этому рычагу. Считает калькулятор по ${m.user_numbers ? "вашим цифрам" : "оценкам профиля"}.</div></div>` : "";
+  const peers = pe && pe.rows.length ? `<div class="peers-line">${ico("user")} У похожих компаний (${pe.n}): ${pe.rows.map((r) => `${esc(r.title)} — у ${Math.round(r.peers_share * 100)}%${r.has ? " <i>как у вас</i>" : ""}`).join(" · ")}. <span class="muted">От этих продуктов зависят рычаги ставки, курса и зарплат.</span></div>` : "";
+  return buf + peers;
+}
+// Доля в выручке — цветная шкала: до 0,5% — спокойно, до 2% — заметно, больше — существенно
+function shareGauge(x) {
+  if (x == null) return "";
+  const v = Math.abs(x) * 100, lvl = v < 0.5 ? "low" : v < 2 ? "mid" : "high";
+  return `<span class="gauge ${lvl}" role="img" aria-label="${esc(pctRev(x))} выручки"><i style="width:${Math.min(100, v / 3 * 100).toFixed(1)}%"></i></span>`;
+}
+
+// ---------------------------------------------------------------- «Мои цифры»: долг, импорт, ФОТ — в браузере клиента
+const NUM_FIELDS = [["revenue_rub", "Выручка в год", "млн ₽", 1e6], ["debt_rub", "Кредиты и займы", "млн ₽", 1e6],
+  ["floating_share", "Доля долга под плавающей ставкой", "%", 0.01], ["deposits_rub", "Депозиты", "млн ₽", 1e6],
+  ["import_rub", "Импорт в год", "млн ₽", 1e6], ["export_rub", "Экспорт в год", "млн ₽", 1e6],
+  ["payroll_rub", "ФОТ в год с взносами", "млн ₽", 1e6], ["margin", "Маржинальность", "%", 0.01]];
+function myNums() { try { return JSON.parse(localStorage.getItem("bn:nums:" + state.company) || "null"); } catch (e) { return null; } }
+function saveNums(n) { try { if (n) localStorage.setItem("bn:nums:" + state.company, JSON.stringify(n)); else localStorage.removeItem("bn:nums:" + state.company); } catch (e) { /* без хранилища — цифры действуют до перезагрузки */ } }
+async function openNumbers() {
+  const d = $("#actionDialog");
+  let def = {};
+  try { def = (await api("/api/scenario", { method: "POST", body: JSON.stringify({ company_id: state.company, role: state.role }) })).defaults || {}; } catch (e) { /* без оценок — пустые поля */ }
+  const mine = myNums() || {};
+  const val = (k, sc) => (mine[k] != null ? +(mine[k] / sc).toFixed(2) : "");
+  const ph = (k, sc) => (def[k] != null ? `оценка: ${String(+(def[k] / sc).toFixed(1)).replace(".", ",")}` : "нет данных");
+  d.innerHTML = `<form method="dialog" class="act-form nums-form"><h3>Мои цифры</h3>
+    <p class="muted small">Введите то, что знаете, — остальное останется оценкой по профилю. Все суммы «Деньги на кону», сценарии разборов и «Что если» пересчитаются. Цифры хранятся только в этом браузере и на сервере не сохраняются.</p>
+    <div class="nums-grid">${NUM_FIELDS.map(([k, t, u, sc]) => `<label>${esc(t)}<span class="nf"><input type="number" min="0" step="any" id="nf_${k}" value="${val(k, sc)}" placeholder="${esc(ph(k, sc))}"><i>${u}</i></span></label>`).join("")}</div>
+    <div class="row"><button value="reset" class="btn ghost" id="numsReset">Сбросить</button><button value="cancel" class="btn ghost">Отмена</button><button class="btn" id="numsSave" value="save">Пересчитать</button></div></form>`;
+  d.showModal();
+  const apply = (n) => { saveNums(n); d.close(); toast(n ? "Пересчитано по вашим цифрам" : "Вернулись к оценкам профиля"); track("numbers_set", { meta: { fields: n ? Object.keys(n).length : 0 } }); loadMoney(); if (state.insight) { state.insight._mineFor = null; renderInsight(state.tab || "analysis"); } loadHomeWhatIf(); };
+  $("#numsReset").onclick = (e) => { e.preventDefault(); apply(null); };
+  $("#numsSave").onclick = (e) => {
+    e.preventDefault();
+    const n = {};
+    for (const [k, , , sc] of NUM_FIELDS) { const v = $("#nf_" + k).value; if (v !== "" && !isNaN(+v)) n[k] = Math.min(+v * sc, k === "floating_share" || k === "margin" ? 1 : Infinity); }
+    apply(Object.keys(n).length ? n : null);
+  };
+}
+// Разбор по «моим цифрам»: сценарии пересчитывает тот же калькулятор (/api/scenario), тексты разбора не меняются
+async function applyNumsToInsight(i) {
+  const mine = myNums();
+  if (!mine) {  // цифры сброшены — возвращаем расчёт по оценкам профиля
+    if (i._orig) { i.scenarios = i._orig; delete i._orig; delete i._mine; i._mineFor = null; renderInsight(state.tab || "analysis"); }
+    return;
+  }
+  if (!(i.scenarios || []).length || i._mineFor === state.company + i.event_id) return;
+  i._mineFor = state.company + i.event_id;
+  if (!i._orig) i._orig = i.scenarios;
+  try {
+    const r = await api("/api/scenario", { method: "POST", body: JSON.stringify({ company_id: state.company, event_id: i.event_id, role: state.role, inputs: mine }) });
+    if (state.insight !== i) return;
+    i.scenarios = r.scenarios; i._mine = true;
+    renderInsight(state.tab || "analysis");
+  } catch (e) { /* остаются суммы по оценкам профиля */ }
+}
+
+// ---------------------------------------------------------------- «Что если» на главной + стресс-тест «всё сразу»
+async function loadHomeWhatIf() {
+  const box = $("#homeWhatIf");
+  if (!box || !state.company) return;
+  let r;
+  try { r = await api("/api/scenario", { method: "POST", body: JSON.stringify({ company_id: state.company, role: state.role, inputs: myNums() || {} }) }); } catch (e) { box.hidden = true; return; }
+  box.hidden = false;
+  const b = r.baseline;
+  state.hw = { plan: b.wage_growth_pct || 0 };
+  const sl = (id, label, min, max, step, val) => `<label class="hw-row"><span>${label}</span><input type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${val}"><b id="${id}V"></b></label>`;
+  box.innerHTML = `<div class="mini-head"><h3>Что если</h3><button class="link-more" data-nums="1">${myNums() ? "мои цифры ✓" : "мои цифры"}</button></div>
+    <div class="muted small">Сдвиги от прогноза Альфа-Банка за 12 месяцев: ${esc(String(b.key_rate_avg_next).replace(".", ","))}% средняя ставка, ${esc(String(b.wage_growth_pct).replace(".", ","))}% рост зарплат</div>
+    ${sl("hwRate", "Ставка, п.п.", -3, 3, 0.25, 0)}${sl("hwFx", "Рубль слабее, %", -15, 25, 1, 0)}${sl("hwWage", "Зарплаты быстрее, п.п.", -3, 6, 0.5, 0)}
+    <div class="hw-out" id="hwOut"></div>
+    <div class="hw-btns"><button class="btn small btn-red" id="hwStress" title="Ставка +1 п.п., рубль слабее на 10%, зарплаты +3 п.п. — как в негативном сценарии разборов">Стресс-тест: всё сразу</button><button class="btn ghost small" id="hwZero">Как в прогнозе</button></div>
+    ${(r.buffers || []).length ? `<div class="hw-buf">${ico("spark")} 1% выручки съест: ${r.buffers.map((x) => `${esc(x.title.toLowerCase())} ${x.lever === "fx" ? "" : "+"}${String(x.value).replace(".", ",")} ${esc(x.unit)}`).join(" · ")}</div>` : ""}`;
+  let t;
+  const run = () => { clearTimeout(t); t = setTimeout(hwCalc, 120); };
+  box.querySelectorAll("input").forEach((el) => el.addEventListener("input", run));
+  box.querySelectorAll("[data-nums]").forEach((x) => x.onclick = openNumbers);
+  $("#hwStress").onclick = () => { $("#hwRate").value = 1; $("#hwFx").value = 10; $("#hwWage").value = 3; hwCalc(); track("stress_test"); };
+  $("#hwZero").onclick = () => { $("#hwRate").value = 0; $("#hwFx").value = 0; $("#hwWage").value = 0; hwCalc(); };
+  hwCalc();
+}
+async function hwCalc() {
+  const v = (id) => +document.getElementById(id).value;
+  $("#hwRateV").textContent = fmtPct(v("hwRate"), " п.п."); $("#hwFxV").textContent = fmtPct(v("hwFx")); $("#hwWageV").textContent = fmtPct(v("hwWage"), " п.п.");
+  const inputs = { ...(myNums() || {}), rate_delta_pp: v("hwRate"), fx_change_pct: v("hwFx"), wage_growth_pct: state.hw.plan + v("hwWage") };
+  try {
+    const { result: r } = await api("/api/scenario", { method: "POST", body: JSON.stringify({ company_id: state.company, role: state.role, inputs }) });
+    $("#hwOut").innerHTML = `<div class="hw-total ${r.total_rub < 0 ? "bad" : r.total_rub > 0 ? "ok" : ""}">${rub(r.total_rub)}<span class="muted small"> за 12 месяцев к плану${r.share_of_revenue != null ? ` · ${pctRev(r.share_of_revenue)} выручки` : ""}</span>${shareGauge(r.share_of_revenue)}</div>
+      ${r.rows.filter((x) => Math.abs(x.effect_rub) >= 500).map((x) => `<div class="hw-line" title="${esc(x.calc || x.formula)}"><span>${esc(x.title)}</span><b class="${x.effect_rub < 0 ? "bad" : "ok"}">${rub(x.effect_rub)}</b></div>`).join("")}`;
+  } catch (e) { $("#hwOut").textContent = "Не удалось посчитать"; }
+}
+
+// Выгрузка расчёта разбора: сценарии и рычаги с формулами — для финдиректора, в Excel открывается как таблица
+function downloadCalc(i) {
+  const rowsOut = [["Сценарий", "Рычаг", "Эффект за 12 мес., ₽", "Формула", "Подстановка", "Основание"]];
+  (i.scenarios || []).forEach((s) => {
+    (s.rows || []).forEach((r) => rowsOut.push([s.title, r.title, Math.round(r.effect_rub), r.formula, r.calc || "", r.basis]));
+    rowsOut.push([s.title, "Итого", Math.round(s.total_rub), s.assumptions, "", ""]);
+  });
+  const csv = "\ufeff" + rowsOut.map((r) => r.map((x) => `"${String(x ?? "").replace(/"/g, '""')}"`).join(";")).join("\r\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  a.download = `расчёт-${(i.headline || "разбор").slice(0, 40).replace(/[^\wа-яё ]+/gi, "").trim()}.csv`;
+  a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  track("calc_csv", { event_id: i.event_id });
 }
 
 async function reload() {
@@ -376,6 +500,7 @@ async function reload() {
   $("#insightPanel").innerHTML = `<div class="empty">Выберите событие — сервис объяснит, что оно значит именно для вашей компании.</div>`;
   await Promise.all([loadProfile(), loadFeed(), state.bankLoaded ? null : loadBank()]);
   loadMoney();
+  loadHomeWhatIf();
   loadTaskCount();
   updateRevBadge();
   loadNextDate();
@@ -1176,10 +1301,11 @@ function scenarioCards(list, compact = false, weak = false) {
   const cards = `<div class="scenarios">${SCEN_ORDER.filter((n) => byName[n]).map((n) => { const s = byName[n]; return `<div class="scen ${SCEN_CLASS[s.name]}">
       <div class="scen-t">${esc(s.title)}</div>
       <div class="scen-v ${s.total_rub < 0 ? "bad" : s.total_rub > 0 ? "ok" : ""}">${s.name === "base" && !s.total_rub ? "0 ₽ к плану" : rub(s.total_rub)}</div>
-      ${s.share_of_revenue != null ? `<div class="muted small">${pctRev(s.share_of_revenue)} выручки</div>` : ""}
+      ${s.share_of_revenue != null ? `<div class="muted small">${pctRev(s.share_of_revenue)} выручки</div>${s.name !== "base" ? shareGauge(s.share_of_revenue) : ""}` : ""}
       <div class="small">${esc(s.assumptions)}</div></div>`; }).join("")}</div>`;
   if (compact) return cards;
-  return cards + effectChart(list) + leverTable(list)
+  const mineNote = `<div class="calc-bar"><button class="nums-chip ${myNums() ? "on" : ""}" data-nums="1">${ico("doc")} ${myNums() ? "Посчитано по вашим цифрам · изменить" : "Посчитано по оценкам профиля · ввести свои цифры"}</button><button class="btn ghost small" data-csv="1">${ico("doc")} Скачать расчёт (CSV)</button></div>`;
+  return mineNote + cards + effectChart(list) + leverTable(list)
     + `<div class="muted small scen-note">Базовый сценарий — прогноз Альфа-Банка: считаем, что он уже заложен в ваш план. Негативный и позитивный — умеренные отклонения от него, а не худший и лучший случай.
       ${est.length ? `Оценено по профилю: ${esc(est.join("; "))}. ` : ""}Суммы считает калькулятор по формулам, а не модель. Свои цифры — в блоке «Что если».</div>`;
 }
@@ -1210,7 +1336,10 @@ function effectChart(list) {
   // подписи у правого края не должны налезать друг на друга
   const startMark = start > 0 ? `<line x1="${x(start - 1).toFixed(1)}" x2="${x(start - 1).toFixed(1)}" y1="${T}" y2="${H - B}" class="ec-start"/>
     <text x="${(x(start - 1) + 4).toFixed(1)}" y="${T + 10}" class="ec-lbl">вступление в силу</text>` : "";
-  return `<div class="effect-chart"><div class="ec-head">Как накапливается эффект по месяцам</div>
+  const neg = ok.find((s) => s.name === "negative") || ok[0], fin = Math.abs(neg.monthly[11]);
+  const k25 = fin ? neg.monthly.findIndex((v) => Math.abs(v) >= fin * 0.25) : -1;
+  const when = k25 >= 0 ? ` · ощутимо (четверть итога) — к ${esc(months[k25] || "")}` : "";
+  return `<div class="effect-chart"><div class="ec-head">Как накапливается эффект по месяцам${when}</div>
     <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Накопленный эффект по трём сценариям за 12 месяцев">
       ${ticks.map((v) => `<line x1="${L}" x2="${W - R}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" class="${Math.abs(v) < 1e-6 ? "ec-zero" : "ec-grid"}"/><text x="${L - 8}" y="${(y(v) + 4).toFixed(1)}" class="ec-ax" text-anchor="end">${v === 0 ? "0" : esc(rub(v))}</text>`).join("")}
       ${months.map((m, k) => k % 2 === 0 || k === 11 ? `<text x="${x(k).toFixed(1)}" y="${H - 10}" class="ec-ax" text-anchor="middle">${esc(m)}</text>` : "").join("")}
@@ -1231,7 +1360,7 @@ function leverTable(list) {
   if (!levers.length) return "";
   const cell = (n, lv) => { const r = ((byName[n] || {}).rows || []).find((x) => x.lever === lv); return r ? `<td class="${r.effect_rub < 0 ? "bad" : r.effect_rub > 0 ? "ok" : "muted"}" title="${esc(r.formula)}">${rub(r.effect_rub)}</td>` : `<td class="muted">—</td>`; };
   return `<div class="lever-wrap"><table class="lever-table"><thead><tr><th>Из чего складывается</th>${SCEN_ORDER.filter((n) => byName[n]).map((n) => `<th>${SCEN_SHORT[n]}</th>`).join("")}</tr></thead><tbody>
-    ${levers.map((l) => { const b = ((byName.base || {}).rows || []).find((x) => x.lever === l.lever) || l; return `<tr><td><b>${esc(l.title)}</b>${b.basis ? `<div class="muted small">${esc(b.basis)}</div>` : ""}<div class="muted small lt-f">${esc(b.formula)}</div></td>${SCEN_ORDER.filter((n) => byName[n]).map((n) => cell(n, l.lever)).join("")}</tr>`; }).join("")}
+    ${levers.map((l) => { const b = ((byName.base || {}).rows || []).find((x) => x.lever === l.lever) || l; return `<tr><td><b>${esc(l.title)}</b>${b.basis ? `<div class="muted small">${esc(b.basis)}</div>` : ""}<div class="muted small lt-f">${esc(b.formula)}</div>${((byName.negative || {}).rows || []).find((x) => x.lever === l.lever)?.calc ? `<div class="lt-calc" title="Негативный сценарий с подставленными числами">${esc(((byName.negative || {}).rows || []).find((x) => x.lever === l.lever).calc)}</div>` : ""}</td>${SCEN_ORDER.filter((n) => byName[n]).map((n) => cell(n, l.lever)).join("")}</tr>`; }).join("")}
     <tr class="lt-total"><td>Итого за 12 месяцев</td>${SCEN_ORDER.filter((n) => byName[n]).map((n) => `<td class="${byName[n].total_rub < 0 ? "bad" : byName[n].total_rub > 0 ? "ok" : ""}">${rub(byName[n].total_rub)}</td>`).join("")}</tr>
   </tbody></table></div>`;
 }
@@ -1258,7 +1387,8 @@ async function initWhatIf() {
   const slider = (id, label, min, max, step, val, hint) => `<label class="wi-row"><span>${label}</span>
     <input type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${val}"><b id="${id}V"></b><span class="muted small">${hint}</span></label>`;
   const fields = Object.keys(WI).filter((k) => !((k === "margin" && !biz.demand) || (k === "purchases_rub" && !biz.costs)));
-  const field = (k) => `<label class="wi-field">${WI[k][0]}<input type="number" min="0" step="any" id="wi_${k}" value="${d[k] != null ? +(d[k] / WI[k][1]).toFixed(2) : ""}" placeholder="нет данных"></label>`;
+  const own = myNums() || {};
+  const field = (k) => { const x = own[k] != null ? own[k] : d[k]; return `<label class="wi-field">${WI[k][0]}<input type="number" min="0" step="any" id="wi_${k}" value="${x != null ? +(x / WI[k][1]).toFixed(2) : ""}" placeholder="нет данных"></label>`; };
   box.className = "";
   box.innerHTML = `
     <div class="wi-grid">
@@ -1291,7 +1421,7 @@ async function recalc() {
   try {
     const { result: r } = await api("/api/scenario", { method: "POST", body: JSON.stringify({ company_id: state.company, event_id: state.current, role: state.role, inputs }) });
     $("#wiOut").innerHTML = `<div class="wi-total ${r.total_rub < 0 ? "bad" : r.total_rub > 0 ? "ok" : ""}">${rub(r.total_rub)} <span class="muted small">за 12 месяцев к плану${r.share_of_revenue != null ? ` · ${pctRev(r.share_of_revenue)} выручки` : ""}</span></div>
-      ${r.rows.map((x) => `<div class="wi-line"><span>${esc(x.title)}</span><b class="${x.effect_rub < 0 ? "bad" : x.effect_rub > 0 ? "ok" : ""}">${rub(x.effect_rub)}</b><span class="muted small">${esc(x.formula)}</span></div>`).join("")}`;
+      ${r.rows.map((x) => `<div class="wi-line"><span>${esc(x.title)}</span><b class="${x.effect_rub < 0 ? "bad" : x.effect_rub > 0 ? "ok" : ""}">${rub(x.effect_rub)}</b><span class="muted small">${esc(x.formula)}${x.calc ? `<br><span class="lt-calc">${esc(x.calc)}</span>` : ""}</span></div>`).join("")}`;
   } catch (e) { $("#wiOut").textContent = "Не удалось посчитать: " + e.message; }
 }
 
@@ -1445,6 +1575,9 @@ function renderInsight(tab) {
   const svgMap = document.querySelector("#insightPanel .im-svg");
   if (svgMap) svgMap.addEventListener("mouseenter", () => track("map_hover", { event_id: state.current }), { once: true });
   document.querySelectorAll("[data-src]").forEach((el) => el.onclick = () => { renderInsight("sources"); const li = document.getElementById("src-" + CSS.escape(el.dataset.src)); if (li) { li.classList.add("hl"); li.scrollIntoView({ block: "center" }); } });
+  document.querySelectorAll("#insightPanel [data-nums]").forEach((el) => el.onclick = openNumbers);
+  document.querySelectorAll("#insightPanel [data-csv]").forEach((el) => el.onclick = () => downloadCalc(i));
+  applyNumsToInsight(i);
   $("#refreshBtn").onclick = () => openInsight(state.current, true);
   $("#pdfBtn").onclick = () => printDoc("insight");
   document.querySelectorAll("[data-fb]").forEach((el) => el.onclick = () => +el.dataset.fb > 0 ? sendFeedback(1) : ($("#fbReasons").hidden = false));
