@@ -769,6 +769,11 @@ function renderWidget() {
   bindCards($("#widgetList"));
   renderPulse();
 }
+// Региональная мера в чужом регионе: связь косвенная — пометка на карточке, подробности в подсказке
+function otherRegionTag(it) {
+  const r = (it.reasons || []).find((x) => x.factor_title === "Другой регион");
+  return r ? `<span class="pill mixed" title="${esc(r.why)}">другой регион</span>` : "";
+}
 // Короткая причина «почему вам»: фактор со стрелкой и через что он задевает компанию (полный текст — в подсказке)
 function reasonLine(it) {
   const r = it.reasons[0];
@@ -913,7 +918,7 @@ function renderFeedList(animate = false) {
     day = d;
     return `${head}<div class="feed-item eff-${it.effect} ${read.has(it.event_id) ? "read" : ""} ${it.event_id === state.current ? "active" : ""}" data-ev="${it.event_id}" tabindex="0" role="button">
       ${it.hidden ? `<button class="link-btn unhide" data-unhide="${it.event_id}">Вернуть в ленту</button>` : `<button class="hide-btn" data-hide="${it.event_id}" title="Скрыть из ленты" aria-label="Скрыть из ленты">×</button>`}
-      <div><span class="pill ${it.effect}">${EFFECT[it.effect]}</span>${it.has_bank_view ? `<span class="pill bank">есть позиция банка</span>` : ""}${effectiveTag(it.effective)}</div>
+      <div><span class="pill ${it.effect}">${EFFECT[it.effect]}</span>${it.has_bank_view ? `<span class="pill bank">есть позиция банка</span>` : ""}${otherRegionTag(it)}${effectiveTag(it.effective)}</div>
       <div class="title">${read.has(it.event_id) ? "" : `<span class="new-dot" title="Не прочитано"></span>`}${esc(it.title)}${read.has(it.event_id) ? `<span class="read-mark">✓ прочитано</span>` : ""}</div>
       <div class="meta">${fmtDate(it.published_at)} · ${esc([...new Set(it.sources.map((x) => x.source))].join(", "))}${it.sources.length > 1 ? ` · ${it.sources.length} ${plural(it.sources.length, "публикация", "публикации", "публикаций")}` : ""}</div>
       <div class="chips">${entityChips(it)}</div>
