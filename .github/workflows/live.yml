@@ -123,7 +123,7 @@ jobs:
             || { echo "::error title=warmup::$(grep -v '^\s*$' warmup.log | tail -8 | tr '\n' ' ' | cut -c1-900)"; exit 1; }
           echo "::notice title=warmup итог::$(grep -c '^insight|' warmup.log) разборов в журнале; $(grep -c '| llm' warmup.log) моделью"
           grep -E "LLM-судья|Потрачено" warmup.log >> "$GITHUB_STEP_SUMMARY" || true
-          grep -E "LLM-судья|Потрачено|Остановлено" warmup.log | while read -r l; do echo "::notice title=warmup::$l"; done
+          { grep -E "LLM-судья|Потрачено|Остановлено|Модель недоступна" warmup.log || true; } | while read -r l; do echo "::notice title=warmup::$l"; done
       - name: Два судьи на готовых разборах
         if: inputs.task == 'judges' || inputs.task == 'all'
         run: |
