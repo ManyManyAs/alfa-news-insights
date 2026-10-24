@@ -1560,7 +1560,7 @@ async function loadDigest() {
     <div class="card dg-main">
       <div class="eyebrow">${esc(d.role_title)} · ${per}</div>
       <h3>${esc(d.company)}</h3>
-      ${effectDonut(d.counts)}
+      ${effectDonut(Object.values(d.counts).some(Boolean) ? d.counts : d.top.reduce((m, t) => ({ ...m, [t.effect]: (m[t.effect] || 0) + 1 }), {}))}
       <p>${esc(lead)}</p>
       <div class="sub-h">Главное</div><ul class="dg-list">${d.top.map(item).join("") || `<li class="muted">Нет событий</li>`}</ul>
       ${d.dates.length ? `<div class="sub-h">Сроки</div><ul class="dg-list">${d.dates.map((x) => `<li data-ev="${x.event_id}" tabindex="0" role="button">${ico("clock")} <b>${fmtDate(x.date)}</b> — через ${x.days} ${plural(x.days, "день", "дня", "дней")}: ${esc(x.title)}</li>`).join("")}</ul>` : ""}
