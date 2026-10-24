@@ -105,6 +105,16 @@ jobs:
           r = json.load(open("/tmp/shots/lighthouse.json"))
           sc = {k: round(v["score"] * 100) for k, v in r["categories"].items() if v.get("score") is not None}
           print("::notice title=Lighthouse ${{ inputs.target }}::" + ", ".join(f"{k}: {v}" for k, v in sc.items()))
+          au = r["audits"]
+          keys = ["first-contentful-paint", "largest-contentful-paint", "total-blocking-time", "cumulative-layout-shift", "speed-index", "interactive"]
+          print("::notice title=Lighthouse метрики::" + "; ".join(f"{k}: {au[k].get('displayValue', '')}" for k in keys if k in au))
+          opp = sorted([a for a in au.values() if a.get("details", {}).get("type") == "opportunity" and a.get("score") is not None and a["score"] < 0.9],
+                       key=lambda a: -a["details"].get("overallSavingsMs", 0))[:5]
+          print("::notice title=Lighthouse что ускорить::" + "; ".join(f"{a['title']} ({a.get('displayValue', '')})" for a in opp))
+          lt = au.get("long-tasks", {}).get("details", {}).get("items", [])[:5]
+          print("::notice title=Lighthouse долгие задачи::" + "; ".join(f"{str(x.get('url', ''))[-40:]} {round(x.get('duration', 0))} мс" for x in lt))
+          lcp = au.get("largest-contentful-paint-element", {}).get("details", {}).get("items", [])
+          print("::notice title=Lighthouse LCP-элемент::" + str(lcp)[:300])
           EOF2
       - name: Логи сервиса
         if: always() && inputs.target == 'local'

@@ -282,16 +282,24 @@ class BizGlobe {
     // суша: точки, Россия ярче; задняя полусфера — едва видна
     const ct = Math.cos(this.tilt * RAD), st = Math.sin(this.tilt * RAD), L = this.lon * RAD;
     const ds = Math.max(0.9, R / 190);
+    // точки группируются по яркости (8 ступеней): один fill на группу вместо смены цвета у каждой из тысяч точек —
+    // кадр в несколько раз дешевле, страница входа не «подвисает» на слабых устройствах
+    const NB = 8, back = new Path2D(), paths = Array.from({ length: NB * 2 }, () => new Path2D());
     for (const [cl, sl, lon, rus] of this.land) {
       const x0 = cl * Math.sin(lon - L), z0 = cl * Math.cos(lon - L);
       const y = sl * ct - z0 * st, z = sl * st + z0 * ct;
       if (z < -0.15) continue;
       const sx = this.cx + x0 * R, sy = this.cy - y * R;
-      if (z < 0) { ctx.fillStyle = "rgba(255,255,255,0.035)"; ctx.fillRect(sx, sy, ds, ds); continue; }
-      const a = 0.22 + 0.7 * z;
-      ctx.fillStyle = rus ? `rgba(255,255,255,${Math.min(1, a + 0.15)})` : `rgba(150,160,175,${a * 0.75})`;
-      const s = ds * (rus ? 1.5 : 1.2) * (0.7 + 0.3 * z);
-      ctx.fillRect(sx - s / 2, sy - s / 2, s, s);
+      if (z < 0) { back.rect(sx, sy, ds, ds); continue; }
+      const b = Math.min(NB - 1, Math.floor(z * NB));
+      const s = ds * (rus ? 1.5 : 1.2) * (0.7 + 0.3 * (b + 0.5) / NB);
+      paths[b + (rus ? NB : 0)].rect(sx - s / 2, sy - s / 2, s, s);
+    }
+    ctx.fillStyle = "rgba(255,255,255,0.035)"; ctx.fill(back);
+    for (let k = 0; k < NB * 2; k++) {
+      const z = (k % NB + 0.5) / NB, a = 0.22 + 0.7 * z;
+      ctx.fillStyle = k >= NB ? `rgba(255,255,255,${Math.min(1, a + 0.15)})` : `rgba(150,160,175,${a * 0.75})`;
+      ctx.fill(paths[k]);
     }
 
     // партнёры ВЭД: тонкие пунктирные дуги к компании
