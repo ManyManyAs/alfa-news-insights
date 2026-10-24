@@ -220,6 +220,7 @@ async function init() {
   document.addEventListener("click", (e) => { if (!e.target.closest(".bell-wrap")) toggleBell(false); });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#bellPop").hidden) { toggleBell(false); $("#bellBtn").focus(); } });
   $("#analyzeSubmit").onclick = analyzeNews;
+  document.querySelectorAll("[data-example]").forEach((b) => b.onclick = () => { $("#analyzeUrl").value = ""; $("#analyzeText").value = ANALYZE_EXAMPLES[+b.dataset.example]; $("#analyzeText").focus(); });
   try { await enterApp(); } catch (e) { if (e.status !== 401) throw e; }
 }
 
@@ -1523,20 +1524,46 @@ async function sendFeedback(rating, reason = null) {
 }
 
 // ---------------------------------------------------------------- проверка новой новости
+// Примеры для проверки «невиданных» новостей: вымышленные тексты, явно помеченные в окне как примеры
+const ANALYZE_EXAMPLES = [
+  "Пример. Банк России на внеочередном заседании повысил ключевую ставку на 2 п.п., до 18,5% годовых, и допустил дальнейшее ужесточение, если инфляционные ожидания не снизятся.",
+  "Пример. Правительство с 1 марта вводит ввозную пошлину 15% на металлообрабатывающие станки из Китая, чтобы поддержать российских производителей оборудования.",
+  "Пример. Минфин сообщил, что с 1 февраля программа льготной ипотеки на новостройки будет доступна только семьям с детьми до 6 лет; лимит кредита снизят до 6 млн рублей.",
+];
+const ANALYZE_STEPS = ["Читаем и классифицируем новость", "Сопоставляем с профилем компании", "Ищем позицию Альфа-Банка", "Пишем черновик разбора", "Проверяем факты и источники"];
 async function analyzeNews(e) {
   e.preventDefault();
   const url = $("#analyzeUrl").value.trim(), text = $("#analyzeText").value.trim();
   if (!url && !text) return;
   $("#analyzeDialog").close();
   show("radar");
-  $("#insightPanel").innerHTML = `<div class="insight loading">Классификация и анализ новости…</div>`;
+  // честный индикатор ожидания: шаги агента и прошедшее время (обычно 30–60 секунд)
+  const t0 = Date.now();
+  const paint = () => {
+    const sec = Math.round((Date.now() - t0) / 1000), k = Math.min(ANALYZE_STEPS.length - 1, Math.floor(sec / 9));
+    $("#insightPanel").innerHTML = `<div class="insight an-wait"><div class="eyebrow">Новость не из ленты</div><h3>Разбираем новость для вашей компании</h3>
+      <ol class="an-steps">${ANALYZE_STEPS.map((t, i) => `<li class="${i < k ? "done" : i === k ? "now" : ""}">${esc(t)}</li>`).join("")}</ol>
+      <div class="muted small">Прошло ${sec} с · обычно 30–60 секунд</div></div>`;
+  };
+  paint();
+  const timer = setInterval(paint, 1000);
   try {
     const r = await api("/api/news/analyze", { method: "POST", body: JSON.stringify({ url: url || null, text: text || null, company_id: state.company, role: state.role }) });
+    clearInterval(timer);
     state.current = r.event_id; state.insight = r.insight;
     renderInsight("analysis");
     loadFeed();
-  } catch (err) { $("#insightPanel").innerHTML = `<div class="insight bad">Ошибка: ${esc(err.message)}</div>`; }
-  $("#analyzeUrl").value = ""; $("#analyzeText").value = "";
+    $("#analyzeUrl").value = ""; $("#analyzeText").value = "";
+  } catch (err) {
+    clearInterval(timer);
+    const viaUrl = url && !text;
+    $("#insightPanel").innerHTML = `<div class="insight"><div class="eyebrow">Новость не из ленты</div>
+      <h3>${viaUrl ? "Не удалось прочитать страницу по ссылке" : "Не получилось разобрать новость"}</h3>
+      <p class="muted">${esc(err.message)}</p>
+      ${viaUrl ? `<p>Некоторые сайты не отдают текст автоматически. Скопируйте текст новости и вставьте его — разбор будет таким же.</p>` : ""}
+      <button class="btn btn-red small" id="analyzeRetry">${viaUrl ? "Вставить текст" : "Попробовать ещё раз"}</button></div>`;
+    $("#analyzeRetry").onclick = () => { $("#analyzeDialog").showModal(); (viaUrl ? $("#analyzeText") : $("#analyzeUrl")).focus(); };
+  }
 }
 
 // ---------------------------------------------------------------- действия после инсайта (менеджер, звонок, заявка)
