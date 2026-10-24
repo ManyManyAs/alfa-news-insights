@@ -248,7 +248,20 @@ def story_delta(ev) -> dict | None:
     idx = next((k for k, e in enumerate(events) if e["event_id"] == ev.id), None)
     if not idx:  # первое событие сюжета или его нет в хронологии — сравнивать не с чем
         return None
-    prev = events[idx - 1]
+    # сюжет бывает широким (десятки событий про ставку и кредиты): сравниваем с ближайшим по смыслу прошлым событием
+    # того же фактора, а не просто с предыдущим по времени — иначе «раньше» окажется про другое
+    main = ev.classification.factors[0].factor if ev.classification.factors else None
+    mine = _words(f"{ev.title} {ev.classification.summary}")
+
+    def close(e: dict) -> float:
+        w = _words(f"{e.get('title', '')} {e.get('summary', '')}")
+        return len(mine & w) / max(1, min(len(mine), len(w)))
+
+    earlier = [e for e in events[:idx] if e.get("factor") == main and e["event_id"] != ev.id]
+    scored = sorted(((close(e), k, e) for k, e in enumerate(earlier)), key=lambda x: (x[0], x[1]), reverse=True)
+    if not scored or scored[0][0] < 0.25:
+        return None
+    prev = scored[0][2]
     now_nums = list(dict.fromkeys(re.findall(PCT + r"|\d+(?:[.,]\d+)?\s*(?:млрд|млн)\s*(?:₽|руб\w*)", ev.classification.summary)))
     prev_text = f"{prev.get('title', '')} {prev.get('summary', '')}"
     prev_nums = {_num(x) for x in NUM_RE.findall(prev_text)}
@@ -256,7 +269,7 @@ def story_delta(ev) -> dict | None:
     days = None
     if ev.published_at and prev.get("published_at"):
         days = _age_days(prev["published_at"], date.fromisoformat(ev.published_at[:10]))
-    return {"story_title": st.get("title"), "count": len(events), "position": idx + 1,
+    return {"story_title": st.get("title"), "count": len(events), "position": idx + 1, "similarity": round(scored[0][0], 2),
             "prev": {"event_id": prev["event_id"], "title": prev.get("title"), "date": prev.get("published_at"),
                      "summary": prev.get("summary")},
             "now": ev.classification.summary, "new_numbers": new_nums[:4], "days_since_prev": days}

@@ -1362,7 +1362,7 @@ function storyDelta(i) {
   if (!d) return "";
   return `<div class="delta-card"><div class="dv-head">Что изменилось с прошлого события сюжета</div>
     <div class="dl-row"><span class="dl-k">Раньше · ${fmtDate(d.prev.date)}</span><span>${esc(d.prev.title)}</span></div>
-    <div class="dl-row now"><span class="dl-k">Сейчас${d.days_since_prev != null ? ` · через ${d.days_since_prev} ${plural(d.days_since_prev, "день", "дня", "дней")}` : ""}</span><span>${esc(d.now)}</span></div>
+    <div class="dl-row now"><span class="dl-k">Сейчас${d.days_since_prev == null ? "" : d.days_since_prev === 0 ? " · в тот же день" : ` · через ${d.days_since_prev} ${plural(d.days_since_prev, "день", "дня", "дней")}`}</span><span>${esc(d.now)}</span></div>
     ${d.new_numbers.length ? `<div class="dl-new">Новые цифры: ${d.new_numbers.map((x) => `<b>${esc(x)}</b>`).join(" ")}</div>` : ""}
     <div class="muted small">Событие ${d.position} из ${d.count} в сюжете «${esc(d.story_title || "")}»</div></div>`;
 }
