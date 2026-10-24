@@ -22,6 +22,7 @@ class Claim(BaseModel):
     confidence: Literal["high", "medium", "low"] = "medium"
     # считается при выдаче (app/agent/review.py), модель это не заполняет:
     support: list[str] = Field(default_factory=list)  # факт: издания, в тексте которых он есть
+    independent: int | None = None  # факт: независимых первоисточников (перепечатки одного агентства — один)
     as_of: str | None = None  # позиция банка: дата материала
     stale: bool = False  # позиция банка: материалу больше квартала
     used: int | None = None  # позиция банка: сколько разборов опираются на этот материал
@@ -122,3 +123,6 @@ class Insight(BaseModel):
     materiality_why: str = ""
     # проверяемость разбора (app/agent/review.py, при выдаче): тип события и чек-лист, цифры рядом, что нового в сюжете
     review: dict = Field(default_factory=dict)
+    # публикации события на момент разбора; что добавилось после — показываем и предлагаем пересчитать
+    news_seen: list[str] | None = None
+    news_added: list[dict] = Field(default_factory=list)

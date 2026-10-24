@@ -58,3 +58,24 @@ def test_specifics_required_in_explanation():
     concrete = _ins(why_it_matters=[Claim(text="37% платежей поставщиков — из строительства")])
     assert not has_specifics(vague)
     assert has_specifics(concrete)
+
+
+def test_reprints_are_not_independent_confirmations():
+    """Перепечатка новости агентства — один первоисточник, а не два подтверждения."""
+    txt = "Банк России повысил ключевую ставку до 17% годовых"
+    ev = _event("ЦБ повысил ставку", txt, outlets=("Интерфакс", "РБК"),
+                texts=[txt, "Как сообщает Интерфакс, Банк России повысил ставку до 17%. Решение неожиданное для рынка."])
+    from app.agent.review import independent_sources
+    assert len(fact_support("Ставка повышена до 17%", ev.news)) == 2
+    assert independent_sources("Ставка повышена до 17%", ev.news) == 1
+    ev2 = _event("ЦБ повысил ставку", txt, outlets=("Интерфакс", "Коммерсантъ"),
+                 texts=[txt, "Регулятор неожиданно поднял ставку до 17%, аналитики ждали паузы и сохранения прежнего уровня."])
+    assert independent_sources("Ставка повышена до 17%", ev2.news) == 2
+
+
+def test_news_added_after_insight_is_shown_and_cited():
+    """К событию приклеилась публикация после разбора — разбор говорит об этом и показывает её в источниках."""
+    ev = _event("ЦБ повысил ставку", "Банк России повысил ключевую ставку до 17%", outlets=("Интерфакс", "РБК"))
+    ins = review(_ins(news_seen=["n0"]), ev)
+    assert [x["source"] for x in ins.news_added] == ["РБК"] and any(s.id == "news:n1" for s in ins.sources)
+    assert review(_ins(news_seen=["n0", "n1"]), ev).news_added == []
