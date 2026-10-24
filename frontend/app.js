@@ -220,6 +220,7 @@ async function init() {
   document.addEventListener("click", (e) => { if (!e.target.closest(".bell-wrap")) toggleBell(false); });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#bellPop").hidden) { toggleBell(false); $("#bellBtn").focus(); } });
   $("#analyzeSubmit").onclick = analyzeNews;
+  document.querySelectorAll("[data-example]").forEach((b) => b.onclick = () => { $("#analyzeUrl").value = ""; $("#analyzeText").value = ANALYZE_EXAMPLES[+b.dataset.example]; $("#analyzeText").focus(); });
   try { await enterApp(); } catch (e) { if (e.status !== 401) throw e; }
 }
 
@@ -553,13 +554,13 @@ async function loadProfile() {
   state.factors = factors; state.exposures = exposures; state.profile = p;
   renderRadar();
   renderHero();
-  const money = (v) => v == null ? "нет данных" : (v >= 1e9 ? (v / 1e9).toFixed(1) + " млрд ₽" : (v / 1e6).toFixed(1) + " млн ₽");
+  const money = (v) => v == null ? "нет данных" : (v >= 1e9 ? (v / 1e9).toFixed(1) + " млрд ₽" : (v / 1e6).toFixed(1) + " млн ₽").replace(".", ",");
   const products = { CL_PRODUCT_RKO_MARK: "РКО", CL_PRODUCT_LOA_MARK: "Кредит", CL_PRODUCT_LEA_MARK: "Лизинг", CL_PRODUCT_DEP_MARK: "Депозит", CL_PRODUCT_ZPP_MARK: "Зарплатный проект", CL_PRODUCT_GAR_MARK: "Гарантии", FACTORING_MARK: "Факторинг", FTS_FLAG: "ВЭД" };
   $("#profileCard").innerHTML = `
     <div class="eyebrow">Профиль, на котором строится персонализация</div>
     <h3>${esc(p.okved_name)}</h3>
     <dl>
-      <dt>ОКВЭД</dt><dd>${esc(p.okved)}</dd>
+      <dt>Код отрасли</dt><dd>${esc(p.okved)} <span class="muted small">по ОКВЭД</span></dd>
       <dt>Регион</dt><dd>${esc(p.region || "—")}</dd>
       <dt>Выручка</dt><dd>${p.revenue_suspicious ? "недостоверна" : money(p.revenue)}</dd>
       <dt>Сотрудники</dt><dd>${esc(p.workers || "—")}</dd>
@@ -730,7 +731,7 @@ function renderFocus() {
     try { localStorage.setItem(key, new Date().toISOString()); } catch (e) { /* хранилище недоступно */ }
   }
   const fresh = state.visitMark ? feed.filter((it) => (it.published_at || "") > state.visitMark).length : 0;
-  const due = feed.filter((it) => it.effective && it.effective.days >= 0).sort((a, b) => a.effective.days - b.effective.days)[0];
+  const due = feed.filter((it) => it.effective && it.effective.days >= 0 && !otherRegionTag(it)).sort((a, b) => a.effective.days - b.effective.days)[0];
   const m = eventMoney(main.event_id);
   const unreadRisks = feed.filter((i) => i.effect === "risk" && !read.has(i.event_id)).length;
   box.innerHTML = `<div class="eyebrow">Главное сейчас</div>
@@ -768,6 +769,11 @@ function renderWidget() {
   }
   bindCards($("#widgetList"));
   renderPulse();
+}
+// Региональная мера в чужом регионе: связь косвенная — пометка на карточке, подробности в подсказке
+function otherRegionTag(it) {
+  const r = (it.reasons || []).find((x) => x.factor_title === "Другой регион");
+  return r ? `<span class="pill mixed" title="${esc(r.why)}">другой регион</span>` : "";
 }
 // Короткая причина «почему вам»: фактор со стрелкой и через что он задевает компанию (полный текст — в подсказке)
 function reasonLine(it) {
@@ -913,7 +919,7 @@ function renderFeedList(animate = false) {
     day = d;
     return `${head}<div class="feed-item eff-${it.effect} ${read.has(it.event_id) ? "read" : ""} ${it.event_id === state.current ? "active" : ""}" data-ev="${it.event_id}" tabindex="0" role="button">
       ${it.hidden ? `<button class="link-btn unhide" data-unhide="${it.event_id}">Вернуть в ленту</button>` : `<button class="hide-btn" data-hide="${it.event_id}" title="Скрыть из ленты" aria-label="Скрыть из ленты">×</button>`}
-      <div><span class="pill ${it.effect}">${EFFECT[it.effect]}</span>${it.has_bank_view ? `<span class="pill bank">есть позиция банка</span>` : ""}${effectiveTag(it.effective)}</div>
+      <div><span class="pill ${it.effect}">${EFFECT[it.effect]}</span>${it.has_bank_view ? `<span class="pill bank">есть позиция банка</span>` : ""}${otherRegionTag(it)}${effectiveTag(it.effective)}</div>
       <div class="title">${read.has(it.event_id) ? "" : `<span class="new-dot" title="Не прочитано"></span>`}${esc(it.title)}${read.has(it.event_id) ? `<span class="read-mark">✓ прочитано</span>` : ""}</div>
       <div class="meta">${fmtDate(it.published_at)} · ${esc([...new Set(it.sources.map((x) => x.source))].join(", "))}${it.sources.length > 1 ? ` · ${it.sources.length} ${plural(it.sources.length, "публикация", "публикации", "публикаций")}` : ""}</div>
       <div class="chips">${entityChips(it)}</div>
@@ -1085,6 +1091,12 @@ function claims(list) {
     <span class="kind">${KIND[c.kind] || c.kind}</span>${esc(c.text)}${c.owner || c.due ? `<div class="act-meta">${c.owner ? `<span class="am-owner">${ico("user")} ${esc(c.owner)}</span>` : ""}${c.due ? `<span class="am-due">${ico("clock")} ${esc(c.due)}</span>` : ""}</div>` : ""}<div>${srcTags(c.sources)}${c.kind !== "fact" ? `<span class="conf ${c.confidence}" title="${esc(CONF_DEF[c.confidence] || "")}">${CONF[c.confidence] || ""}</span>` : ""}</div></div>`).join("") || `<div class="muted small">нет данных</div>`;
 }
 
+// Первые n утверждений раздела видны сразу, остальные — по кнопке «ещё»: меньше текста на первом экране разбора
+function claimsShort(list, n) {
+  const l = list || [];
+  if (l.length <= n + 1) return claims(l);
+  return `${claims(l.slice(0, n))}<details class="more-claims"><summary>Ещё ${l.length - n}</summary>${claims(l.slice(n))}</details>`;
+}
 const SCEN_CLASS = { base: "watch", negative: "risk", positive: "opportunity" };
 const SCEN_SHORT = { negative: "Негативный", base: "Базовый", positive: "Позитивный" };
 const SCEN_ORDER = ["negative", "base", "positive"];
@@ -1252,7 +1264,8 @@ function moneyLine(i, sc, lo, hi) {
   if (moneyOff(i)) return `<div class="sh-range"><span class="sh-note">Деньги: заметного влияния на прибыль за 12 месяцев не ожидаем — суммы не показываем.</span></div>`;
   const neg = sc.negative, pos = sc.positive;
   const main = (neg && neg.rows.length ? neg.rows : pos.rows).slice().sort((a, b) => Math.abs(b.effect_rub) - Math.abs(a.effect_rub))[0];
-  return `<div class="sh-range">${stakeBar(lo, hi)}Что на кону за 12 месяцев: от <b class="${lo < 0 ? "neg" : ""}">${rub(lo)}</b> до <b class="${hi > 0 ? "pos" : ""}">${rub(hi)}</b>
+  const sym = lo < 0 && hi > 0 && Math.abs(lo + hi) <= 0.02 * Math.max(-lo, hi);
+  return `<div class="sh-range">${stakeBar(lo, hi)}${sym ? `<div class="sh-sym">Плюс и минус равны, потому что сценарии симметричны: рычаг отклоняется от прогноза банка на одинаковую величину в обе стороны (например, ставка ±1 п.п.), а связь с компанией линейная.</div>` : ""}Что на кону за 12 месяцев: от <b class="${lo < 0 ? "neg" : ""}">${rub(lo)}</b> до <b class="${hi > 0 ? "pos" : ""}">${rub(hi)}</b>
     <span class="sh-note">если всё пойдёт по прогнозу Альфа-Банка — без изменений к плану${main ? " · главный рычаг — " + esc(main.title.replace(/^./, (c) => c.toLowerCase())) : ""}${sc.base.start_month ? " · начнётся с " + esc((sc.base.months || [])[sc.base.start_month] || "") : ""} · расчёт — в подробном разборе</span></div>`;
 }
 // Новость и позиция банка расходятся — показываем наверху оба взгляда, без выбора «кто прав»
@@ -1273,13 +1286,13 @@ function renderInsight(tab) {
     body = `
       <details class="impact-wrap" open><summary>Карта влияния: как событие доходит до вашей компании</summary>${impactMap(i)}</details>
       <div class="kinds"><span class="k-fact" title="Подтверждено новостью или документом">Факт</span><span class="k-assumption" title="Прогноз или мнение из источника — не факт">Предположение источника</span><span class="k-bank_view" title="Тезис или прогноз из аналитики Альфа-Банка со ссылкой на документ и страницу">Позиция Альфа-Банка</span><span class="k-ai_inference" title="Вывод модели, не официальная позиция банка">Вывод сервиса (AI) — не позиция банка</span></div>
-      <div class="q"><h4><span class="n">1</span>Что произошло</h4>${claims(i.what_happened)}</div>
-      <div class="q"><h4><span class="n">2</span>Почему это важно для вашей компании</h4>${claims(i.why_it_matters)}</div>
+      <div class="q"><h4><span class="n">1</span>Что произошло</h4>${claimsShort(i.what_happened, 2)}</div>
+      <div class="q"><h4><span class="n">2</span>Почему это важно для вашей компании</h4>${claimsShort(i.why_it_matters, 2)}</div>
       <div class="q"><h4><span class="n">3</span>Возможные последствия</h4>
-        <div class="cols"><div><b class="bad small">Риски</b>${claims(i.consequences.risks)}</div><div><b class="ok small">Возможности</b>${claims(i.consequences.opportunities)}</div></div>
-        <b class="small muted">Что повлияет на развитие ситуации</b>${claims(i.consequences.drivers)}
+        <div class="cols"><div><b class="bad small">Риски</b>${claimsShort(i.consequences.risks, 2)}</div><div><b class="ok small">Возможности</b>${claimsShort(i.consequences.opportunities, 2)}</div></div>
+        <b class="small muted">Что повлияет на развитие ситуации</b>${claimsShort(i.consequences.drivers, 1)}
         ${(i.scenarios || []).length ? `<div class="effect-block"><div class="sub-h">Эффект для компании за 12 месяцев</div>${scenarioCards(i.scenarios, false, moneyOff(i))}</div>` : ""}
-        ${(i.what_could_change || []).length ? `<div class="sub-h">Что может изменить вывод</div>${claims(i.what_could_change)}` : ""}
+        ${(i.what_could_change || []).length ? `<div class="sub-h">Что может изменить вывод</div>${claimsShort(i.what_could_change, 1)}` : ""}
         ${whatIfBlock()}</div>
       <div class="q"><h4><span class="n">4</span>Что можно сделать</h4>${actionsBlock(i.actions)}
         ${i.products.map((p) => `<div class="product"><span class="lbl">${esc(p.label)}</span><br><b>${esc(PRODUCT_RU[p.product] || p.product)}</b> — ${esc(p.why)}
@@ -1289,9 +1302,10 @@ function renderInsight(tab) {
         <div class="bv-card"><div class="bv-head"><span class="bv-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 10 12 4l9 6M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18"/></svg></span><div><b>Позиция Альфа-Банка</b><div class="muted small">тезисы и прогнозы из аналитики банка — со ссылкой на документ и страницу</div></div></div>
         ${(i.bank_view || []).length ? claims(i.bank_view) : `<div class="muted small">В аналитике банка нет материалов по этой теме — сервис не придумывает позицию за банк.</div>`}</div></div>
       <div class="q"><h4><span class="n">6</span>На чём основан вывод</h4>
-        <div class="small muted">Каждое утверждение выше помечено типом и источником. Автоматическая проверка разбора (${i.iterations} ${plural(i.iterations, "проход", "прохода", "проходов")}):</div>
-        <ul class="quality">${i.quality.map((c) => `<li class="${c.passed ? "ok" : "bad"}">${c.passed ? "✓" : "✗"} ${esc(CHECK_RU[c.name] || c.name)}${c.passed ? "" : " — " + esc(cleanRefs(c.detail))}</li>`).join("")}</ul>
-        <div class="muted small scale">Шкала уверенности: ${Object.values(CONF_DEF).map(esc).join(" · ")}. Эффект: «риск» — событие ухудшает показатели компании, «возможность» — улучшает, «отслеживать» — влияние неоднозначно или ещё не наступило.</div>
+        <div class="qa-sum"><span class="qa-ring ${allOk ? "ok" : "warn"}">${i.quality.filter((c) => c.passed).length}/${i.quality.length}</span>
+          <div><b>${allOk ? "Самопроверка пройдена" : "Самопроверка: есть замечания"}</b><div class="muted small">Каждое утверждение помечено типом и источником · ${i.iterations} ${plural(i.iterations, "проход", "прохода", "проходов")} проверки</div></div></div>
+        <details class="qa-details"><summary>Все проверки</summary><ul class="quality">${i.quality.map((c) => `<li class="${c.passed ? "ok" : "bad"}">${c.passed ? "✓" : "✗"} ${esc(CHECK_RU[c.name] || c.name)}${c.passed ? "" : " — " + esc(cleanRefs(c.detail))}</li>`).join("")}</ul>
+        <div class="muted small scale">Шкала уверенности: ${Object.values(CONF_DEF).map(esc).join(" · ")}. Эффект: «риск» — событие ухудшает показатели компании, «возможность» — улучшает, «отслеживать» — влияние неоднозначно или ещё не наступило.</div></details>
       </div>
       <div class="feedback">Полезно? <button class="btn ghost small" data-fb="1" aria-label="Полезно">${ico("like")}</button><button class="btn ghost small" data-fb="-1" aria-label="Не полезно">${ico("dislike")}</button>
         <span id="fbReasons" hidden>Что не так?
@@ -1510,20 +1524,46 @@ async function sendFeedback(rating, reason = null) {
 }
 
 // ---------------------------------------------------------------- проверка новой новости
+// Примеры для проверки «невиданных» новостей: вымышленные тексты, явно помеченные в окне как примеры
+const ANALYZE_EXAMPLES = [
+  "Пример. Банк России на внеочередном заседании повысил ключевую ставку на 2 п.п., до 18,5% годовых, и допустил дальнейшее ужесточение, если инфляционные ожидания не снизятся.",
+  "Пример. Правительство с 1 марта вводит ввозную пошлину 15% на металлообрабатывающие станки из Китая, чтобы поддержать российских производителей оборудования.",
+  "Пример. Минфин сообщил, что с 1 февраля программа льготной ипотеки на новостройки будет доступна только семьям с детьми до 6 лет; лимит кредита снизят до 6 млн рублей.",
+];
+const ANALYZE_STEPS = ["Читаем и классифицируем новость", "Сопоставляем с профилем компании", "Ищем позицию Альфа-Банка", "Пишем черновик разбора", "Проверяем факты и источники"];
 async function analyzeNews(e) {
   e.preventDefault();
   const url = $("#analyzeUrl").value.trim(), text = $("#analyzeText").value.trim();
   if (!url && !text) return;
   $("#analyzeDialog").close();
   show("radar");
-  $("#insightPanel").innerHTML = `<div class="insight loading">Классификация и анализ новости…</div>`;
+  // честный индикатор ожидания: шаги агента и прошедшее время (обычно 30–60 секунд)
+  const t0 = Date.now();
+  const paint = () => {
+    const sec = Math.round((Date.now() - t0) / 1000), k = Math.min(ANALYZE_STEPS.length - 1, Math.floor(sec / 9));
+    $("#insightPanel").innerHTML = `<div class="insight an-wait"><div class="eyebrow">Новость не из ленты</div><h3>Разбираем новость для вашей компании</h3>
+      <ol class="an-steps">${ANALYZE_STEPS.map((t, i) => `<li class="${i < k ? "done" : i === k ? "now" : ""}">${esc(t)}</li>`).join("")}</ol>
+      <div class="muted small">Прошло ${sec} с · обычно 30–60 секунд</div></div>`;
+  };
+  paint();
+  const timer = setInterval(paint, 1000);
   try {
     const r = await api("/api/news/analyze", { method: "POST", body: JSON.stringify({ url: url || null, text: text || null, company_id: state.company, role: state.role }) });
+    clearInterval(timer);
     state.current = r.event_id; state.insight = r.insight;
     renderInsight("analysis");
     loadFeed();
-  } catch (err) { $("#insightPanel").innerHTML = `<div class="insight bad">Ошибка: ${esc(err.message)}</div>`; }
-  $("#analyzeUrl").value = ""; $("#analyzeText").value = "";
+    $("#analyzeUrl").value = ""; $("#analyzeText").value = "";
+  } catch (err) {
+    clearInterval(timer);
+    const viaUrl = url && !text;
+    $("#insightPanel").innerHTML = `<div class="insight"><div class="eyebrow">Новость не из ленты</div>
+      <h3>${viaUrl ? "Не удалось прочитать страницу по ссылке" : "Не получилось разобрать новость"}</h3>
+      <p class="muted">${esc(err.message)}</p>
+      ${viaUrl ? `<p>Некоторые сайты не отдают текст автоматически. Скопируйте текст новости и вставьте его — разбор будет таким же.</p>` : ""}
+      <button class="btn btn-red small" id="analyzeRetry">${viaUrl ? "Вставить текст" : "Попробовать ещё раз"}</button></div>`;
+    $("#analyzeRetry").onclick = () => { $("#analyzeDialog").showModal(); (viaUrl ? $("#analyzeText") : $("#analyzeUrl")).focus(); };
+  }
 }
 
 // ---------------------------------------------------------------- действия после инсайта (менеджер, звонок, заявка)

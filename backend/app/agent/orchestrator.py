@@ -382,7 +382,8 @@ def _profile_label(sid: str, p: CompanyProfile) -> str:
 def decide_revise(ins: Insight, ctx: AgentContext, issues: list[str], tracer: Tracer) -> bool:
     """Нужна ли правка моделью и хватает ли на неё времени и денег. Решение и причина — в трассировке."""
     # суммы не из калькулятора и пересказ заголовка правилами не исправить — нужна правка моделью
-    llm_issues = [i for i in issues if i.startswith(("LLM-критик", "Суммы — только из калькулятора", "Главный вывод не повторяет"))]
+    llm_issues = [i for i in issues if i.startswith(("LLM-критик", "Суммы — только из калькулятора", "Главный вывод не повторяет"))
+                  or (i.startswith("Числа позиции банка") and "сверьте" in i)]
     no_bank = any("аналитику банка" in i or "Позиция банка" in i for i in issues)
     elapsed = time.perf_counter() - ctx.memory["_t0"]
     spent = sum(s.get("cost_rub") or 0 for s in tracer.steps)
@@ -450,7 +451,9 @@ def run_agent(event: Event, profile: CompanyProfile, role: str | None = None, li
         p = plan(ctx, tracer)
         execute(ctx, p, tracer)
         pool.shutdown(wait=False)
-        ctx.memory["_allowed_bank"] = {s for s in allowed_sources(ctx) if s.startswith("bank:")}
+        _allowed = allowed_sources(ctx)
+        ctx.memory["_allowed_bank"] = {s for s in _allowed if s.startswith("bank:")}
+        ctx.memory["_allowed_all"] = set(_allowed)
         ins = fill_action_meta(draft(ctx, tracer), ctx)
         if listener and ins.generated_by.startswith("llm"):
             emit_draft(ins, ctx, tracer)

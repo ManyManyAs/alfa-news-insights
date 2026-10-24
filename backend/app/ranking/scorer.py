@@ -156,6 +156,7 @@ def _watched(cls, watch: list[dict], reasons: list[dict]) -> float:
             return WATCH_BONUS  # одно совпадение — один бонус, чтобы список не перекрывал профиль
     return 0.0
 INDUSTRY_BONUS = 0.45
+OTHER_REGION_PENALTY = 0.12
 
 
 def _industry_region(cls, profile: CompanyProfile, reasons: list[dict], has_factors: bool) -> float:
@@ -197,6 +198,15 @@ def _industry_region(cls, profile: CompanyProfile, reasons: list[dict], has_fact
                                     "specific": True, "contribution": c, "basis": [f"graph:region:{r['region']}"],
                                     "why": f"В регионе «{r['region']}» находятся {role} компании ({r['share']:.0%} платежей)"})
                     break
+            else:
+                # региональная мера в другом регионе, где нет ни компании, ни её контрагентов: ниже в ленте и честная пометка
+                other = [x for x in cls.regions if x and x != profile.region]
+                if other and profile.region:
+                    add -= OTHER_REGION_PENALTY
+                    reasons.append({"factor": "region", "factor_title": "Другой регион", "effect": "watch", "specific": False,
+                                    "contribution": -OTHER_REGION_PENALTY, "basis": ["profile:REGION"],
+                                    "why": f"Событие касается региона «{other[0]}», а компания и её контрагенты — в других "
+                                           f"регионах: влияние косвенное"})
     return add
 
 

@@ -24,6 +24,10 @@ on:
         description: "warmup: пересобрать уже готовые инсайты (после правки промптов)"
         type: boolean
         default: false
+      ingest:
+        description: "warmup: сначала собрать свежие новости из RSS (живой поток в снапшот — тогда «docker compose up» показывает свежие события)"
+        type: boolean
+        default: false
       interactive:
         description: "warmup: приоритет как у пользователя — для коротких замеров (тратит и из резерва бюджета для пользователей)"
         type: boolean
@@ -98,13 +102,28 @@ jobs:
       - name: Предрасчёт разборов и инсайтов
         if: inputs.task == 'warmup' || inputs.task == 'all'
         run: |
+          if [ "${{ inputs.ingest }}" = "true" ]; then
+            python scripts/manage.py ingest | tee ingest.log | tail -40
+            python - <<'EOF2'
+          import json, re
+          t = open("ingest.log", encoding="utf-8").read()
+          try:
+              d = json.loads(t[t.index("{"):])
+              print(f"::notice title=ingest::новостей {d.get('fetched')}, новых событий {d.get('new_events')}, склеено {d.get('merged')}, шум {d.get('noise')}, ошибок источников {len(d.get('errors', []))}")
+          except Exception as e:
+              print("::warning title=ingest::не удалось разобрать итог сбора:", e)
+          EOF2
+          fi
           ROLES=""; if [ "${{ inputs.roles }}" = "true" ]; then ROLES="--roles"; fi
           REFRESH=""; if [ "${{ inputs.refresh }}" = "true" ]; then REFRESH="--refresh"; fi
           # мягкий лимит 85 мин: job ограничен 120 мин, снапшот должен успеть выгрузиться
           PRIO="--background"; if [ "${{ inputs.interactive }}" = "true" ]; then PRIO=""; fi
-          python scripts/manage.py warmup --top ${{ inputs.top }} --max-rub ${{ inputs.max_rub }} --max-minutes 85 $PRIO $ROLES $REFRESH | tee warmup.log
+          set -o pipefail
+          python scripts/manage.py warmup --top ${{ inputs.top }} --max-rub ${{ inputs.max_rub }} --max-minutes 85 $PRIO $ROLES $REFRESH 2>&1 | tee warmup.log \
+            || { echo "::error title=warmup::$(grep -v '^\s*$' warmup.log | tail -8 | tr '\n' ' ' | cut -c1-900)"; exit 1; }
+          echo "::notice title=warmup итог::$(grep -c '^insight|' warmup.log) разборов в журнале; $(grep -c '| llm' warmup.log) моделью"
           grep -E "LLM-судья|Потрачено" warmup.log >> "$GITHUB_STEP_SUMMARY" || true
-          grep -E "LLM-судья|Потрачено|Остановлено" warmup.log | while read -r l; do echo "::notice title=warmup::$l"; done
+          { grep -E "LLM-судья|Потрачено|Остановлено|Модель недоступна" warmup.log || true; } | while read -r l; do echo "::notice title=warmup::$l"; done
       - name: Два судьи на готовых разборах
         if: inputs.task == 'judges' || inputs.task == 'all'
         run: |

@@ -315,6 +315,45 @@ def unverified_money(ins: Insight, ctx: AgentContext) -> list[tuple[str, Claim, 
     return bad
 
 
+# --- обоснованность (замечания судей 24.10): число в позиции банка должно быть в том материале, на который ссылаемся,
+# а ссылки на профиль и граф — только из списка allowed_sources (иначе читатель не сможет проверить вывод)
+PCT_RE = re.compile(r"(\d+(?:[.,]\d+)?)\s*(?:%|п\.\s?п\.)")
+
+
+def _bank_text(sid: str) -> str:
+    ref = sid.partition(":")[2]
+    kb = get_knowledge()
+    return next((c.text for c in kb.chunks if c.id == ref), "")
+
+
+def bank_number_mismatch(ins: Insight, ctx: AgentContext) -> list[tuple[Claim, str, str | None]]:
+    """Проценты в «позиции банка», которых нет в указанных материалах банка. Третье поле — материал из контекста,
+    где это число есть (для честной перепривязки ссылки), или None."""
+    allowed = sorted(ctx.memory.get("_allowed_bank") or [])
+    out = []
+    for c in ins.bank_view:
+        if c.kind != "bank_view":
+            continue
+        cited = [s for s in c.sources if s.startswith("bank:")]
+        texts = " ".join(_bank_text(s) for s in cited)
+        have = {_num(x) for x in NUM_RE.findall(texts)}
+        for raw in PCT_RE.findall(c.text):
+            n = _num(raw)
+            if n in have:
+                continue
+            alt = next((s for s in allowed if s not in cited and n in {_num(x) for x in NUM_RE.findall(_bank_text(s))}), None)
+            out.append((c, raw, alt))
+    return out
+
+
+def foreign_profile_sources(ins: Insight, ctx: AgentContext) -> list[str]:
+    allowed = ctx.memory.get("_allowed_all")
+    if not allowed:
+        return []
+    return sorted({s for _, c in all_claims(ins) for s in c.sources
+                   if s.startswith(("profile:", "graph:", "peers:")) and s not in allowed})
+
+
 def _tokens(s: str) -> set[str]:
     return {w for w in re.findall(r"[а-яёa-z0-9]{4,}", (s or "").lower())}
 
@@ -383,6 +422,13 @@ def critique_rules(ins: Insight, ctx: AgentContext) -> tuple[list[QualityCheck],
               "суммы нет в calc:scenario — замените на сумму калькулятора или уберите: " + "; ".join(f"«{r}»" for _, _, r in money[:3]))
         check("Главный вывод не повторяет заголовок", not repeats_headline(ins),
               "takeaway пересказывает заголовок — напишите, что событие значит для компании")
+        mism = bank_number_mismatch(ins, ctx)
+        check("Числа позиции банка совпадают с материалом", not mism,
+              "; ".join(f"«{r}» нет в {', '.join(x for x in c.sources if x.startswith('bank:'))}"
+                        + (f" — это число из {alt}" if alt else " — сверьте число или ссылку") for c, r, alt in mism[:3]))
+        foreign = foreign_profile_sources(ins, ctx)
+        check("Ссылки на профиль — из списка контекста", not foreign,
+              f"нет в allowed_sources: {', '.join(foreign[:4])} — используйте id из списка")
     return checks, issues
 
 
@@ -429,6 +475,19 @@ def repair_rules(ins: Insight, ctx: AgentContext) -> Insight:
         if id(ins.takeaway) in bad_ids:
             for raw, _ in money_values(ins.takeaway.text):
                 ins.takeaway.text = re.sub(r"\s*[(—–-]?\s*" + re.escape(raw) + r"[^.;)]*[);]?", "", ins.takeaway.text).strip()
+    if ins.generated_by.startswith("llm"):
+        # число в позиции банка взято из другого материала банка — перепривязываем ссылку на тот, где оно есть
+        for c, _, alt in bank_number_mismatch(ins, ctx):
+            if alt and alt not in c.sources:
+                c.sources = [*c.sources, alt]
+            elif not alt:
+                c.confidence = "low"
+        foreign = set(foreign_profile_sources(ins, ctx))
+        if foreign:
+            okved = f"profile:OKVED={ctx.profile.okved[:2]}"
+            for _, c in all_claims(ins):
+                if any(s in foreign for s in c.sources):
+                    c.sources = [s for s in c.sources if s not in foreign] or [okved]
     fill_action_meta(ins, ctx)
     return fix_headline(ins, ctx)
 

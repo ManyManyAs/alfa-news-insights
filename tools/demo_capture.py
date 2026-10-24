@@ -201,6 +201,21 @@ async def shots(b):
         await pg.screenshot(path=OUT / "12_notifications.png")
         await pg.keyboard.press("Escape")
 
+    async def s_tour():
+        # тур по сервису: каждый шаг находит свой элемент на экране (иначе подсветка «повисает» на пустом месте)
+        await pg.click(".nav-item[data-view=home]")
+        await pg.click("#tourBtn")
+        await pg.wait_for_selector("#tour.on .tour-pop", timeout=15000)
+        steps = await pg.evaluate("TOUR.length")
+        for k in range(steps):
+            sel = await pg.evaluate(f"TOUR[{k}].sel")
+            await wait_js(pg, f"document.querySelector({json.dumps(sel)})", 60)
+            await asyncio.sleep(0.6)
+            if k < steps - 1:
+                await pg.click("#tour [data-t=next]")
+        await pg.keyboard.press("Escape")
+        await asyncio.sleep(0.5)
+
     async def s_widths():
         # оболочка на ширинах ноутбука: шапка в одну строку, у страницы нет горизонтальной прокрутки
         await pg.click(".nav-item[data-view=home]")
@@ -217,7 +232,7 @@ async def shots(b):
 
     for name, fn in [("вход", s_login), ("главная", s_home), ("лента и разбор", s_insight), ("сценарии", s_scen),
                      ("чат", s_chat), ("трассировка", s_trace), ("мои действия", s_tasks), ("календарь", s_calendar), ("прогнозы банка", s_forecasts), ("дайджест", s_digest), ("качество и бюджет", s_quality),
-                     ("разделы банка", s_bank), ("уведомления", s_bell), ("ширины экрана", s_widths)]:
+                     ("разделы банка", s_bank), ("уведомления", s_bell), ("тур по сервису", s_tour), ("ширины экрана", s_widths)]:
         await step(name, fn())
     await ctx.close()
 
@@ -278,7 +293,8 @@ async def video(b):
         await asyncio.sleep(3)
         await pg.click("#tourBtn")
         await pg.wait_for_selector("#tour.on .tour-pop", timeout=15000)
-        for _ in range(9):  # 9 шагов тура; шаги с разбором ждут его загрузки сами
+        steps = await pg.evaluate("TOUR.length")
+        for _ in range(steps - 1):  # шаги тура; шаги с разбором ждут его загрузки сами
             await asyncio.sleep(11)
             await pg.click("#tour [data-t=next]")
         await asyncio.sleep(2)

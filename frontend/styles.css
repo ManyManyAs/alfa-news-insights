@@ -1282,3 +1282,23 @@ h2 { font-weight: 700; } h3 { font-weight: 500; }
 .dn-legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 13.5px; }
 .dn-legend li { display: flex; align-items: center; gap: 8px; }
 .dn-legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+
+/* Разбор: часть утверждений свёрнута, самопроверка — одной строкой со счётчиком */
+details.more-claims > summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--muted); padding: 4px 2px; list-style: none; }
+details.more-claims > summary::before { content: "+ "; }
+details.more-claims[open] > summary::before { content: "− "; }
+details.more-claims > summary::-webkit-details-marker { display: none; }
+.qa-sum { display: flex; align-items: center; gap: 12px; margin: 4px 0 8px; }
+.qa-ring { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; font: 700 13px var(--display); flex: none; }
+.qa-ring.ok { background: var(--opp-bg); color: var(--opp); box-shadow: inset 0 0 0 3px var(--opp); }
+.qa-ring.warn { background: var(--mixed-bg); color: var(--mixed); box-shadow: inset 0 0 0 3px var(--mixed); }
+.qa-details summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--muted); }
+.sh-sym { font-size: 12px; color: rgba(255, 255, 255, .6); margin: -4px 0 8px; max-width: 460px; }
+/* «Проверить новость»: примеры в один клик и шаги ожидания */
+.an-examples { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 4px 0 12px; }
+.an-examples .chip { background: var(--soft2); }
+.an-steps { list-style: none; padding: 0; margin: 14px 0; display: grid; gap: 8px; }
+.an-steps li { display: flex; gap: 10px; align-items: center; color: var(--muted); font-size: 14px; }
+.an-steps li::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--line); flex: none; }
+.an-steps li.done { color: var(--ink); } .an-steps li.done::before { background: var(--opp); }
+.an-steps li.now { color: var(--ink); font-weight: 600; } .an-steps li.now::before { background: var(--red-2); animation: live 1.6s infinite; }

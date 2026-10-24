@@ -82,3 +82,32 @@ def test_scenarios_carry_company_sensitivity():
     # событие о ставке двигает этот рычаг; у компаний с кредитом ставка выше прогноза — рост расходов по долгу,
     # у компаний только с депозитами — доход (знак плюс тоже верен)
     assert rates and all(x["event_lever"] for x in rates) and any(x["effect_rub"] < 0 for x in rates)
+
+
+def test_bank_number_must_be_in_cited_material_and_is_relinked():
+    """Судьи 24.10: «12,4%» приписано прогнозу банка, где 13,0% — число должно быть в том материале, на который ссылка."""
+    from app.agent.rules import bank_number_mismatch, foreign_profile_sources, repair_rules
+    from app.knowledge.bank import get_knowledge
+
+    kb = get_knowledge()
+    fc = next(c for c in kb.chunks if c.id.startswith("fc-") and "%" in c.text)
+    own = {x.replace(",", ".") for x in __import__("re").findall(r"\d+(?:[.,]\d+)?", fc.text)}
+    other = next(c for c in kb.chunks if c.kind == "thesis" and any(
+        x.replace(",", ".") not in own for x in __import__("re").findall(r"(\d+,\d+)\s*%", c.text)))
+    num = next(x for x in __import__("re").findall(r"(\d+,\d+)\s*%", other.text) if x.replace(",", ".") not in own)
+    claim = Claim(text=f"Банк ожидает ставку около {num}%", kind="bank_view", sources=[f"bank:{fc.id}"])
+    ins = _ins(bank_view=[claim], generated_by="llm:deepseek")
+    ctx = _ctx({})
+    ctx.memory["_allowed_bank"] = {f"bank:{fc.id}", f"bank:{other.id}"}
+    found = bank_number_mismatch(ins, ctx)
+    assert found and found[0][2] == f"bank:{other.id}"
+    # ссылки на профиль вне allowed_sources
+    ctx.memory["_allowed_all"] = {"profile:OKVED=41", f"bank:{fc.id}"}
+    ins.why_it_matters = [Claim(text="Компания в Москве", kind="ai_inference", sources=["profile:регион"])]
+    assert foreign_profile_sources(ins, ctx) == ["profile:регион"]
+    ctx.profile = SimpleNamespace(okved="41.20")
+    ctx.event.news[0].id = "n1"
+    ctx.event.title = "Событие"
+    fixed = repair_rules(ins, ctx)
+    assert f"bank:{other.id}" in fixed.bank_view[0].sources
+    assert fixed.why_it_matters[0].sources == ["profile:OKVED=41"]
