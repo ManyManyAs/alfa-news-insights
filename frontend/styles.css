@@ -1673,3 +1673,63 @@ button.cite { border: 0; font: inherit; cursor: pointer; }
 .fc-log { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 10px; }
 .fc-log:empty { display: none; }
 .fc-log .msg { max-width: 100%; }
+
+/* ============================== Этап 7: действия и связь с банком ============================== */
+.act-v2 textarea { width: 100%; margin-top: 4px; }
+.act-prev { margin: 12px 0 4px; padding: 12px 14px; border-radius: var(--radius-s); background: var(--soft); }
+.act-prev .sub-h { margin-top: 0; }
+.act-prev dl { display: grid; grid-template-columns: 110px 1fr; gap: 6px 12px; margin: 6px 0 8px; font-size: 13.5px; }
+.act-prev dt { color: var(--muted); }
+.act-prev dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.act-prev-t { white-space: pre-wrap; }
+@media (max-width: 640px) { .act-prev dl { grid-template-columns: 1fr; gap: 2px; } .act-prev dd { margin-bottom: 6px; } }
+
+.kb-tools { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; margin: 0 0 12px; }
+.kb-tools .ico { width: 15px; height: 15px; vertical-align: -2px; }
+.kanban { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; align-items: start; margin-bottom: 18px; }
+.kb-col { background: var(--soft); border-radius: var(--radius-m); padding: 12px; min-height: 140px; transition: box-shadow .15s; }
+.kb-col.over { box-shadow: inset 0 0 0 2px var(--red); }
+.kb-head { display: flex; align-items: center; justify-content: space-between; margin: 2px 4px 10px; }
+.kb-n { font: 600 12px var(--font); color: var(--muted); background: var(--surface); border-radius: 999px; padding: 1px 8px; }
+.kb-col[data-col="doing"] .kb-head b { color: var(--watch); } .kb-col[data-col="done"] .kb-head b { color: var(--opp); }
+.kb-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.kb-empty { color: var(--muted); font-size: 13px; padding: 14px 6px; text-align: center; border: 1.5px dashed var(--line); border-radius: var(--radius-s); }
+.kb-card { background: var(--surface); border: var(--hair, 1px solid var(--line)); border-radius: var(--radius-s); padding: 10px 12px; display: grid; gap: 6px; cursor: grab; font-size: 14px; }
+.kb-card.drag { opacity: .5; }
+.kb-card.late { box-shadow: inset 3px 0 0 var(--risk); } .kb-card.soon { box-shadow: inset 3px 0 0 var(--mixed); }
+.kb-col[data-col="done"] .kb-card > b { text-decoration: line-through; color: var(--muted); font-weight: 500; }
+.kb-money { font-size: 12.5px; color: var(--ink2); background: var(--bank-bg); border-radius: 8px; padding: 4px 8px; display: block; line-height: 1.5; }
+.kb-money .ico { vertical-align: -2px; margin-right: 4px; }
+.kb-money .ico, .kb-meta .ico { width: 14px; height: 14px; flex: none; }
+.kb-meta { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.kb-owner { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
+.kb-owner select { font-size: 12.5px; padding: 2px 6px; border-radius: 8px; max-width: 170px; }
+.kb-meta .warn { color: var(--mixed); font-weight: 600; }
+.kb-btns { display: flex; gap: 4px; justify-content: flex-end; }
+@media (max-width: 900px) { .kanban { grid-template-columns: 1fr; } .kb-card { cursor: default; } }
+
+.req-card { max-width: 900px; }
+.req-list { list-style: none; margin: 6px 0; padding: 0; display: grid; gap: 4px; }
+.req { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 8px 6px; border-bottom: 1px solid var(--line); }
+.req-main { flex: 1; min-width: 220px; display: grid; gap: 2px; }
+.req.cancelled, .req.resolved { opacity: .7; }
+.req-btns { display: flex; gap: 10px; }
+.req-btns .link-btn { font-size: 13px; }
+.pill.muted { background: var(--soft2); color: var(--muted); }
+
+.ev-history:empty { display: none; }
+.ev-history { margin: 12px 0 4px; padding: 10px 12px; border-radius: var(--radius-s); background: var(--opp-bg); }
+.ev-history .sub-h { margin-top: 0; }
+.evh { list-style: none; margin: 4px 0 6px; padding: 0; display: grid; gap: 4px; font-size: 13.5px; }
+.evh-done { color: var(--muted); }
+
+.report-print { display: none; }
+@media print {
+  body[data-print="report"] .report-print { display: block !important; font-size: 12.5px; color: #000; }
+  .report-print h1 { font-size: 20px; margin: 0 0 4px; }
+  .report-print h2 { font-size: 14px; margin: 14px 0 6px; color: #c4170c; border-bottom: 1px solid #ddd; padding-bottom: 3px; }
+  .report-print ol, .report-print ul { margin: 0; padding-left: 18px; }
+  .report-print li { margin: 0 0 6px; break-inside: avoid; }
+  .report-print .rp-meta, .report-print .rp-why { color: #444; }
+  .report-print .rp-disc { margin-top: 16px; font-size: 10px; color: #666; }
+}
