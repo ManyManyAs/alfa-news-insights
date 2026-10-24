@@ -146,7 +146,7 @@ async def shots(b):
 
     async def s_trace():
         await pg.click("#insightPanel .tab[data-tab=trace]")
-        await pg.wait_for_selector("#traceBox .ag-svg", timeout=20000)  # этап 8: схема шагов агента
+        await pg.wait_for_selector("#traceBox .ag-flow", timeout=20000)  # этап 8: схема шагов агента
         await asyncio.sleep(1)
         await pg.locator("#insightPanel .tabs").scroll_into_view_if_needed()
         await pg.screenshot(path=OUT / "06_trace.png")
