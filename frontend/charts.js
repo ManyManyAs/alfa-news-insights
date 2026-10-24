@@ -11,13 +11,18 @@ function isoDay(d) { return d.toISOString().slice(0, 10); }
 // Пульс ленты: события по дням за 14 дней, столбцы по эффекту. Клик по дню — лента этого дня.
 function pulseChart(feed, days = 14) {
   const today = new Date(); today.setHours(12, 0, 0, 0);
+  const recent = feed.filter((it) => (it.published_at || "") >= isoDay(new Date(today - (days - 1) * 864e5))).length;
+  // в тихие периоды дневные столбцы пустые — тогда показываем 12 недель
+  const weekly = recent < 3, step = weekly ? 7 : 1, n = weekly ? 12 : days;
   const cols = [];
-  for (let k = days - 1; k >= 0; k--) {
-    const d = new Date(today - k * 864e5), key = isoDay(d);
-    const items = feed.filter((it) => (it.published_at || "").slice(0, 10) === key);
-    cols.push({ key, d, items, by: Object.fromEntries(EFF_ORDER.map((e) => [e, items.filter((it) => (it.effect || "watch") === e).length])) });
+  for (let k = n - 1; k >= 0; k--) {
+    const end = new Date(today - k * step * 864e5), start = new Date(end - (step - 1) * 864e5);
+    const a = isoDay(start), b = isoDay(end);
+    const items = feed.filter((it) => { const d = (it.published_at || "").slice(0, 10); return d >= a && d <= b; });
+    cols.push({ key: weekly ? "" : b, d: end, start, items, by: Object.fromEntries(EFF_ORDER.map((e) => [e, items.filter((it) => (it.effect || "watch") === e).length])) });
   }
-  const older = feed.filter((it) => (it.published_at || "") < cols[0].key).length;
+  days = n;
+  const older = feed.filter((it) => (it.published_at || "") < isoDay(cols[0].start)).length;
   const max = Math.max(1, ...cols.map((c) => c.items.length));
   const W = 420, H = 120, B = 20, gap = 6, bw = (W - gap * (days - 1)) / days;
   const bars = cols.map((c, i) => {
@@ -28,15 +33,18 @@ function pulseChart(feed, days = 14) {
       y -= h;
       return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${(h - 1).toFixed(1)}" rx="2.5" fill="${EFF_COLOR[e]}"/>`;
     }).join("");
-    const tip = `${c.d.toLocaleDateString("ru-RU", { day: "numeric", month: "long" })}: ${c.items.length ? EFF_ORDER.filter((e) => c.by[e]).map((e) => `${EFF_WORD[e]} — ${c.by[e]}`).join(", ") : "событий нет"}`;
-    const lbl = i % 3 === (days - 1) % 3 ? `<text x="${(x + bw / 2).toFixed(1)}" y="${H - 5}" text-anchor="middle" class="pc-ax">${c.d.getDate()}</text>` : "";
+    const when = weekly ? `неделя ${c.start.toLocaleDateString("ru-RU", { day: "numeric", month: "short" })} – ${c.d.toLocaleDateString("ru-RU", { day: "numeric", month: "short" })}`
+      : c.d.toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
+    const tip = `${when}: ${c.items.length ? EFF_ORDER.filter((e) => c.by[e]).map((e) => `${EFF_WORD[e]} — ${c.by[e]}`).join(", ") : "событий нет"}`;
+    const lbl = i % 3 === (days - 1) % 3 ? `<text x="${(x + bw / 2).toFixed(1)}" y="${H - 5}" text-anchor="middle" class="pc-ax">${weekly ? c.d.toLocaleDateString("ru-RU", { day: "numeric", month: "short" }).replace(".", "") : c.d.getDate()}</text>` : "";
     const empty = c.items.length ? "" : `<rect x="${x.toFixed(1)}" y="${H - B - 3}" width="${bw.toFixed(1)}" height="3" rx="1.5" class="pc-empty"/>`;
-    return `<g class="pc-col${c.items.length ? " on" : ""}" ${c.items.length ? `data-pulse-day="${c.key}" tabindex="0" role="button"` : ""} aria-label="${esc(tip)}">
+    const click = c.items.length && c.key;
+    return `<g class="pc-col${click ? " on" : ""}" ${click ? `data-pulse-day="${c.key}" tabindex="0" role="button"` : ""} aria-label="${esc(tip)}">
       <rect x="${(x - gap / 2).toFixed(1)}" y="0" width="${(bw + gap).toFixed(1)}" height="${H - B}" class="pc-hit"/>${segs}${empty}${lbl}<title>${esc(tip)}</title></g>`;
   }).join("");
   const total = cols.reduce((s, c) => s + c.items.length, 0);
   const legend = EFF_ORDER.filter((e) => feed.some((it) => it.effect === e)).map((e) => `<span><i style="background:${EFF_COLOR[e]}"></i>${EFF_WORD[e]}</span>`).join("");
-  return `<div class="mini-head"><h3>Пульс ленты</h3><span class="muted small">${total} за 14 дней${older ? ` · ещё ${older} раньше` : ""}</span></div>
+  return `<div class="mini-head"><h3>Пульс ленты</h3><span class="muted small">${total} ${weekly ? "за 12 недель" : "за 14 дней"}${older ? ` · ещё ${older} раньше` : ""}</span></div>
     <svg viewBox="0 0 ${W} ${H}" class="pulse-svg" role="img" aria-label="События ленты по дням за две недели">${bars}</svg>
     <div class="pc-legend">${legend}</div>`;
 }
