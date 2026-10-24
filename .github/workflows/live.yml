@@ -6,9 +6,9 @@ on:
   workflow_dispatch:
     inputs:
       task:
-        description: "check — проверка моделей; benchmark — сравнение моделей; warmup — предрасчёт + снапшот; judges — два судьи (GLM и Kimi) на готовых разборах; redteam — 10 атак через живые модели; selfcheck — эксперимент «только DeepSeek» (сам себя проверяет) против текущего конвейера; all — всё"
+        description: "check — проверка моделей; benchmark — сравнение моделей; warmup — предрасчёт + снапшот; judges — два судьи (GLM и Kimi) на готовых разборах; redteam — 10 атак через живые модели; selfcheck — эксперимент «только DeepSeek» (сам себя проверяет) против текущего конвейера; feeds — проверка адресов RSS-кандидатов (без LLM); all — всё"
         type: choice
-        options: [check, benchmark, warmup, judges, redteam, selfcheck, all]
+        options: [check, benchmark, warmup, judges, redteam, selfcheck, feeds, all]
         default: check
       max_rub:
         description: "Лимит расходов на прогон, ₽ (дневной лимит команды — 500 ₽)"
@@ -144,6 +144,11 @@ jobs:
           fi
           grep -E "^Прогон|^\| \*\*Средняя|^- " ../docs/llm/deepseek_only.md | while read -r l; do echo "::notice title=selfcheck::$l"; done
           cat ../docs/llm/deepseek_only.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Проверка RSS-кандидатов
+        if: inputs.task == 'feeds'
+        run: |
+          python scripts/probe_feeds.py
+          cat ../docs/llm/feeds_probe.md >> "$GITHUB_STEP_SUMMARY"
       - name: Экспорт снапшота
         run: python scripts/manage.py snapshot-export
       - name: Итоги в summary
