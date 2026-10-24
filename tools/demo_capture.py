@@ -168,8 +168,12 @@ async def shots(b):
         await pg.click("#insightPanel [data-task] >> nth=0")
         await asyncio.sleep(1)
         await pg.click(".nav-item[data-view=tasks]")
-        await pg.wait_for_selector("#tasksBox li.task", timeout=20000)
-        await asyncio.sleep(0.5)
+        await pg.wait_for_selector("#tasksBox .kb-card", timeout=20000)
+        # этап 7: карточка → «В работе», исполнитель — роль
+        await pg.click("#tasksBox .kb-col[data-col=open] [data-tmove] >> nth=0")
+        await pg.wait_for_selector("#tasksBox .kb-col[data-col=doing] .kb-card", timeout=10000)
+        await pg.select_option("#tasksBox .kb-col[data-col=doing] [data-towner] >> nth=0", index=1)
+        await asyncio.sleep(0.8)
         await pg.screenshot(path=OUT / "13_tasks.png")
     async def s_calendar():
         await pg.click(".nav-item[data-view=calendar]")
@@ -260,6 +264,23 @@ async def shots(b):
         if not await pg.locator("#insightPanel .crumbs").count():
             raise AssertionError("в разборе нет хлебных крошек")
 
+    async def s_stage7():
+        # этап 7: заявка с расчётом и предпросмотром, статус обращения, история по событию
+        await pg.evaluate("show('radar')")
+        await pg.click("#insightPanel .tab[data-tab=analysis]")
+        btn = "#insightPanel [data-act=application]" if await pg.locator("#insightPanel [data-act=application]").count() else "#insightPanel [data-act=manager]"
+        await pg.click(btn + " >> nth=0")
+        await pg.wait_for_selector("#actionDialog[open] .act-prev", timeout=10000)
+        await asyncio.sleep(0.5)
+        await pg.screenshot(path=OUT / "25_request_preview.png")
+        await pg.click("#actSend")
+        await wait_js(pg, "!document.querySelector('#actionDialog[open]')", 10)
+        await pg.wait_for_selector("#evHistory .evh li", timeout=15000)
+        await pg.click(".nav-item[data-view=tasks]")
+        await pg.wait_for_selector("#tasksBox .req-card .req", timeout=15000)
+        await pg.locator("#tasksBox .req-card").scroll_into_view_if_needed()
+        await pg.screenshot(path=OUT / "26_requests.png")
+
     async def s_stage6():
         # этап 6: «для собственника», сравнение двух событий, вопрос по всей ленте с главной
         await pg.evaluate("show('radar')")
@@ -283,7 +304,7 @@ async def shots(b):
 
     for name, fn in [("вход", s_login), ("главная", s_home), ("лента и разбор", s_insight), ("сценарии", s_scen),
                      ("чат", s_chat), ("трассировка", s_trace), ("мои действия", s_tasks), ("календарь", s_calendar), ("прогнозы банка", s_forecasts), ("дайджест", s_digest), ("качество и бюджет", s_quality),
-                     ("разделы банка", s_bank), ("уведомления", s_bell), ("тур по сервису", s_tour), ("ширины экрана", s_widths), ("этап 5: навигация", s_stage5), ("этап 6: чат", s_stage6)]:
+                     ("разделы банка", s_bank), ("уведомления", s_bell), ("тур по сервису", s_tour), ("ширины экрана", s_widths), ("этап 5: навигация", s_stage5), ("этап 6: чат", s_stage6), ("этап 7: действия", s_stage7)]:
         await step(name, fn())
     await ctx.close()
 
