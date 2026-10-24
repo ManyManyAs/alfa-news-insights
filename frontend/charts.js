@@ -138,3 +138,16 @@ function effectDonut(counts) {
     <text x="44" y="42" text-anchor="middle" class="dn-n">${total}</text><text x="44" y="56" text-anchor="middle" class="dn-l">${plural(total, "событие", "события", "событий")}</text></svg>
     <ul class="dn-legend">${parts.map(([e, v]) => `<li><i style="background:${EFF_COLOR[e]}"></i><b>${v}</b> ${EFF_WORD[e]}</li>`).join("")}</ul></div>`;
 }
+
+// Пересмотры прогноза Альфа-Банка: факт (два опубликованных прогноза) → сумма для компании по калькулятору
+function revisionRows(list) {
+  if (!list || !list.length) return "";
+  const f = (v, unit) => `${String(v).replace(".", ",")}${unit.startsWith("%") ? "%" : " " + unit}`;
+  return `<div class="rev-money"><div class="sub-h">Уже изменилось: Альфа-Банк пересмотрел прогноз</div>${list.map((r) => `
+    <div class="rm-row" title="${esc(r.formula)}">
+      <div class="rm-what"><b>${esc(r.indicator)}, ${esc(r.period)}</b>
+        <span class="rm-change">${f(r.from, r.unit)} <span aria-hidden="true">→</span> ${f(r.to, r.unit)}</span>
+        <span class="muted small">${fmtDate(r.from_date)} → ${fmtDate(r.to_date)}${r.doc_title ? ` · ${esc(r.doc_title)}${r.page ? `, стр. ${r.page}` : ""}` : ""}</span></div>
+      <div class="rm-eff ${r.effect_rub < 0 ? "bad" : "ok"}"><b>${rub(r.effect_rub)}</b><span class="muted small">за 12 мес. к прежнему плану</span></div>
+    </div>`).join("")}</div>`;
+}

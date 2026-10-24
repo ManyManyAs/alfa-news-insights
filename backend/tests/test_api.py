@@ -179,3 +179,19 @@ def test_proof_summary(client):
     p = client.get("/api/proof").json()
     assert p["offline"]["p3"] and p["repo"].startswith("https://github.com/")
     assert p["redteam"]["total"] >= p["redteam"]["passed"] >= 0
+
+
+def test_money_bank_revisions_are_facts_with_source(client, demo):
+    """«Уже изменилось»: разница двух опубликованных прогнозов банка, сумма — калькулятор, у строки есть ссылка на прогноз."""
+    from datetime import date
+
+    from app.agent.money import bank_revisions, horizon_year
+    from app.data.profiles import get_profile
+
+    assert horizon_year(date(2026, 10, 24)) == 2027 and horizon_year(date(2026, 3, 1)) == 2026
+    rows = bank_revisions(get_profile(demo["primary_company"]))
+    for r in rows:
+        assert r["ref"].startswith("bank:fc-") and r["from"] != r["to"] and abs(r["effect_rub"]) >= 1000
+    h = {"X-User-Id": demo["user_id"]}
+    m = client.get(f"/api/money?company_id={demo['primary_company']}&role={demo['role']}", headers=h).json()
+    assert "revisions" in m

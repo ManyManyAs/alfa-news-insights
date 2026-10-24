@@ -317,12 +317,15 @@ def reset_preferences(company_id: str, user: str = Depends(current_user)):
 _rank_cache: dict[tuple, list] = {}
 
 
+FEED_POOL, FEED_DAYS = 1500, 45  # лента: деловые события за 45 дней (не «последние 300» — это меньше суток потока)
+
+
 def cached_rank(p, role: str | None, limit: int) -> list:
     """Ранжирование ленты с кэшем: ключ меняется при новых событиях и при изменении персональных настроек компании.
 
     Лента — самый частый запрос; без кэша каждый запрос пересчитывает сотни событий (нагрузочный тест: docs/SECURITY.md).
     """
-    events = list_events(300)
+    events = list_events(FEED_POOL, business_days=FEED_DAYS)
     from app.news.ingest import _events_cache
 
     overrides = tuple(sorted((f, o["multiplier"]) for f, o in get_overrides(p.uid).items())) + tuple(

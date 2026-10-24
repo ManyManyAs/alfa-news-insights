@@ -56,19 +56,24 @@ def warmup(top: int = 5, max_rub: float | None = None, background: bool = False,
             return True
         return max_rub is not None and llm.budget_status()["spent_rub"] - start >= max_rub
 
-    events = list_events(300)
+    events = list_events(1500, business_days=45)
     judged: list[float] = []
     with llm_priority("background" if background else "interactive"):
         try:
-            for e in events:
-                if over():
-                    break
-                _, by, _ = get_event_brief(e)
-                print(f"brief  | {e.title[:60]:60s} | {by}")
             users = [(u, get_profile(u["primary_company"])) for u in load_demo_users()]
             plan = [(u, p, u["role"]) for u, p in users]
             if roles:
                 plan += [(u, p, r) for u, p in users for r in role_titles() if r != u["role"]]
+            # общий разбор события — только для тех, что попадают в верх лент демо-персон (а не для всего потока)
+            top_ids: dict[str, object] = {}
+            for _u, p, role in plan:
+                for s in rank_feed(events, p, role, limit=top):
+                    top_ids.setdefault(s.event.id, s.event)
+            for e in top_ids.values():
+                if over():
+                    break
+                _, by, _ = get_event_brief(e)
+                print(f"brief  | {e.title[:60]:60s} | {by}")
             for u, p, role in plan:
                 for s in rank_feed(events, p, role, limit=top):
                     if over():

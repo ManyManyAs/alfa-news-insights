@@ -8,7 +8,7 @@ import logging
 import threading
 import time
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from pydantic import BaseModel
 
@@ -199,7 +199,7 @@ def get_event(event_id: str) -> Event | None:
                  story_id=row["story_id"])
 
 
-_events_cache: dict = {"sig": None, "events": []}
+_events_cache: dict = {"sig": None}
 _NEWS_COLS = ("id", "source", "source_title", "url", "title", "text", "published_at")
 
 
@@ -209,17 +209,32 @@ def _events_signature() -> tuple:
     return tuple(r)
 
 
-def list_events(limit: int = 200) -> list[Event]:
+# Для ленты берём только «деловые» события (есть фактор или отрасль) за окно в днях: при 21 источнике последние
+# 300 событий — это меньше суток потока, и у компании с узким профилем в ленте оставалось 5 новостей «за всё время».
+BUSINESS_SQL = ("(json_array_length(json_extract(classification, '$.factors')) > 0 "
+                "OR json_array_length(json_extract(classification, '$.industries')) > 0 "
+                "OR json_extract(classification, '$.trust') = 'demo')")
+
+
+def list_events(limit: int = 200, business_days: int | None = None) -> list[Event]:
     """Последние события одним пакетом (2 запроса вместо 2N) с кэшем до изменения таблицы событий.
 
     Лента строится на каждый запрос пользователя, а события меняются только при сборе — кэш снимает
-    основную задержку ленты при сотнях событий.
+    основную задержку ленты при сотнях событий. business_days — только деловые события за последние N дней
+    (демо-набор — всегда).
     """
-    sig = (_events_signature(), limit, str(db.get_settings().db_path))
-    if _events_cache["sig"] == sig:
-        return _events_cache["events"]
-    rows = db.query("SELECT id, title, published_at, classification, story_id FROM events "
-                    "WHERE classification IS NOT NULL ORDER BY published_at DESC LIMIT ?", (limit,))
+    sig = (_events_signature(), limit, business_days, str(db.get_settings().db_path))
+    hit = _events_cache.get(sig)
+    if hit is not None:
+        _events_cache["sig"] = sig
+        return hit
+    where = "classification IS NOT NULL"
+    args: list = []
+    if business_days:
+        where += f" AND {BUSINESS_SQL} AND (published_at >= ? OR json_extract(classification, '$.trust') = 'demo')"
+        args.append((datetime.now(UTC) - timedelta(days=business_days)).isoformat())
+    rows = db.query(f"SELECT id, title, published_at, classification, story_id FROM events "
+                    f"WHERE {where} ORDER BY published_at DESC LIMIT ?", (*args, limit))
     ids = [r["id"] for r in rows]
     news: dict[str, list[NewsItem]] = {}
     for i in range(0, len(ids), 500):
@@ -230,5 +245,8 @@ def list_events(limit: int = 200) -> list[Event]:
     out = [Event(id=r["id"], title=r["title"], published_at=r["published_at"], news=news[r["id"]],
                  classification=EventClassification.model_validate_json(r["classification"]), story_id=r["story_id"])
            for r in rows if news.get(r["id"])]
-    _events_cache.update(sig=sig, events=out)
+    if len(_events_cache) > 8:
+        _events_cache.clear()
+    _events_cache[sig] = out
+    _events_cache["sig"] = sig  # совместимость: ключ кэша ленты в main.cached_rank
     return out

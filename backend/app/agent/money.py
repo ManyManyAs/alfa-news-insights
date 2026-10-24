@@ -18,6 +18,7 @@ import logging
 from pydantic import BaseModel, Field
 
 from app.agent.humanize import humanize_text
+from app.agent.scenario import Inputs, bank_baseline, calc
 from app.agent.scenario import scenarios as scenario_set
 from app.security.guard import UNTRUSTED_NOTICE, guard_output, sanitize_untrusted
 
@@ -127,6 +128,44 @@ def ai_check(p, role, cands: list[dict]) -> tuple[dict[str, dict] | None, dict]:
     return out, {"used": True, "model": res.model, "cost_rub": round(res.cost_rub, 3), "cached": res.cached}
 
 
+def horizon_year(today=None) -> int:
+    """Горизонт «12 месяцев вперёд»: со второго полугодия большая часть горизонта — следующий год."""
+    from datetime import date
+
+    today = today or date.today()
+    return today.year + 1 if today.month >= 7 else today.year
+
+
+def bank_revisions(p) -> list[dict]:
+    """Что уже изменилось по факту: Альфа-Банк пересмотрел прогноз — сколько это для компании за 12 месяцев к плану,
+    составленному по прежнему прогнозу. Числа прогноза — из материалов банка (ссылка на документ и страницу), сумма —
+    калькулятор. Это не догадка по новости, а разница двух опубликованных прогнозов банка."""
+    from app.knowledge.bank import get_knowledge
+
+    kb, year = get_knowledge(), str(horizon_year())
+    plan_w = bank_baseline()["wage_growth_pct"] or 0
+    specs = [("rate", "key_rate_avg", lambda r: {"rate_delta_pp": round(r["to"] - r["from"], 2)}),
+             ("wages", "wages_nominal", lambda r: {"wage_growth_pct": plan_w + round(r["to"] - r["from"], 2)})]
+    if p.fts:
+        specs.append(("fx", "usd_rub", lambda r: {"fx_change_pct": round((r["to"] / r["from"] - 1) * 100, 2)}))
+    out = []
+    for lever, ind, shock in specs:
+        f = kb.forecast(ind, year)
+        r = (f or {}).get("revision")
+        if not r or not r.get("from"):
+            continue
+        res = calc(p, Inputs(**shock(r)), None, 0)
+        row = next((x for x in res["rows"] if x["lever"] == lever), None)
+        if not row or abs(row["effect_rub"]) < 1000:
+            continue
+        doc = kb.doc(f["doc_id"]) if hasattr(kb, "doc") else {}
+        out.append({"lever": lever, "title": LEVER_TITLE[lever], "indicator": f["title"], "period": year, "unit": f["unit"],
+                    "from": r["from"], "to": r["to"], "from_date": r["from_date"], "to_date": r["to_date"],
+                    "effect_rub": row["effect_rub"], "formula": row["formula"], "ref": f["ref"],
+                    "doc_title": (doc or {}).get("title", ""), "page": f.get("page")})
+    return out
+
+
 def money_view(p, role, ranked: list, mat: dict, importance_level, cached_insight, revenue) -> dict:
     cands = candidates(p, role, ranked, mat, importance_level, cached_insight)
     verdict, ai = ai_check(p, role, cands)
@@ -168,4 +207,5 @@ def money_view(p, role, ranked: list, mat: dict, importance_level, cached_insigh
             "events_used": len(used), "candidates": len({c["event_id"] for c in cands}),
             "dropped": len({c["event_id"] for c in cands} - used), "ai": ai,
             "sensitivity": [{"lever": s["lever"], "title": s["title"], "effect_rub": s["effect_rub"]} for s in sens],
+            "revisions": bank_revisions(p),
             "share_up": round(up / revenue, 4) if revenue else None, "share_down": round(down / revenue, 4) if revenue else None}

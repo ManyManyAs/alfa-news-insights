@@ -43,7 +43,7 @@ def prewarm_top(top: int | None = None, max_rub: float | None = None, max_second
     stats = {"built": 0, "rebuilt": 0, "ready": 0, "rules": 0, "stopped": None}
     start_rub = llm.budget_status()["spent_rub"]
     deadline = time.monotonic() + max_seconds
-    events = list_events(300)
+    events = list_events(1500, business_days=45)
     with llm_priority("background"):
         try:
             llm.model_for("interpret", "background")  # бюджет: фоновый лимит ещё не исчерпан
