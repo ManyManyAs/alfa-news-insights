@@ -1020,3 +1020,11 @@ body.logged-out .layout, body.logged-out .topbar { display: none; }
   background: color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter: blur(10px); border-top: 1px solid var(--line); border-radius: 0 0 var(--radius) var(--radius); }
 @media (max-width: 980px) { .ins-bar { display: none; } }  /* на планшете и телефоне внизу — кнопка «К ленте» */
 @media print { .ins-bar { display: none; } }
+
+/* Прогнозы: название сверху, крупное значение под ним — длинные значения («−5,8 трлн руб.») не ломают слова */
+.fc-top { flex-direction: column; align-items: flex-start; gap: 2px; }
+.fc-top span { overflow-wrap: normal; font-weight: 600; color: var(--ink2); }
+.fc-top b { font: 800 26px/1.1 var(--display); letter-spacing: -.02em; }
+.fc-card { overflow-wrap: break-word; }
+/* «Мои действия»: ссылка на событие — обычной строкой слева */
+[data-tev] { text-align: left; display: block; margin-top: 4px; }
