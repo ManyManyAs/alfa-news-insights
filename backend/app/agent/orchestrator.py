@@ -370,15 +370,17 @@ def upgrade_hidden(event: Event, profile: CompanyProfile, role: str | None) -> N
     _upgrading.add(key)
     try:
         ins = cached_insight(event.id, profile.uid, role)
-        if not ins or ins.hidden_effects is not None or not ins.generated_by.startswith("llm") or not get_llm().enabled:
+        from app.agent.hidden import HIDDEN_VERSION, find_hidden
+
+        fresh = ins and ins.hidden_effects is not None and ins.hidden_version >= HIDDEN_VERSION
+        if not ins or fresh or not ins.generated_by.startswith("llm") or not get_llm().enabled:
             return
         exposures = compute_exposures(profile, role)
         ctx = AgentContext(event=event, profile=profile, role=role, exposures=exposures, scored=score_event(event, profile, exposures))
         tracer = Tracer()
-        from app.agent.hidden import find_hidden
-
         with llm_deadline(40):
             ins.hidden_effects = find_hidden(ins, ctx, tracer)
+        ins.hidden_version = HIDDEN_VERSION
         add_hidden_sources(ins, profile)
         with db.tx() as conn:
             conn.execute("UPDATE insights SET payload=? WHERE key=?", (ins.model_dump_json(), key))
@@ -522,8 +524,11 @@ def run_agent(event: Event, profile: CompanyProfile, role: str | None = None, li
     if get_llm().enabled and ins.generated_by.startswith("llm") and left >= HIDDEN_MIN_LEFT_S and llm_allowed(ctx, tracer):
         from app.agent.hidden import find_hidden
 
+        from app.agent.hidden import HIDDEN_VERSION
+
         with llm_deadline(left):
             ins.hidden_effects = find_hidden(ins, ctx, tracer)
+        ins.hidden_version = HIDDEN_VERSION
     ins.sources = build_sources(ins, ctx)
     add_hidden_sources(ins, ctx.profile)
     ins.trace_id = tracer.trace_id

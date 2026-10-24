@@ -19,6 +19,7 @@ from app.security.guard import UNTRUSTED_NOTICE, sanitize_untrusted
 
 log = logging.getLogger(__name__)
 MAX_ITEMS = 2
+HIDDEN_VERSION = 2  # 2: роли контрагентов (поставщики — затраты, покупатели — выручка), проверяющий при сомнении отклоняет
 
 
 class HiddenItem(BaseModel):
