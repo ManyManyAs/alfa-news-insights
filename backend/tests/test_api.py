@@ -267,3 +267,19 @@ def test_chat_offtopic_money_and_feed(client, demo):
     assert r["answer"]
     s = client.post("/api/chat/feed", headers=h, json={"company_id": cid, "role": demo["role"], "question": "Что главное на неделе?"})
     assert s.status_code == 200 and '"events"' in s.text and "[ev:" in s.text
+
+
+def test_task_kanban_and_request_statuses(client, demo):
+    """Этап 7: «в работе» и смена исполнителя у задачи; обращения в банк со статусом, клиент отмечает «решено»."""
+    h, cid = {"X-User-Id": demo["user_id"]}, demo["primary_company"]
+    t = client.post("/api/tasks", headers=h, json={"company_id": cid, "text": "Проверить ковенанты по кредиту"}).json()
+    assert client.patch(f"/api/tasks/{t['id']}", headers=h, json={"company_id": cid, "status": "doing", "owner": "Казначей"}).status_code == 200
+    row = next(x for x in client.get(f"/api/tasks?company_id={cid}", headers=h).json()["tasks"] if x["id"] == t["id"])
+    assert row["status"] == "doing" and row["owner"] == "Казначей"
+    assert client.patch(f"/api/tasks/{t['id']}", headers=h, json={"company_id": cid}).status_code == 400
+    a = client.post("/api/actions", headers=h, json={"company_id": cid, "kind": "application", "product": "Кредит", "comment": "Сумма 5 млн"}).json()
+    items = client.get(f"/api/actions?company_id={cid}", headers=h).json()["items"]
+    me = next(x for x in items if x["ticket"] == a["ticket"])
+    assert me["status"] == "accepted" and me["product"] == "Кредит"
+    assert client.patch(f"/api/actions/{me['id']}", headers=h, json={"company_id": cid, "status": "resolved"}).status_code == 200
+    assert next(x for x in client.get(f"/api/actions?company_id={cid}", headers=h).json()["items"] if x["id"] == me["id"])["status"] == "resolved"

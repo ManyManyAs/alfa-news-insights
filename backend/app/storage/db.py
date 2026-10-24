@@ -253,7 +253,9 @@ def _connect(path: Path) -> sqlite3.Connection:
 
 
 # Колонки, добавленные после первых релизов: CREATE TABLE IF NOT EXISTS их в старую БД не добавит
-MIGRATIONS = {"events": {"story_id": "TEXT"}, "news": {"minhash": "TEXT", "noise": "INTEGER DEFAULT 0"}}
+MIGRATIONS = {"events": {"story_id": "TEXT"}, "news": {"minhash": "TEXT", "noise": "INTEGER DEFAULT 0"},
+              # этап 7: статус обращения в банк и продукт; исполнитель задачи меняется после создания
+              "action_requests": {"status": "TEXT DEFAULT 'accepted'", "product": "TEXT", "updated_at": "TEXT"}}
 
 
 def _migrate(conn: sqlite3.Connection) -> None:

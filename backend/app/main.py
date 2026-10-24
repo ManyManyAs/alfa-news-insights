@@ -521,7 +521,10 @@ class TaskIn(BaseModel):
 
 class TaskPatch(BaseModel):
     company_id: str
-    status: str = Field(..., pattern="^(open|done)$")
+    # open — сделать, doing — в работе, done — готово (канбан «Мои действия»)
+    status: str | None = Field(None, pattern="^(open|doing|done)$")
+    owner: str | None = Field(None, max_length=60)
+    due: str | None = Field(None, max_length=80)
 
 
 def _task_row(r) -> dict:
@@ -555,9 +558,14 @@ def create_task(req: TaskIn, user: str = Depends(current_user)):
 @app.patch("/api/tasks/{task_id}")
 def update_task(task_id: int, req: TaskPatch, user: str = Depends(current_user)):
     p = authorized_profile(req.company_id, user)
+    fields = {k: v.strip() if isinstance(v, str) and k != "status" else v
+              for k, v in (("status", req.status), ("owner", req.owner), ("due", req.due)) if v is not None}
+    if not fields:
+        raise HTTPException(400, "Нечего менять")
+    sets = ", ".join(f"{k}=?" for k in fields)  # имена колонок — из белого списка выше
     with db.tx() as conn:
-        n = conn.execute("UPDATE tasks SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND company_uid=?",
-                         (req.status, task_id, p.uid)).rowcount
+        n = conn.execute(f"UPDATE tasks SET {sets}, updated_at=CURRENT_TIMESTAMP WHERE id=? AND company_uid=?",
+                         (*fields.values(), task_id, p.uid)).rowcount
     if not n:
         raise HTTPException(404, "Задача не найдена")
     return {"ok": True}
@@ -609,14 +617,47 @@ def request_action(req: ActionRequest, user: str = Depends(current_user)):
     """Естественное действие после инсайта. В прототипе запрос сохраняется; в банке уходит в CRM менеджеру клиента."""
     p = authorized_profile(req.company_id, user)
     throttle(user, "action", 5)
-    comment = " · ".join(x for x in (req.product, req.comment) if x)
+    comment = sanitize_untrusted(req.comment)[0] if req.comment else None
     with db.tx() as conn:
-        cur = conn.execute("INSERT INTO action_requests(user_id, company_uid, event_id, kind, comment) VALUES (?,?,?,?,?)",
-                           (user, p.uid, req.event_id, req.kind, comment or None))
+        cur = conn.execute("INSERT INTO action_requests(user_id, company_uid, event_id, kind, comment, product, status, updated_at) "
+                           "VALUES (?,?,?,?,?,?,'accepted',CURRENT_TIMESTAMP)", (user, p.uid, req.event_id, req.kind, comment, req.product))
     audit(user, f"action:{req.kind}", p.uid, True)
     return {"ok": True, "ticket": f"AB-{cur.lastrowid:06d}", "title": ACTION_KINDS[req.kind],
             "message": "Запрос передан менеджеру. Он свяжется с вами в течение рабочего дня (демо: запрос сохранён, "
                        "в банке он уходит в CRM)."}
+
+
+# Статусы обращения: в прототипе банк отвечает «принято»; «менеджер связался» в банке приходит из CRM —
+# в демо его не изображаем. Клиент сам может отметить «решено» или отозвать обращение.
+ACTION_STATUS = {"accepted": "Принято, ждёт менеджера", "contacted": "Менеджер связался", "resolved": "Решено", "cancelled": "Отозвано"}
+
+
+@app.get("/api/actions")
+def list_actions(company_id: str, user: str = Depends(current_user)):
+    """Мои обращения в банк по компании: номер, тип, продукт, событие, статус."""
+    p = authorized_profile(company_id, user)
+    rows = db.query("SELECT a.*, e.title event_title FROM action_requests a LEFT JOIN events e ON e.id = a.event_id "
+                    "WHERE a.company_uid=? ORDER BY a.id DESC LIMIT 50", (p.uid,))
+    return {"statuses": ACTION_STATUS, "items": [
+        {"id": r["id"], "ticket": f"AB-{r['id']:06d}", "kind": r["kind"], "title": ACTION_KINDS.get(r["kind"], r["kind"]),
+         "product": r["product"], "comment": r["comment"], "event_id": r["event_id"], "event_title": r["event_title"],
+         "status": r["status"] or "accepted", "created_at": r["ts"], "updated_at": r["updated_at"] or r["ts"]} for r in rows]}
+
+
+class ActionPatch(BaseModel):
+    company_id: str
+    status: str = Field(..., pattern="^(resolved|cancelled|accepted)$")
+
+
+@app.patch("/api/actions/{action_id}")
+def update_action(action_id: int, req: ActionPatch, user: str = Depends(current_user)):
+    p = authorized_profile(req.company_id, user)
+    with db.tx() as conn:
+        n = conn.execute("UPDATE action_requests SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND company_uid=?",
+                         (req.status, action_id, p.uid)).rowcount
+    if not n:
+        raise HTTPException(404, "Обращение не найдено")
+    return {"ok": True}
 
 
 QUIET_DAYS = 7

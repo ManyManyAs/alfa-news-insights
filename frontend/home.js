@@ -68,7 +68,7 @@ function renderSparks() {
   }
   put("[data-strip=radar]", sparkSvg(risks, "risk"), `Риски ${unit}: ${risks.join(", ")}`);
   if (state.tasks && state.tasks.length) {
-    const all = state.tasks.length, done = state.tasks.filter((t) => t.status !== "open").length;
+    const all = state.tasks.length, done = state.tasks.filter((t) => t.status === "done").length;
     put("[data-strip=tasks]", `<span class="hs-prog" aria-hidden="true"><i style="width:${all ? Math.round(done / all * 100) : 0}%"></i></span><small>${done} из ${all} готово</small>`, `Выполнено ${done} из ${all}`);
   }
   if (state.nextDate) {

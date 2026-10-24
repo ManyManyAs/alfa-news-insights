@@ -524,7 +524,7 @@ function renderStrip() {
   setStrip("stripRisks", state.feed ? String(risks) : "—");
   if (state.tasks) {
     const today = new Date(); today.setHours(0, 0, 0, 0);
-    const open = state.tasks.filter((t) => t.status === "open");
+    const open = state.tasks.filter((t) => t.status !== "done");
     const late = open.filter((t) => { const d = /\d{1,2}\.\d{1,2}/.test(t.due || "") ? dueDate(t.due) : null; return d && d < today; }).length;
     setStrip("stripTasks", String(open.length));
     const tl = document.getElementById("tasksList");
@@ -989,8 +989,8 @@ function updateBadge() {
   b.title = t;
   b.closest(".nav-item").setAttribute("aria-label", n ? `Бизнес-радар, ${t}` : "Бизнес-радар");
   const bn = $("#bellN");
-  const nr = (state.freshRevs || []).length, total = n + nr;
-  if (bn) { bn.hidden = !total; bn.textContent = total > 9 ? "9+" : String(total || ""); $("#bellBtn").title = total ? [t, nr ? `новых пересмотров прогноза банка: ${nr}` : ""].filter(Boolean).join("; ") : "Новых уведомлений нет"; }
+  const nr = (state.freshRevs || []).length, nd = tasksDue().length, total = n + nr + nd;
+  if (bn) { bn.hidden = !total; bn.textContent = total > 9 ? "9+" : String(total || ""); $("#bellBtn").title = total ? [t, nr ? `новых пересмотров прогноза банка: ${nr}` : "", nd ? `сроков по действиям в ближайшие 3 дня: ${nd}` : ""].filter(Boolean).join("; ") : "Новых уведомлений нет"; }
   if (!$("#bellPop").hidden) renderBell();
   renderStrip();
 }
@@ -1005,7 +1005,7 @@ function renderBell() {
     ${list.length ? `<ul>${list.map((i) => `<li data-ev="${i.event_id}" tabindex="0" role="button"><b>${esc(i.title)}</b>
       <span class="muted small">${fmtDate(i.published_at)} · ${esc((i.reasons[0] || {}).why || "")}</span></li>`).join("")}</ul>
       <p class="muted small">Событие отмечается прочитанным, когда вы его открываете.</p>`
-    : `<p class="muted">Новых рисков нет — всё прочитано. Новые появятся после следующего сбора новостей.</p>`}${revHtml}`;
+    : `<p class="muted">Новых рисков нет — всё прочитано. Новые появятся после следующего сбора новостей.</p>`}${revHtml}${tasksDueHtml()}`;
   $("#bellPop").querySelectorAll("li[data-goview]").forEach((li) => {
     const go = () => { toggleBell(false); show(li.dataset.goview); };
     li.onclick = go; li.onkeydown = (e) => { if (e.key === "Enter") go(); };
@@ -1626,7 +1626,7 @@ function renderInsight(tab) {
         ${(i.scenarios || []).length ? `<div class="effect-block"><div class="sub-h">Эффект для компании за 12 месяцев</div>${scenarioCards(i.scenarios, false, moneyOff(i))}</div>` : ""}
         ${(i.what_could_change || []).length ? `<div class="sub-h">Что может изменить вывод</div>${claimsShort(i.what_could_change, 1)}` : ""}
         ${whatIfBlock()}</div>
-      <div class="q"><h4><span class="n">4</span>Что можно сделать</h4>${actionsBlock(i.actions)}
+      <div class="q"><h4><span class="n">4</span>Что можно сделать</h4>${actionsBlock(i.actions)}<div id="evHistory" class="ev-history"></div>
         ${i.products.map((p) => `<div class="product"><span class="lbl">${esc(p.label)}</span><br><b>${esc(PRODUCT_RU[p.product] || p.product)}</b> — ${esc(p.why)}
           <div><button class="btn small" data-act="application" data-product="${esc(PRODUCT_RU[p.product] || p.product)}">Оставить заявку</button></div></div>`).join("")}
         <div class="cta"><button class="btn small" data-act="manager">Обсудить с менеджером</button><button class="btn ghost small" data-act="callback">Заказать обратный звонок</button></div></div>
@@ -1701,6 +1701,7 @@ function renderInsight(tab) {
   document.querySelectorAll("[data-task]").forEach((el) => el.onclick = () => addTask(i.actions[+el.dataset.task], el));
   document.querySelectorAll("[data-ics]").forEach((el) => el.onclick = () => downloadIcs(i.actions[+el.dataset.ics], i.headline));
   bindChat();
+  renderEventHistory();
 }
 
 // ---------------------------------------------------------------- «Мои действия»: шаги из разборов в работе
@@ -1717,7 +1718,8 @@ async function addTask(a, btn) {
     btn.textContent = "✓ В моих действиях"; btn.disabled = true;
     toast(r.duplicate ? "Это действие уже в «Моих действиях»" : `Добавлено в «Мои действия»${a.owner ? ": " + a.owner : ""}${a.due ? ", " + a.due : ""}`);
     track("action_open", { event_id: state.current, meta: { kind: "task" } });
-    loadTaskCount();
+    await loadTaskCount();
+    renderEventHistory();
   } catch (e) { toast("Не удалось добавить: " + e.message); }
 }
 // Срок из текста «до 30.11.2026» → дата; иначе — через неделю
@@ -1746,43 +1748,12 @@ async function loadTaskCount() {
   try {
     const { tasks } = await api(`/api/tasks?${q({ company_id: state.company })}`);
     state.tasks = tasks;
-    const n = tasks.filter((t) => t.status === "open").length, b = $("#tasksBadge");
+    const n = tasks.filter((t) => t.status !== "done").length, b = $("#tasksBadge");
     b.hidden = !n; b.textContent = String(n || "");
     renderStrip();
   } catch (e) { /* не критично */ }
 }
-async function loadTasks() {
-  const box = $("#tasksBox");
-  box.innerHTML = `<div class="skeleton"></div>`;
-  await loadTaskCount();
-  const tasks = state.tasks || [], today = new Date(); today.setHours(0, 0, 0, 0);
-  const row = (t) => {
-    const d = /\d{1,2}\.\d{1,2}/.test(t.due || "") ? dueDate(t.due) : null, late = t.status === "open" && d && d < today;
-    return `<li class="task ${t.status} ${late ? "late" : ""}">
-      <label class="chk"><input type="checkbox" data-tdone="${t.id}" ${t.status === "done" ? "checked" : ""} aria-label="Выполнено"></label>
-      <div class="task-body"><b>${esc(t.text)}</b>
-        <div class="muted small">${t.owner ? `${ico("user")} ${esc(t.owner)}` : ""}${t.due ? ` · ${ico("clock")} ${esc(t.due)}${late ? " · <span class='bad'>срок прошёл</span>" : ""}` : ""}</div>
-        ${t.event_id ? `<button class="link-btn" data-tev="${esc(t.event_id)}">По событию: ${esc(t.event_title || "открыть разбор")}</button>` : ""}</div>
-      <button class="icon-btn small" data-tdel="${t.id}" title="Удалить" aria-label="Удалить">×</button></li>`;
-  };
-  const open = tasks.filter((t) => t.status === "open"), done = tasks.filter((t) => t.status === "done");
-  box.innerHTML = tasks.length ? `<div class="card"><div class="eyebrow">В работе · ${open.length}</div>
-      ${open.length ? `<ul class="tasks">${open.map(row).join("")}</ul>` : `<p class="muted">Всё сделано.</p>`}</div>
-      ${done.length ? `<div class="card"><div class="eyebrow">Сделано · ${done.length}</div><ul class="tasks">${done.map(row).join("")}</ul></div>` : ""}`
-    : `<div class="card e-card">${emptyArt("tasks")}<h3>Пока пусто</h3><p class="muted">Откройте разбор события и нажмите «＋ В мои действия» у шага, который берёте в работу: он появится здесь с исполнителем и сроком. Задачи видны всем пользователям компании.</p>
-      <button class="btn btn-red small" data-goto2="radar">Открыть ленту</button></div>`;
-  box.querySelectorAll("[data-tdone]").forEach((c) => c.onchange = async () => {
-    await api(`/api/tasks/${c.dataset.tdone}`, { method: "PATCH", body: JSON.stringify({ company_id: state.company, status: c.checked ? "done" : "open" }) });
-    loadTasks();
-  });
-  box.querySelectorAll("[data-tdel]").forEach((b) => b.onclick = async () => {
-    await api(`/api/tasks/${b.dataset.tdel}?${q({ company_id: state.company })}`, { method: "DELETE" });
-    loadTasks();
-  });
-  box.querySelectorAll("[data-tev]").forEach((b) => b.onclick = () => { show("radar"); openInsight(b.dataset.tev, false, "tasks"); });
-  box.querySelectorAll("[data-goto2]").forEach((b) => b.onclick = () => show(b.dataset.goto2));
-}
-
+// loadTasks (канбан) — actions.js (этап 7)
 async function loadTrace(traceId) {
   const { steps } = await api(`/api/trace/${traceId}`);
   $("#traceBox").classList.remove("loading");
@@ -1890,22 +1861,7 @@ function actWhere() {
   return "Менеджер увидит профиль компании и сможет связаться с вами удобным способом.";
 }
 const ACT_TITLE = { manager: "Обсудить с менеджером", callback: "Заказать обратный звонок", application: "Оставить заявку" };
-function openAction(kind, product) {
-  track("action_open", { event_id: state.current, meta: { kind } });
-  const d = $("#actionDialog");
-  d.innerHTML = `<form method="dialog" class="act-form"><h3>${esc(ACT_TITLE[kind])}${product ? ": " + esc(product) : ""}</h3>
-    <p class="muted small">${actWhere()}</p>
-    <textarea id="actComment" rows="4" maxlength="1000" placeholder="Комментарий (необязательно): удобное время, вопрос, сумма…"></textarea>
-    <div class="row"><button value="cancel" class="btn ghost">Отмена</button><button class="btn" id="actSend" value="send">Отправить</button></div></form>`;
-  d.showModal();
-  $("#actSend").onclick = async (e) => {
-    e.preventDefault();
-    try {
-      const r = await api("/api/actions", { method: "POST", body: JSON.stringify({ company_id: state.company, event_id: state.current, kind, product: product || null, comment: $("#actComment").value.trim() || null }) });
-      d.close(); toast(`${r.title}: запрос ${r.ticket} принят. ${r.message}`);
-    } catch (err) { toast("Не удалось отправить: " + err.message); }
-  };
-}
+// openAction — actions.js (этап 7)
 
 // ---------------------------------------------------------------- дайджест под роль
 async function loadDigest() {
@@ -1956,8 +1912,8 @@ function cleanRefs(t) { return String(t || "").replace(/\b(?:news|bank|graph|pro
 
 // ---------------------------------------------------------------- PDF: печать браузера со своими стилями
 function printDoc(kind) {
-  const c = $("#companySelect").selectedOptions[0], r = $("#roleSelect").selectedOptions[0];
-  $("#printMeta").textContent = [c ? c.textContent : "", r && r.value ? r.textContent : "", new Date().toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" })].filter(Boolean).join(" · ");
+  const r = $("#roleSelect").selectedOptions[0];
+  $("#printMeta").textContent = [companyName(), r && r.value ? r.textContent : "", new Date().toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" })].filter(Boolean).join(" · ");
   const wasDetail = state.detail;
   if (kind === "insight" && !state.detail) { state.detail = true; renderInsight("analysis"); }
   document.body.dataset.print = kind;

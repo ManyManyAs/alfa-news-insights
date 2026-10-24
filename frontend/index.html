@@ -42,6 +42,7 @@
   </section>
 
   <!-- шапка документа для печати и PDF (на экране скрыта) -->
+  <div class="report-print" id="reportPrint" aria-hidden="true"></div>
   <div class="print-head" aria-hidden="true"><b>Альфа-Бизнес · Бизнес-радар</b><span id="printMeta"></span></div>
 
   <!-- ============================== Шапка ============================== -->
@@ -217,8 +218,8 @@
 
       <section id="view-tasks" class="view">
         <div class="page-head"><div><div class="eyebrow">Из разборов — в работу</div><h2>Мои действия</h2></div></div>
-        <p class="muted small">Шаги из разборов событий, которые взяли в работу: кто делает и к какому сроку. Отметьте выполненное — список обновится у всех пользователей компании.</p>
-        <div id="tasksBox" class="tasks-grid"><div class="skeleton"></div></div>
+        <p class="muted small">Шаги из разборов событий: кто делает и к какому сроку. Перетащите карточку в «В работе» или «Готово» — доска обновится у всех пользователей компании.</p>
+        <div id="tasksBox"><div class="skeleton"></div></div>
       </section>
 
       <section id="view-calendar" class="view">
@@ -286,6 +287,7 @@
   <script src="/static/proof.js"></script>
   <script src="/static/home.js"></script>
   <script src="/static/chat.js"></script>
+  <script src="/static/actions.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>
