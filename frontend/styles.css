@@ -1737,17 +1737,17 @@ button.cite { border: 0; font: inherit; cursor: pointer; }
 /* ============================== Этап 8: агент и прозрачность ============================== */
 .tr-head { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; }
 .tr-head .btn { flex: none; } .tr-head .ico { width: 15px; height: 15px; vertical-align: -2px; }
-.ag-wrap { overflow-x: auto; margin: 8px 0 4px; padding-bottom: 4px; }
-.ag-svg { width: 100%; min-width: 860px; height: auto; display: block; }
-.ag-n rect { fill: var(--surface); stroke: var(--line); stroke-width: 1.5; }
-.ag-n.llm rect { stroke: var(--ai); fill: var(--ai-bg); } .ag-n.tool rect { stroke: var(--watch); fill: var(--watch-bg); }
-.ag-n.off rect { fill: transparent; stroke-dasharray: 4 4; }
-.ag-n.off text { fill: var(--muted); opacity: .7; }
-.ag-t { font: 600 12.5px var(--font); fill: var(--ink); } .ag-m { font: 500 11px var(--font); fill: var(--ink2); } .ag-s { font: 600 11px var(--font); fill: var(--muted); }
-.ag-a { fill: none; stroke: var(--muted); stroke-width: 1.5; }
-.ag-loop { fill: none; stroke: var(--red); stroke-width: 1.5; stroke-dasharray: 5 4; }
-.ag-lt { font: 500 11px var(--font); fill: var(--red-ink); }
-.ag-badge { fill: var(--red); } .ag-bt { font: 700 11px var(--font); fill: #fff; }
+.ag-flow { list-style: none; margin: 10px 0 6px; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; counter-reset: ag; }
+.ag-n { position: relative; display: grid; gap: 2px; padding: 8px 10px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--surface); font-size: 12px; counter-increment: ag; }
+.ag-n::before { content: counter(ag); position: absolute; top: 6px; right: 8px; font: 600 10.5px var(--font); color: var(--muted); }
+.ag-n b { font-size: 12.5px; padding-right: 14px; } .ag-x { color: var(--muted); font-weight: 600; } .ag-r { color: var(--red); font-weight: 700; }
+.ag-m { color: var(--ink2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .ag-s { color: var(--muted); font-weight: 600; }
+.ag-n.llm { border-color: var(--ai); background: var(--ai-bg); } .ag-n.tool { border-color: var(--watch); background: var(--watch-bg); }
+.ag-n.off { border-style: dashed; background: transparent; opacity: .6; }
+.ag-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; color: var(--muted); margin-bottom: 6px; }
+.ag-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; border: 1.5px solid var(--line); }
+.ag-legend i.llm { border-color: var(--ai); background: var(--ai-bg); } .ag-legend i.tool { border-color: var(--watch); background: var(--watch-bg); }
+.ag-loopnote { color: var(--red-ink); font-weight: 600; }
 .ag-notes { display: grid; gap: 4px; margin: 2px 0 12px; color: var(--ink2); }
 .ag-notes .ico { width: 14px; height: 14px; color: var(--red); vertical-align: -2px; }
 .df-wrap { margin: 6px 0 14px; padding: 10px 14px; border-radius: var(--radius-s); background: var(--soft); }

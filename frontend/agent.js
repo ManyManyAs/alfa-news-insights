@@ -23,17 +23,12 @@ function agentGraph(steps) {
       retry: st.some((s) => s.name.includes("(retry)")), kind: llm ? "llm" : st.some((s) => s.kind === "tool") ? "tool" : "rules" };
   });
   const dec = steps.find((s) => s.name === "decide:revise"), rev = dec && dec.output ? dec.output.revise_with_llm : null;
-  const W = 118, G = 14, H = 74, cols = nodes.length, width = cols * W + (cols - 1) * G;
-  const box = (nd, i) => { const x = i * (W + G), off = !nd.n;
-    return `<g class="ag-n ${nd.kind} ${off ? "off" : ""}" transform="translate(${x},14)"><rect width="${W}" height="${H}" rx="12"/>
-      <text x="10" y="20" class="ag-t">${esc(nd.t)}${nd.n > 1 ? ` ×${nd.n}` : ""}</text>
-      <text x="10" y="40" class="ag-m">${off ? "не понадобилось" : esc(nd.model.slice(0, 16))}</text>
-      ${off ? "" : `<text x="10" y="60" class="ag-s">${fmtMs(nd.ms)}${nd.cost ? ` · ${nd.cost.toFixed(2).replace(".", ",")} ₽` : ""}</text>`}
-      ${nd.retry ? `<g transform="translate(${W - 18},-8)"><circle r="9" class="ag-badge"/><text text-anchor="middle" y="4" class="ag-bt">↻</text></g>` : ""}</g>`; };
-  const arrows = nodes.slice(1).map((nd, i) => { const x = (i + 1) * (W + G) - G; return `<path d="M${x + 1} ${14 + H / 2}h${G - 4}" class="ag-a"/><path d="M${x + G - 7} ${14 + H / 2 - 4}l4 4-4 4" class="ag-a"/>`; }).join("");
-  const loop = nodes[6].n ? `<path d="M${6 * (W + G) + W / 2} ${14 + H}v14H${4 * (W + G) + W / 2}v-14" class="ag-loop"/><text x="${5 * (W + G) + W / 2}" y="${14 + H + 26}" text-anchor="middle" class="ag-lt">замечания критика → правка → повторная проверка</text>` : "";
-  const retry = nodes.find((x) => x.retry);
-  return `<div class="ag-wrap"><svg class="ag-svg" viewBox="-4 0 ${width + 8} ${H + 50}" role="img" aria-label="Схема шагов агента">${arrows}${nodes.map(box).join("")}${loop}</svg></div>
+  // карточки с переносом строк: схема помещается в узкую панель разбора и на телефон
+  const card = (nd) => `<li class="ag-n ${nd.kind} ${nd.n ? "" : "off"}"><b>${esc(nd.t)}${nd.n > 1 ? ` <span class="ag-x">×${nd.n}</span>` : ""}${nd.retry ? ` <span class="ag-r" title="Повторный поиск">↻</span>` : ""}</b>
+    <span class="ag-m">${nd.n ? esc(nd.model.slice(0, 18)) : "не понадобилось"}</span>${nd.n ? `<span class="ag-s">${fmtMs(nd.ms)}${nd.cost ? ` · ${nd.cost.toFixed(2).replace(".", ",")} ₽` : ""}</span>` : ""}</li>`;
+  const retry = nodes.find((x) => x.retry), looped = nodes[6].n > 0;
+  return `<ol class="ag-flow" aria-label="Схема шагов агента">${nodes.map(card).join("")}</ol>
+    <div class="ag-legend small"><span><i class="llm"></i>модель</span><span><i class="tool"></i>инструменты</span><span><i class="rules"></i>правила</span>${looped ? `<span class="ag-loopnote">↺ критик → правка → повторная проверка</span>` : ""}</div>
     <div class="ag-notes small">${dec ? `<span>${ico("spark")} Решение о правке: <b>${rev ? "править моделью" : "без правки моделью"}</b> — ${esc(dec.output.why || "")}</span>` : ""}
       ${retry ? `<span>↻ Агент не нашёл позицию банка с первого раза и повторил поиск с расширенным запросом.</span>` : ""}</div>`;
 }
