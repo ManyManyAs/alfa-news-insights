@@ -24,6 +24,7 @@ class Claim(BaseModel):
     support: list[str] = Field(default_factory=list)  # факт: издания, в тексте которых он есть
     as_of: str | None = None  # позиция банка: дата материала
     stale: bool = False  # позиция банка: материалу больше квартала
+    used: int | None = None  # позиция банка: сколько разборов опираются на этот материал
 
 
 class Action(Claim):
