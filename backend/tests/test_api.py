@@ -214,3 +214,16 @@ def test_money_with_my_numbers_and_numeric_formulas(client, demo):
     rate = next(x for x in r["result"]["rows"] if x["lever"] == "rate")
     assert rate["calc"].startswith("−100,0 млн ₽ × 50% × 1,0 п.п.") and rate["effect_rub"] == -500_000
     assert any(b["lever"] == "rate" and b["value"] > 0 for b in r["buffers"]) or not r["defaults"].get("revenue_rub")
+
+
+def test_feed_filtered_explains_what_was_not_shown(client, demo):
+    """Этап 3: «что сервис не показал и почему» — группы причин с примерами; события ленты туда не попадают."""
+    h, cid = {"X-User-Id": demo["user_id"]}, demo["primary_company"]
+    feed = client.get(f"/api/feed?company_id={cid}&limit=40", headers=h).json()["items"]
+    r = client.get(f"/api/feed/filtered?company_id={cid}", headers=h).json()
+    assert {"pool", "shown", "noise", "groups"} <= set(r)
+    shown = {x["event_id"] for x in feed}
+    for g in r["groups"]:
+        assert g["n"] >= len(g["examples"]) and g["title"]
+        assert not ({e["event_id"] for e in g["examples"]} & shown)
+    assert len(feed[0]["reasons"]) <= 5

@@ -1,4 +1,4 @@
-"""Проверка адресов RSS-кандидатов перед добавлением в config/sources.yaml (этап 8: больше источников).
+"""Проверка адресов RSS-кандидатов перед добавлением в config/sources.yaml (этап 8 и этап 3 плана улучшений).
 
 Адрес не угадываем: каждый кандидат скачивается тем же адаптером, что и на сервере (app/news/sources.RSSSource),
 и в отчёт попадает: отвечает ли, сколько новостей, дата самой свежей, доля новостей про экономику по словарю.
@@ -20,28 +20,25 @@ from app.config import REPO_ROOT
 from app.news.sources import RSSSource
 
 CANDIDATES = [
-    ("minfin", "Минфин России", "official", "https://minfin.gov.ru/ru/press-center/?rss=Y"),
-    ("minfin_rss", "Минфин России", "official", "https://minfin.gov.ru/ru/rss/"),
-    ("economy", "Минэкономразвития", "official", "https://www.economy.gov.ru/material/news/rss/"),
-    ("economy_rss", "Минэкономразвития", "official", "https://economy.gov.ru/rss/"),
-    ("nalog", "ФНС России", "official", "https://www.nalog.gov.ru/rn77/about_fts/fts/rss/"),
-    ("nalog_news", "ФНС России", "official", "https://www.nalog.gov.ru/rss/rn77/news/"),
-    ("rosstat", "Росстат", "official", "https://rosstat.gov.ru/rss"),
-    ("duma", "Госдума", "official", "http://duma.gov.ru/news/rss/"),
-    ("pnp", "Парламентская газета", "media", "https://www.pnp.ru/rss/index.xml"),
-    ("consultant", "КонсультантПлюс — горячие документы", "media", "https://www.consultant.ru/rss/hotdocs.xml"),
-    ("garant", "Гарант — новости законодательства", "media", "https://www.garant.ru/rss/"),
-    ("interfax_business", "Интерфакс — бизнес", "agency", "https://www.interfax.ru/rss/business"),
-    ("vedomosti_economics", "Ведомости — экономика", "media", "https://www.vedomosti.ru/rss/rubric/economics"),
-    ("vedomosti_business", "Ведомости — бизнес", "media", "https://www.vedomosti.ru/rss/rubric/business"),
-    ("kommersant_business", "Коммерсантъ — бизнес", "media", "https://www.kommersant.ru/RSS/section-business.xml"),
-    ("kommersant_finance", "Коммерсантъ — финансы", "media", "https://www.kommersant.ru/RSS/section-finance.xml"),
-    ("forbes", "Forbes Россия", "media", "https://www.forbes.ru/newrss.xml"),
-    ("cnews", "CNews — ИТ-рынок", "media", "https://www.cnews.ru/inc/rss/news.xml"),
-    ("retail", "Retail.ru", "media", "https://www.retail.ru/rss/news/"),
-    ("agroinvestor", "Агроинвестор", "media", "https://www.agroinvestor.ru/rss/"),
-    ("frank", "Frank Media", "media", "https://frankmedia.ru/feed"),
-    ("eg_online", "Экономика и жизнь", "media", "https://www.eg-online.ru/rss/"),
+    # этап 3 плана улучшений: отраслевые источники (стройка и недвижимость, ритейл, логистика, агро, авто, металлы, ТЭК)
+    ("vedomosti_realty", "Ведомости — недвижимость", "media", "https://www.vedomosti.ru/rss/rubric/realty"),
+    ("vedomosti_retail", "Ведомости — потребительский рынок", "media", "https://www.vedomosti.ru/rss/rubric/business/retail"),
+    ("vedomosti_auto", "Ведомости — авто", "media", "https://www.vedomosti.ru/rss/rubric/auto"),
+    ("vedomosti_industry", "Ведомости — промышленность", "media", "https://www.vedomosti.ru/rss/rubric/business/industry"),
+    ("vedomosti_energy", "Ведомости — ТЭК", "media", "https://www.vedomosti.ru/rss/rubric/business/energy"),
+    ("vedomosti_transport", "Ведомости — транспорт", "media", "https://www.vedomosti.ru/rss/rubric/business/transport"),
+    ("vedomosti_agro", "Ведомости — агро", "media", "https://www.vedomosti.ru/rss/rubric/business/agriculture"),
+    ("stroygaz", "Строительная газета", "media", "https://www.stroygaz.ru/rss/"),
+    ("erzrf", "ЕРЗ.РФ — жилищное строительство", "media", "https://erzrf.ru/rss/news"),
+    ("agroinvestor_news", "Агроинвестор", "media", "https://www.agroinvestor.ru/rss/news/"),
+    ("new_retail", "New Retail", "media", "https://new-retail.ru/rss/"),
+    ("retail_ru", "Retail.ru", "media", "https://www.retail.ru/rss/"),
+    ("logirus", "Logirus — логистика", "media", "https://logirus.ru/rss/"),
+    ("autostat", "Автостат", "media", "https://www.autostat.ru/rss/"),
+    ("metalinfo", "Металлоснабжение и сбыт", "media", "https://www.metalinfo.ru/ru/news/rss"),
+    ("neftegaz", "Neftegaz.RU", "media", "https://neftegaz.ru/rss/news/"),
+    ("interfax_realty", "Интерфакс — недвижимость", "agency", "https://realty.interfax.ru/ru/rss/"),
+    ("bfm", "BFM.ru — новости", "media", "https://www.bfm.ru/news.rss?type=news"),
 ]
 ECON = re.compile(r"налог|ставк|кредит|банк|рубл|курс|инфляц|бюджет|экспорт|импорт|санкц|рынок|цен|закон|компани|бизнес|"
                   r"зарплат|ВВП|субсид|льгот|тариф|пошлин|маркировк|ипотек|лизинг|МСП|предпринимат", re.I)

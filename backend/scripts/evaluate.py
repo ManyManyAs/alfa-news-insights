@@ -100,6 +100,19 @@ def golden_effects(events: list[Event]) -> dict:
             "effect_acc": round(ok_effect / rows, 3) if rows else None, "fails": fails}
 
 
+def off_target(s, prof: CompanyProfile) -> bool:
+    """Карточка «не по адресу» (этап 3 плана улучшений): мера в чужом регионе или новость о чужой отрасли,
+    которая не задевает компанию через макроканалы (ставка, курс, инфляция…). Чем меньше доля в топ-10, тем лучше."""
+    from app.ranking.scorer import MACRO_FACTORS
+
+    if any(r.get("factor_title") == "Другой регион" for r in s.reasons):
+        return True
+    cls = s.event.classification
+    related = {(prof.okved or "")[:2]} | {m["okved2"] for m in prof.industry_mix if m["share"] >= 0.15}
+    other = bool(cls.industries) and not (set(cls.industries) & related)
+    return other and not (set(s.matched_factors) & MACRO_FACTORS)
+
+
 def relevance(events: list[Event], rerank_too: bool = False) -> dict:
     path = get_settings().data_dir / "eval" / "relevance_labels.csv"
     cases: dict[str, dict] = {}
@@ -125,6 +138,7 @@ def relevance(events: list[Event], rerank_too: bool = False) -> dict:
 
     stale_n = 0
     per_case, p3s, ndcgs, crit_hit, crit_tot, rr_p3s, rr_ndcgs = {}, [], [], 0, 0, [], []
+    off_hit = off_tot = 0
     for cid, r in cases.items():
         card_label: dict[str, int] = {}
         for n, lab in labels[cid].items():
@@ -142,6 +156,8 @@ def relevance(events: list[Event], rerank_too: bool = False) -> dict:
         critical = {k for k, v in card_label.items() if v == 2}
         crit_tot += len(critical)
         crit_hit += len(critical & set(ranked[:10]))
+        off_hit += sum(off_target(s, prof) for s in feed[:10])
+        off_tot += len(feed[:10])
         p3s.append(p3)
         ndcgs.append(n5)
         per_case[cid] = {"p3": round(p3, 3), "ndcg5": round(n5, 3), "top3": rels[:3],
@@ -157,6 +173,7 @@ def relevance(events: list[Event], rerank_too: bool = False) -> dict:
                 rr_ndcgs.append(ndcg(rr_rels, list(card_label.values()), 5))
     out = {"p3": round(sum(p3s) / len(p3s), 3), "ndcg5": round(sum(ndcgs) / len(ndcgs), 3),
            "critical_recall10": round(crit_hit / crit_tot, 3) if crit_tot else None,
+           "off_target10": round(off_hit / off_tot, 3) if off_tot else None,
            "cases": len(cases), "pairs": sum(len(v) for v in labels.values()), "stale_critical": stale_n,
            "as_of": EVAL_NOW.date().isoformat(), "per_case": per_case}
     if rr_p3s:
@@ -204,7 +221,7 @@ def main() -> None:
         print(f"{cid:12s} P@3={c['p3']:.2f} nDCG@5={c['ndcg5']:.2f}  top3={c['top3']}"
               + (f"  пропущено важного: {len(c['missed_critical'])}" if c["missed_critical"] else ""))
     print(f"\nСРЕДНЕЕ ({rel['cases']} профилей, {rel['pairs']} пар): P@3={rel['p3']:.3f}  nDCG@5={rel['ndcg5']:.3f}  "
-          f"важное в топ-10={rel['critical_recall10']:.3f}")
+          f"важное в топ-10={rel['critical_recall10']:.3f}  не по адресу в топ-10={rel['off_target10']}")
     if args.rerank:
         print(f"С LLM-реранком ({rel['rerank']['cases']} профилей): P@3={rel['rerank']['p3']:.3f}  nDCG@5={rel['rerank']['ndcg5']:.3f}"
               if "rerank" in rel else "LLM-реранк не применён (нет доступа к модели)")

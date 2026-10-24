@@ -364,7 +364,7 @@ def feed(company_id: str, role: str | None = None, limit: int = Query(20, le=50)
         return {
             "event_id": s.event.id, "title": s.event.title, "published_at": s.event.published_at,
             "summary": cls.summary, "score": s.score, "effect": s.effect,
-            "reasons": s.reasons[:3], "sources": s.event.sources, "importance": cls.importance,
+            "reasons": s.reasons[:5], "sources": s.event.sources, "importance": cls.importance,
             "trust": cls.trust, "regions": cls.regions, "countries": cls.countries,
             "industries": [{"code": c, "name": okved_class_name(c)} for c in cls.industries],
             "effective": ({"date": upcoming[0], "days": (date.fromisoformat(upcoming[0]) - today).days}
@@ -386,6 +386,73 @@ def feed(company_id: str, role: str | None = None, limit: int = Query(20, le=50)
                                                               "published_at": items[0].event.published_at} if items else None)}
     return {"company_id": company_id, "role": role, "quiet": quiet, "hidden_count": len(hidden),
             "items": [{**card(s), "hidden": s.event.id in hidden} for s in items]}
+
+
+_filtered_cache: dict = {}
+
+
+@app.get("/api/feed/filtered")
+def feed_filtered(company_id: str, role: str | None = None, user: str = Depends(current_user)):
+    """Что сервис не показал в ленте и почему: деловые события за 45 дней, не попавшие в 40 карточек, по причинам.
+
+    Причины — те же правила, что у ранжирования (scorer.py): нет связи с профилем, другой регион, другая отрасль,
+    слабая связь (ниже порога), свёрнуто в сюжет, скрыто пользователем, ниже по важности. Плюс сколько новостей
+    сервис отсеял как не деловые ещё при сборе (без факторов и отраслей).
+    """
+    from app.news.ingest import BUSINESS_SQL, _events_cache
+    from app.ranking.scorer import MIN_SCORE, freshness
+
+    p = authorized_profile(company_id, user)
+    hidden = {r["event_id"] for r in db.query("SELECT event_id FROM hidden_events WHERE user_id=? AND company_uid=?", (user, p.uid))}
+    events = list_events(FEED_POOL, business_days=FEED_DAYS)
+    shown = cached_rank(p, role, 40)
+    key = (p.uid, role, _events_cache.get("sig"), tuple(sorted(hidden)), datetime.now(UTC).strftime("%Y%m%d%H"),
+           tuple(sorted((f, o["multiplier"]) for f, o in get_overrides(p.uid).items())))
+    if (hit := _filtered_cache.get(key)) is not None:
+        return hit
+    shown_ids = {s.event.id for s in shown}
+    shown_stories = {s.event.story_id for s in shown if s.event.story_id}
+    exposures = apply_overrides(p.uid, compute_exposures(p, role))
+    watch = get_watchlist(p.uid)
+    groups: dict[str, dict] = {}
+    titles = {
+        "hidden": "Скрыто вами", "story": "Свёрнуто в сюжет: показано самое важное событие сюжета",
+        "none": "Нет связи с компанией: тема не касается её отрасли, продуктов, ВЭД и контрагентов",
+        "region": "Мера в другом регионе: ни компании, ни её контрагентов там нет",
+        "industry": "Новость о другой отрасли: отраслевой эффект для компании слабый",
+        "weak": "Слабая связь: оценка ниже порога ленты", "below": "Связь есть, но ниже по важности — не вошло в 40 карточек",
+    }
+    for ev in events:
+        if ev.id in shown_ids:
+            continue
+        s = score_event(ev, p, exposures, None, watch)
+        if ev.id in hidden:
+            k = "hidden"
+        elif ev.story_id and ev.story_id in shown_stories:
+            k = "story"
+        elif not s.reasons:
+            k = "none"
+        elif any(r.get("factor_title") == "Другой регион" for r in s.reasons):
+            k = "region"
+        elif s.score < MIN_SCORE * freshness(ev.published_at):
+            cls = ev.classification
+            k = "industry" if cls.industries and (p.okved or "")[:2] not in cls.industries else "weak"
+        else:
+            k = "below"
+        g = groups.setdefault(k, {"key": k, "title": titles[k], "n": 0, "examples": []})
+        g["n"] += 1
+        if len(g["examples"]) < 3:
+            g["examples"].append({"event_id": ev.id, "title": ev.title, "published_at": ev.published_at})
+    since = (datetime.now(UTC) - timedelta(days=FEED_DAYS)).isoformat()
+    noise = db.query_one(f"SELECT COUNT(*) n FROM events WHERE classification IS NOT NULL AND published_at >= ? AND NOT {BUSINESS_SQL}",
+                         (since,))["n"]
+    order = ["none", "weak", "industry", "region", "story", "below", "hidden"]
+    out = {"pool": len(events), "shown": len(shown), "noise": noise, "days": FEED_DAYS,
+           "groups": [groups[k] for k in order if k in groups]}
+    if len(_filtered_cache) > 256:
+        _filtered_cache.clear()
+    _filtered_cache[key] = out
+    return out
 
 
 MATERIALITY_WEIGHT = {0: 0.3, 1: 0.6, 2: 1.0, 3: 1.15}
