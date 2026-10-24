@@ -187,13 +187,6 @@ async function init() {
   addEventListener("popstate", () => { if (document.body.classList.contains("m-detail")) closeDetail(false); });
   document.querySelectorAll("[data-view]").forEach((el) => el.onclick = () => show(el.dataset.view, el.dataset.bank));
   document.querySelectorAll("[data-goto]").forEach((el) => el.onclick = () => show(el.dataset.goto));
-  // официальный логотип из брендбука, если он положен в frontend/brand/logo.svg (см. README там же)
-  if (document.body.dataset.logo) {
-    document.querySelectorAll(".brand-mark").forEach((m) => {
-      const img = new Image(); img.src = "/static/brand/logo.svg"; img.alt = "";
-      m.classList.add("official"); m.replaceChildren(img);
-    });
-  }
   document.querySelectorAll("[data-strip]").forEach((el) => el.onclick = () => show(el.dataset.strip));
   // быстрые действия на главной — как ряд кнопок в интернет-банке
   document.querySelectorAll("[data-qa]").forEach((el) => el.onclick = () => {
