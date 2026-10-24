@@ -258,6 +258,13 @@ async def shots(b):
     pg = await ctx.new_page()
 
     async def s_mobile():
+        # экран входа на телефоне: форма не шире экрана
+        await pg.goto(URL)
+        await pg.wait_for_selector(".demo-acc", timeout=60000)
+        form = await pg.evaluate("() => { const r = document.querySelector('.login-form').getBoundingClientRect(); return Math.round(r.right - innerWidth); }")
+        await pg.screenshot(path=OUT / "10d_mobile_login.png")
+        if form > 1:
+            raise AssertionError(f"форма входа шире экрана телефона на {form} px")
         await login(pg)
         await pg.evaluate("show('radar')")
         await pg.wait_for_selector(".feed-item", timeout=30000)
@@ -268,6 +275,13 @@ async def shots(b):
         await asyncio.sleep(0.5)
         await pg.screenshot(path=OUT / "10b_mobile_context.png")
         await pg.click("#ctxBtn")
+        await pg.click("#bellBtn")
+        await asyncio.sleep(0.5)
+        bell = await pg.evaluate("() => { const r = document.querySelector('#bellPop').getBoundingClientRect(); return [Math.round(r.left), Math.round(innerWidth - r.right)]; }")
+        await pg.screenshot(path=OUT / "10e_mobile_bell.png")
+        if min(bell) < 0:
+            raise AssertionError(f"окно уведомлений за краем экрана: {bell}")
+        await pg.keyboard.press("Escape")
         await pg.click("#navMore")
         await asyncio.sleep(0.6)
         await pg.screenshot(path=OUT / "10c_mobile_menu.png")

@@ -1302,3 +1302,24 @@ details.more-claims > summary::-webkit-details-marker { display: none; }
 .an-steps li::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--line); flex: none; }
 .an-steps li.done { color: var(--ink); } .an-steps li.done::before { background: var(--opp); }
 .an-steps li.now { color: var(--ink); font-weight: 600; } .an-steps li.now::before { background: var(--red-2); animation: live 1.6s infinite; }
+
+/* Этап 9: телефон и мелкий лоск */
+/* вход: форма не шире экрана (длинные строки демо-учёток не растягивают колонку) */
+.login-inner > * { min-width: 0; }
+@media (max-width: 980px) { .login-inner { grid-template-columns: minmax(0, 1fr); } }
+/* колокольчик на телефоне: окно уведомлений по ширине экрана, а не от кнопки влево за край */
+@media (max-width: 640px) {
+  .bell-pop { position: fixed; left: 12px; right: 12px; top: calc(var(--top-h, 64px) + 6px); width: auto; max-height: calc(100vh - var(--top-h, 64px) - 100px); overflow: auto; }
+}
+/* карта влияния: короткие подписи колонок на узком экране */
+.im-heads i { font-style: normal; }
+.im-short { display: none; }
+@media (max-width: 760px) { .im-long { display: none; } .im-short { display: inline; } }
+/* вкладки разбора на телефоне — в одну строку с прокруткой, без переносов */
+@media (max-width: 640px) {
+  .tabs { overflow-x: auto; scrollbar-width: none; flex-wrap: nowrap; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { white-space: nowrap; flex: none; padding: 10px 12px; font-size: 14px; }
+  .kinds { font-size: 12px; }
+}
+body.m-detail .insight { padding-bottom: 84px; }

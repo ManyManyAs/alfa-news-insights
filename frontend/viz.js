@@ -80,7 +80,7 @@ function impactMap(ins) {
   factors.forEach((f, i) => { nodes += node(colX[1], ys(factors.length, i), nodeW[1], wrapText(f.label, 20), "fa", f.rs, f.why); });
   bases.forEach((b, i) => { nodes += node(colX[2], ys(bases.length, i), nodeW[2], wrapText(b.label, 21), "ba" + (b.indirect ? " ind" : ""), b.rs, reasons.filter((_, ri) => b.rs.includes(ri)).map((r) => r.why).join("; ")); });
   effects.forEach((e, i) => { nodes += node(colX[3], ys(effects.length, i), nodeW[3], wrapText(e.label, 15), "ef " + e.effect, e.rs); });
-  const heads = ["Событие", "Фактор", "Признак компании", "Эффект"].map((t, i) => `<span style="left:${colX[i] / W * 100}%">${t}</span>`).join("");
+  const heads = [["Событие", "Событие"], ["Фактор", "Фактор"], ["Признак компании", "Признак"], ["Эффект", "Эффект"]].map(([t, sh], i) => `<span style="left:${colX[i] / W * 100}%"><i class="im-long">${t}</i><i class="im-short">${sh}</i></span>`).join("");
   return `<div class="impact"><div class="im-heads">${heads}</div>
     <svg viewBox="0 0 ${W} ${H}" class="im-svg" role="img" aria-label="${esc("Карта влияния: " + links.map((l) => `${factors[l.f].label} → ${l.bIdx.map((i) => bases[i].label).join(", ")} → ${effects[l.e].label}`).join("; "))}">${edges}${nodes}</svg>
     <div class="muted small">Наведите на узел, чтобы увидеть путь. Толщина — вклад в релевантность; пунктир — влияние через контрагентов или похожие компании.</div></div>`;
