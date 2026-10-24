@@ -1,0 +1,120 @@
+app-1  |     return await self.app(scope, receive, send)
+app-1  |   File "/usr/local/lib/python3.12/site-packages/fastapi/applications.py", line 1054, in __call__
+app-1  |     await super().__call__(scope, receive, send)
+app-1  |   File "/usr/local/lib/python3.12/site-packages/starlette/applications.py", line 113, in __call__
+app-1  |     await self.middleware_stack(scope, receive, send)
+app-1  |   File "/usr/local/lib/python3.12/site-packages/starlette/middleware/errors.py", line 165, in __call__
+app-1  |     await self.app(scope, receive, _send)
+app-1  |   File "/usr/local/lib/python3.12/site-packages/starlette/middleware/base.py", line 188, in __call__
+app-1  |     await response(scope, wrapped_receive, send)
+app-1  |   File "/usr/local/lib/python3.12/site-packages/starlette/middleware/base.py", line 214, in __call__
+app-1  |     await send(
+app-1  |   File "/usr/local/lib/python3.12/site-packages/starlette/middleware/errors.py", line 162, in _send
+app-1  |     await send(message)
+app-1  |   File "/usr/local/lib/python3.12/site-packages/uvicorn/protocols/http/h11_impl.py", line 473, in send
+app-1  |     self.access_logger.info(
+app-1  | Message: '172.18.0.1:32852 - "GET /api/feed/rerank?company_id=U_74****&role=cfo&limit=40 HTTP/1.1" 200'
+app-1  | Arguments: ()
+app-1  | INFO:     172.18.0.1:32836 - "POST /api/scenario HTTP/1.1" 200 OK
+app-1  | --- Logging error ---
+app-1  | Traceback (most recent call last):
+app-1  |   File "/usr/local/lib/python3.12/logging/__init__.py", line 1160, in emit
+app-1  |     msg = self.format(record)
+app-1  |           ^^^^^^^^^^^^^^^^^^^
+app-1  |   File "/usr/local/lib/python3.12/logging/__init__.py", line 999, in format
+app-1  |     return fmt.format(record)
+app-1  |            ^^^^^^^^^^^^^^^^^^
+app-1  |   File "/usr/local/lib/python3.12/logging/__init__.py", line 706, in format
+app-1  |     s = self.formatMessage(record)
+app-1  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+app-1  |   File "/usr/local/lib/python3.12/site-packages/uvicorn/logging.py", line 99, in formatMessage
+app-1  |     (
+app-1  | ValueError: not enough values to unpack (expected 5, got 0)
+app-1  | Call stack:
+app-1  |   File "/usr/local/bin/uvicorn", line 8, in <module>
+app-1  |     sys.exit(main())
+app-1  |   File "/usr/local/lib/python3.12/site-packages/click/core.py", line 1157, in __call__
+app-1  |     return self.main(*args, **kwargs)
+app-1  |   File "/usr/local/lib/python3.12/site-packages/click/core.py", line 1078, in main
+app-1  |     rv = self.invoke(ctx)
+app-1  |   File "/usr/local/lib/python3.12/site-packages/click/core.py", line 1434, in invoke
+app-1  |     return ctx.invoke(self.callback, **ctx.params)
+app-1  |   File "/usr/local/lib/python3.12/site-packages/click/core.py", line 783, in invoke
+app-1  |     return __callback(*args, **kwargs)
+app-1  |   File "/usr/local/lib/python3.12/site-packages/uvicorn/main.py", line 412, in main
+app-1  |     run(
+app-1  |   File "/usr/local/lib/python3.12/site-packages/uvicorn/main.py", line 579, in run
+app-1  |     server.run()
+app-1  |   File "/usr/local/lib/python3.12/site-packages/uvicorn/server.py", line 65, in run
+app-1  |     return asyncio.run(self.serve(sockets=sockets))
+app-1  |   File "/usr/local/lib/python3.12/asyncio/runners.py", line 194, in run
+app-1  |     return runner.run(main)
+app-1  |   File "/usr/local/lib/python3.12/asyncio/runners.py", line 118, in run
+app-1  |     return self._loop.run_until_complete(task)
+app-1  |   File "/usr/local/lib/python3.12/asyncio/base_events.py", line 673, in run_until_complete
+app-1  |     self.run_forever()
+app-1  |   File "/usr/local/lib/python3.12/asyncio/base_events.py", line 640, in run_forever
+app-1  |     self._run_once()
+app-1  |   File "/usr/local/lib/python3.12/asyncio/base_events.py", line 1992, in _run_once
+app-1  |     handle._run()
+app-1  |   File "/usr/local/lib/python3.12/asyncio/events.py", line 88, in _run
+app-1  |     self._context.run(self._callback, *self._args)
+app-1  |   File "/usr/local/lib/python3.12/site-packages/uvicorn/protocols/http/h11_impl.py", line 403, in run_asgi
+app-1  |     result = await app(  # type: ignore[func-returns-value]
+app-1  |   File "/usr/local/lib/python3.12/site-packages/uvicorn/middleware/proxy_headers.py", line 60, in __call__
+app-1  |     return await self.app(scope, receive, send)
+app-1  |   File "/usr/local/lib/python3.12/site-packages/fastapi/applications.py", line 1054, in __call__
+app-1  |     await super().__call__(scope, receive, send)
+app-1  |   File "/usr/local/lib/python3.12/site-packages/starlette/applications.py", line 113, in __call__
+app-1  |     await self.middleware_stack(scope, receive, send)
+app-1  |   File "/usr/local/lib/python3.12/site-packages/starlette/middleware/errors.py", line 165, in __call__
+app-1  |     await self.app(scope, receive, _send)
+app-1  |   File "/usr/local/lib/python3.12/site-packages/starlette/middleware/base.py", line 188, in __call__
+app-1  |     await response(scope, wrapped_receive, send)
+app-1  |   File "/usr/local/lib/python3.12/site-packages/starlette/middleware/base.py", line 214, in __call__
+app-1  |     await send(
+app-1  |   File "/usr/local/lib/python3.12/site-packages/starlette/middleware/errors.py", line 162, in _send
+app-1  |     await send(message)
+app-1  |   File "/usr/local/lib/python3.12/site-packages/uvicorn/protocols/http/h11_impl.py", line 473, in send
+app-1  |     self.access_logger.info(
+app-1  | Message: '172.18.0.1:32874 - "GET /api/money?company_id=U_74****&role=cfo HTTP/1.1" 200'
+app-1  | Arguments: ()
+app-1  | INFO:     172.18.0.1:32874 - "GET /static/fonts/InterDisplay-Bold.woff HTTP/1.1" 200 OK
+app-1  | INFO:     172.18.0.1:32874 - "GET /sw.js HTTP/1.1" 200 OK
+app-1  | INFO:     172.18.0.1:32874 - "POST /api/track HTTP/1.1" 200 OK
+app-1  | INFO:     172.18.0.1:32874 - "GET /static/fonts/Inter-Medium.woff HTTP/1.1" 200 OK
+app-1  | INFO:     172.18.0.1:48172 - "GET /api/bank/rate-market HTTP/1.1" 200 OK
+app-1  | INFO:     172.18.0.1:32874 - "GET /api/bank/documents HTTP/1.1" 200 OK
+app-1  | INFO:     172.18.0.1:32874 - "POST /api/track HTTP/1.1" 200 OK
+app-1  | INFO:     127.0.0.1:33182 - "GET /api/health HTTP/1.1" 200 OK
+app-1  | INFO:     172.18.0.1:48194 - "GET / HTTP/1.1" 200 OK
+app-1  | INFO:     172.18.0.1:48194 - "GET /static/fonts/StyreneBLC-Bold.woff HTTP/1.1" 200 OK
+app-1  | INFO:     172.18.0.1:48208 - "GET /static/fonts/Inter-Regular.woff HTTP/1.1" 200 OK
+app-1  | INFO:     172.18.0.1:48224 - "GET /static/styles.css?v=5f9d51ee87 HTTP/1.1" 200 OK
+app-1  | INFO:     172.18.0.1:48232 - "GET /static/globe-data.js?v=edacf1a695 HTTP/1.1" 200 OK
+app-1  | INFO:     172.18.0.1:48238 - "GET /static/globe.js?v=fa8ddd42eb HTTP/1.1" 200 OK
+app-1  | INFO:     172.18.0.1:48230 - "GET /static/fonts/StyreneBLC-Regular.woff HTTP/1.1" 200 OK
+app-1  | INFO:     172.18.0.1:48194 - "GET /static/viz.js?v=ac64dc2987 HTTP/1.1" 200 OK
+app-1  | INFO:     172.18.0.1:48208 - "GET /static/charts.js?v=3193053227 HTTP/1.1" 200 OK
+app-1  | INFO:     172.18.0.1:48194 - "GET /static/tour.js?v=39b8b3e2d4 HTTP/1.1" 200 OK
+app-1  | INFO:     172.18.0.1:48232 - "GET /static/home.js?v=4ed62f1f97 HTTP/1.1" 200 OK
+app-1  | INFO:     172.18.0.1:48224 - "GET /static/actions.js?v=8582357294 HTTP/1.1" 200 OK
+app-1  | INFO:     172.18.0.1:48238 - "GET /static/proof.js?v=4f31c63090 HTTP/1.1" 200 OK
+app-1  | INFO:     172.18.0.1:48230 - "GET /static/bank.js?v=1996809993 HTTP/1.1" 200 OK
+app-1  | INFO:     172.18.0.1:48208 - "GET /static/chat.js?v=ba19b0a82b HTTP/1.1" 200 OK
+app-1  | INFO:     172.18.0.1:48194 - "GET /static/agent.js?v=7bb643da59 HTTP/1.1" 200 OK
+app-1  | INFO:     172.18.0.1:48238 - "GET /static/app.js?v=6b721516cb HTTP/1.1" 200 OK
+app-1  | INFO:     172.18.0.1:48224 - "GET /static/calendar.js?v=c40f81f2de HTTP/1.1" 200 OK
+app-1  | INFO:     172.18.0.1:48232 - "GET /static/ui.js?v=9bf0268530 HTTP/1.1" 200 OK
+app-1  | INFO:     172.18.0.1:48244 - "GET /static/manifest.webmanifest HTTP/1.1" 200 OK
+app-1  | INFO:     172.18.0.1:48224 - "GET /api/demo-users HTTP/1.1" 200 OK
+app-1  | INFO:     172.18.0.1:48238 - "GET /api/llm/budget HTTP/1.1" 200 OK
+app-1  | INFO:     172.18.0.1:48238 - "GET /api/me HTTP/1.1" 401 Unauthorized
+app-1  | INFO:     172.18.0.1:48238 - "GET /static/brand/alfa-mark-red-bg.svg HTTP/1.1" 200 OK
+app-1  | INFO:     172.18.0.1:48238 - "GET /sw.js HTTP/1.1" 200 OK
+app-1  | INFO:     172.18.0.1:48238 - "GET /static/fonts/StyreneBLC-Black.woff HTTP/1.1" 200 OK
+app-1  | INFO:     172.18.0.1:48224 - "GET /static/fonts/StyreneBLC-Medium.woff HTTP/1.1" 200 OK
+app-1  | INFO:     172.18.0.1:48224 - "GET /static/fonts/InterDisplay-ExtraBold.woff HTTP/1.1" 200 OK
+app-1  | INFO:     172.18.0.1:48224 - "GET /static/fonts/InterDisplay-Bold.woff HTTP/1.1" 200 OK
+app-1  | INFO:     172.18.0.1:48224 - "GET /robots.txt HTTP/1.1" 404 Not Found
+app-1  | INFO:     172.18.0.1:48238 - "GET /sw.js HTTP/1.1" 200 OK
