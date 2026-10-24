@@ -371,6 +371,11 @@ def add_specifics(ins: Insight, ctx: AgentContext) -> None:
     if pick is None:
         neg = next((s for s in ins.scenarios or base.scenarios if s.name == "negative" and s.total_rub and not s.negligible), None)
         if neg is None:
+            # суммы нет — точкой отсчёта служит числовой прогноз Альфа-Банка по главному фактору события
+            fc = next((f for f in (headline_forecast(x) for x in ctx.scored.matched_factors) if f), None)
+            if fc:
+                ins.why_it_matters.append(Claim(text=f"Точка отсчёта для плана — {fc['text'][0].lower()}{fc['text'][1:]}",
+                                                kind="bank_view", sources=[fc["ref"]], confidence="high"))
             return
         pick = Claim(text=f"По оценке сервиса, при отклонении от прогноза банка ({neg.assumptions}) — {money(neg.total_rub)} "
                           "за 12 месяцев к плану; расчёт — в блоке сценариев", kind="ai_inference", sources=["calc:scenario"])
@@ -509,7 +514,10 @@ def repair_rules(ins: Insight, ctx: AgentContext) -> Insight:
             elif not alt:
                 c.confidence = "low"
         if not has_specifics(ins):
-            add_specifics(ins, ctx)
+            try:
+                add_specifics(ins, ctx)
+            except Exception:  # дополнение — не повод ломать правку
+                pass
         foreign = set(foreign_profile_sources(ins, ctx))
         if foreign:
             okved = f"profile:OKVED={ctx.profile.okved[:2]}"
