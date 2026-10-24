@@ -118,7 +118,10 @@ jobs:
           REFRESH=""; if [ "${{ inputs.refresh }}" = "true" ]; then REFRESH="--refresh"; fi
           # мягкий лимит 85 мин: job ограничен 120 мин, снапшот должен успеть выгрузиться
           PRIO="--background"; if [ "${{ inputs.interactive }}" = "true" ]; then PRIO=""; fi
-          python scripts/manage.py warmup --top ${{ inputs.top }} --max-rub ${{ inputs.max_rub }} --max-minutes 85 $PRIO $ROLES $REFRESH | tee warmup.log
+          set -o pipefail
+          python scripts/manage.py warmup --top ${{ inputs.top }} --max-rub ${{ inputs.max_rub }} --max-minutes 85 $PRIO $ROLES $REFRESH 2>&1 | tee warmup.log \
+            || { echo "::error title=warmup::$(grep -v '^\s*$' warmup.log | tail -8 | tr '\n' ' ' | cut -c1-900)"; exit 1; }
+          echo "::notice title=warmup итог::$(grep -c '^insight|' warmup.log) разборов в журнале; $(grep -c '| llm' warmup.log) моделью"
           grep -E "LLM-судья|Потрачено" warmup.log >> "$GITHUB_STEP_SUMMARY" || true
           grep -E "LLM-судья|Потрачено|Остановлено" warmup.log | while read -r l; do echo "::notice title=warmup::$l"; done
       - name: Два судьи на готовых разборах
