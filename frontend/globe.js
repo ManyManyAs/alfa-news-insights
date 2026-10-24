@@ -186,7 +186,7 @@ class BizGlobe {
     const up = () => { this.dragging = false; c.classList.remove("grab"); };
     c.addEventListener("pointerup", up); c.addEventListener("pointercancel", up);
     c.addEventListener("pointerleave", () => { this.hover = null; this.showTip(null); });
-    c.addEventListener("click", (e) => { const s = this.hit(e); if (s && this.opts.onPick) this.opts.onPick(s.cluster ? s.cluster[0] : s); });
+    c.addEventListener("click", (e) => { const s = this.hit(e); if (s && this.opts.onPick) this.opts.onPick(s.cluster ? s.cluster[0] : s, s.cluster); });
     // клавиатура: стрелки вращают глобус, Enter открывает ближайшее к центру событие
     if (!this.opts.ambient) {
       c.tabIndex = 0;
@@ -197,7 +197,7 @@ class BizGlobe {
         else if (e.key === "Enter" && this.opts.onPick) {
           const front = this.signals.map((s) => [s, this.project(s.geo[0], s.geo[1])]).filter(([, p]) => p[2] > 0)
             .sort((a, b) => Math.hypot(a[1][0] - this.cx, a[1][1] - this.cy) - Math.hypot(b[1][0] - this.cx, b[1][1] - this.cy));
-          if (front.length) { const s = front[0][0]; this.opts.onPick(s.cluster ? s.cluster[0] : s); }
+          if (front.length) { const s = front[0][0]; this.opts.onPick(s.cluster ? s.cluster[0] : s, s.cluster); }
           return;
         } else return;
         e.preventDefault(); this.idleT = 0; this.vel = 0; this.userMoved = true; this.kick();

@@ -55,6 +55,7 @@
     </div>
     <div class="top-actions">
       <button class="btn ghost small ctx-btn" id="ctxBtn" aria-expanded="false" aria-controls="sessionBox"><span id="ctxLabel">Компания и роль</span><span aria-hidden="true">▾</span></button>
+      <button class="icon-btn cmd-btn" id="cmdBtn" title="Поиск по сервису (Ctrl+K)" aria-label="Поиск по сервису"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg><kbd class="cmd-kbd">Ctrl K</kbd></button>
       <div class="bell-wrap"><button class="icon-btn bell" id="bellBtn" aria-haspopup="true" aria-expanded="false" aria-controls="bellPop" title="Уведомления">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
         <span class="bell-n" id="bellN" hidden></span></button>
@@ -93,6 +94,7 @@
             <div class="hero-eyebrow"><span class="live-dot"></span><span id="heroDate">Бизнес-радар</span></div>
             <h1 id="heroTitle">Собираем картину дня…</h1>
             <p class="hero-sub" id="heroSub"></p>
+            <p class="day-sum" id="daySum" aria-live="polite"></p>
             <div class="hero-stats" id="heroStats"></div>
             <div class="hero-cta">
               <button class="btn btn-red btn-lg" data-goto="radar">Открыть ленту <span aria-hidden="true">→</span></button>
@@ -132,6 +134,7 @@
           <button class="qa" data-qa="manager"><span class="qa-i"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>Менеджер банка</button>
         </nav>
 
+        <div class="home-tools"><button class="link-btn" id="homeSetupBtn" title="Скрыть или переставить карточки главной"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M17.5 14v7M14 17.5h7"/></svg>Настроить главную</button></div>
         <div class="home-grid">
           <div class="home-col">
           <div class="card focus-card" id="focusCard" aria-live="polite"><div class="skeleton"></div></div>
@@ -193,6 +196,7 @@
               </div>
               <div class="tool-row small"><span class="muted" id="feedCount"></span><button class="link-btn" id="showHidden" hidden>Показать скрытые</button><span class="rerank-note" id="rerankNote"></span></div>
             </div>
+            <div class="place-chip" id="placeChip" hidden></div>
             <div id="feedList"></div>
             <details class="filtered" id="feedFiltered"><summary>Что сервис не показал и почему</summary><div id="filteredBody" class="muted small">Загрузка…</div></details>
           </div>
@@ -279,6 +283,7 @@
   <script src="/static/tour.js"></script>
   <script src="/static/bank.js"></script>
   <script src="/static/proof.js"></script>
+  <script src="/static/home.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>

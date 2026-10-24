@@ -19,6 +19,7 @@ const TRUST = { official: ["официально", "Регулятор или о
   demo: ["демо", "Синтетический демо-пример"] };
 // Контурные иконки вместо эмодзи (как в интерфейсе Альфа-Бизнеса): одинаково выглядят на всех системах
 const ICO = {
+  search: '<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/>',
   pin: '<path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/>',
   up: '<path d="M12 19V5M6 11l6-6 6 6"/>',
   mute: '<path d="M11 5 6 9H3v6h3l5 4z"/><path d="m22 9-6 6M16 9l6 6"/>',
@@ -222,6 +223,9 @@ async function init() {
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#bellPop").hidden) { toggleBell(false); $("#bellBtn").focus(); } });
   $("#analyzeSubmit").onclick = analyzeNews;
   document.querySelectorAll("[data-example]").forEach((b) => b.onclick = () => { $("#analyzeUrl").value = ""; $("#analyzeText").value = ANALYZE_EXAMPLES[+b.dataset.example]; $("#analyzeText").focus(); });
+  bindCmd();
+  applyHomeLayout();
+  const hsb = document.getElementById("homeSetupBtn"); if (hsb) hsb.onclick = openHomeSetup;
   try { await enterApp(); } catch (e) { if (e.status !== 401) throw e; }
 }
 
@@ -497,8 +501,8 @@ function downloadCalc(i) {
 }
 
 async function reload() {
-  state.insight = null; state.current = null; state.money = null; state.visitMark = null;
-  $("#insightPanel").innerHTML = `<div class="empty">Выберите событие — сервис объяснит, что оно значит именно для вашей компании.</div>`;
+  state.insight = null; state.current = null; state.money = null; state.visitMark = null; state.placeFilter = null; renderPlaceChip();
+  $("#insightPanel").innerHTML = emptyState("insight", "Выберите событие", "Сервис объяснит, что оно значит именно для вашей компании: деньги, позиция банка, что сделать.");
   await Promise.all([loadProfile(), loadFeed(), state.bankLoaded ? null : loadBank()]);
   loadMoney();
   loadHomeWhatIf();
@@ -506,6 +510,7 @@ async function reload() {
   loadTaskCount();
   updateRevBadge();
   loadNextDate();
+  loadCompanyOverview();
   if ($("#view-digest").classList.contains("active")) loadDigest();
   if ($("#view-tasks").classList.contains("active")) loadTasks();
 }
@@ -525,13 +530,15 @@ function renderStrip() {
     if (tl) tl.innerHTML = open.slice(0, 3).map((t) => `<button class="mini-row" data-mini-task>
         <span class="mini-dot task"></span><span class="mini-t">${esc(t.text.length > 90 ? t.text.slice(0, 90) + "…" : t.text)}</span>
         <span class="mini-s">${esc([t.owner, t.due].filter(Boolean).join(" · "))}</span></button>`).join("")
-      || `<div class="mini-empty">Пока пусто. В разборе события нажмите «В мои действия» — шаг появится здесь с исполнителем и сроком.</div>`;
+      || `<div class="mini-empty">${emptyArt("tasks")}<span>Пока пусто. В разборе события нажмите «В мои действия» — шаг появится здесь с исполнителем и сроком.</span></div>`;
     if (tl) tl.querySelectorAll("[data-mini-task]").forEach((b) => b.onclick = () => show("tasks"));
     setStrip("stripTasksSub", late ? `открытых, ${late} ${plural(late, "просрочено", "просрочено", "просрочено")}` : `${plural(open.length, "открытое действие", "открытых действия", "открытых действий")}`);
   }
   if (state.freshRevs) setStrip("stripRevs", String(state.freshRevs.length));
   const tile = (k) => document.querySelector(`[data-strip=${k}]`);
   if (tile("radar")) tile("radar").classList.toggle("alert", risks > 0);
+  renderDaySum();
+  renderSparks();
 }
 async function loadNextDate() {
   try {
@@ -545,11 +552,13 @@ async function loadNextDate() {
         return `<button class="mini-row" ${it.event_id ? `data-mini-ev="${esc(it.event_id)}"` : "data-mini-cal"}><span class="mini-date">${esc(fmtD(it.date))}</span>
           <span class="mini-t">${esc(it.kind === "cbr" ? "Заседание Банка России по ставке" : it.title)}</span>
           <span class="mini-s">${n === 0 ? "сегодня" : `через ${n} ${plural(n, "день", "дня", "дней")}`}</span></button>`; }).join("")
-        || `<div class="mini-empty">В ближайшие месяцы ключевых дат нет.</div>`;
+        || `<div class="mini-empty">${emptyArt("calendar")}<span>В ближайшие месяцы ключевых дат нет.</span></div>`;
       dl.querySelectorAll("[data-mini-ev]").forEach((b) => b.onclick = () => { show("radar"); openInsight(b.dataset.miniEv, false, "home"); });
       dl.querySelectorAll("[data-mini-cal]").forEach((b) => b.onclick = () => show("calendar"));
     }
     const x = items[0];
+    state.nextDate = x ? { kind: x.kind, n: Math.round((new Date(x.date) - new Date(c.today)) / 864e5) } : null;
+    renderDaySum(); renderSparks();
     if (!x) { setStrip("stripDate", "нет"); setStrip("stripDateSub", "ключевых дат в ближайшие месяцы"); return; }
     const n = Math.round((new Date(x.date) - new Date(c.today)) / 864e5);
     setStrip("stripDate", new Date(x.date).toLocaleDateString("ru-RU", { day: "numeric", month: "long" }));
@@ -605,10 +614,10 @@ function countUp(el, to) {
 }
 function initHeroGlobe() {
   if (state.globe || typeof BizGlobe === "undefined") return;
-  state.globe = new BizGlobe($("#globe"), { tip: $("#globeTip"), onPick: (s) => { show("radar"); openInsight(s.id, false, "globe"); },
+  state.globe = new BizGlobe($("#globe"), { tip: $("#globeTip"), onPick: (s, cluster) => { if (cluster && cluster.length > 1) return filterByPlace(cluster); show("radar"); openInsight(s.id, false, "globe"); },
     clusterTip: (items) => `<div class="gt-top"><b>${items.length} ${plural(items.length, "событие", "события", "событий")} рядом</b><span class="muted small">${ico("pin")} ${esc(items[0].place || "")}</span></div>
       <ul class="gt-list">${items.slice(0, 4).map((x) => `<li><span class="dot" style="background:var(--${x.effect === "opportunity" ? "opp" : x.effect === "risk" ? "risk" : "watch"})"></span>${esc(x.title)}</li>`).join("")}</ul>
-      <div class="gt-cta">Нажмите — открыть главное →</div>` });
+      <div class="gt-cta">Нажмите — показать все ${items.length} в ленте →</div>` });
   state.globeFilter = { days: 0, effects: new Set(["risk", "opportunity", "watch"]) };
   document.querySelectorAll("[data-gp]").forEach((b) => b.onclick = () => {
     state.globeFilter.days = +b.dataset.gp;
@@ -1026,6 +1035,7 @@ function visibleFeed() {
     && (!days || (now - new Date(it.published_at)) / 864e5 <= days)
     && (!t || (it.title + " " + it.summary).toLowerCase().includes(t))
     && (!filters.unread || !read.has(it.event_id))
+    && (!state.placeFilter || state.placeFilter.ids.has(it.event_id))
     && [...filters.quick].every((k) => QF[k](it)));
   if (filters.sort === "date") list = [...list].sort((a, b) => String(b.published_at).localeCompare(String(a.published_at)));
   // «По важности» — строго по шкале; «Рекомендуемые» — порядок сервиса: важность плюс разнообразие тем наверху
@@ -1094,12 +1104,30 @@ function renderFeedList(animate = false) {
       ${impBar(it)}
       <div class="card-foot">${whyMe(it)}${it.hidden ? "" : `<button class="link-btn nfm" data-nfm="${it.event_id}" title="Тема станет ниже в ленте — вернуть можно в профиле">не про меня</button>`}</div>
     </div>`;
-  }).join("") || `<div class="empty">${state.feed.length ? "Под фильтры ничего не подошло — сбросьте их." : "Значимых событий нет."}</div>`;
+  }).join("") || feedEmpty();
   if (before) for (const el of list.children) {
     const dy = (before.get(el.dataset.ev) ?? el.getBoundingClientRect().top) - el.getBoundingClientRect().top;
     if (dy) el.animate([{ transform: `translateY(${dy}px)` }, { transform: "none" }], { duration: 450, easing: "ease-out" });
   }
   bindCards(list);
+  list.querySelectorAll("[data-fempty]").forEach((b) => b.onclick = () => resetFeedFilters(b.dataset.fempty === "all"));
+}
+// Пустая лента: «всё прочитано» — спокойное состояние, а не пустота; под фильтры ничего — кнопка сброса
+function feedEmpty() {
+  if (!state.feed.length) return emptyState("quiet", "Значимых событий нет", "Сервис показывает только то, что касается компании. Новые события появятся после следующего сбора новостей.");
+  const onlyUnread = filters.unread && !filters.text && !filters.factor && filters.effect === "all" && !filters.quick.size && !state.placeFilter;
+  if (onlyUnread) return emptyState("read", "Всё прочитано", `Вы просмотрели все ${state.feed.length} ${plural(state.feed.length, "событие", "события", "событий")} ленты. Новое появится после следующего сбора — придёт в колокольчик.`,
+    `<button class="btn ghost small" data-fempty="unread">Показать прочитанные</button>`);
+  return emptyState("search", "Под фильтры ничего не подошло", "Снимите часть фильтров — или сбросьте все сразу.", `<button class="btn ghost small" data-fempty="all">Сбросить фильтры</button>`);
+}
+function resetFeedFilters(all) {
+  filters.unread = false; $("#fUnread").checked = false;
+  if (all) {
+    Object.assign(filters, { effect: "all", factor: "", period: "all", text: "" }); filters.quick.clear(); state.placeFilter = null; renderPlaceChip();
+    $("#fText").value = ""; $("#fFactor").value = ""; $("#fPeriod").value = "all";
+    document.querySelectorAll("[data-feff]").forEach((x) => x.classList.toggle("on", x.dataset.feff === "all"));
+  }
+  renderFeedList();
 }
 // «Почему мне»: из чего сложилась оценка карточки — вклад каждой причины полоской (отрицательный — «другой регион»)
 function whyMe(it) {
@@ -1228,6 +1256,7 @@ function renderRadar() {
 // ---------------------------------------------------------------- инсайт
 async function openInsight(eventId, refresh = false, from = "feed") {
   state.current = eventId;
+  if (!refresh) state.insightFrom = from;
   const t0 = performance.now();
   openDetail();
   if (!refresh) track("card_open", { event_id: eventId, meta: { from } });
@@ -1627,7 +1656,7 @@ function renderInsight(tab) {
     body = `<div id="traceBox" class="loading">Загрузка трассировки…</div>`;
     loadTrace(i.trace_id);
   }
-  $("#insightPanel").innerHTML = `<div class="insight">
+  $("#insightPanel").innerHTML = `<div class="insight">${crumbsHtml(i.headline || "")}
     <div class="ins-top"><div class="ins-status"><span class="pill ${i.effect}">${EFFECT[i.effect]}</span>
       <span class="muted small">${state.pending === state.current ? "<span class='pending-dot' aria-hidden='true'></span>Черновик ИИ готов · агент проверяет факты и уточняет разбор" : i.generated_by.startsWith("llm") ? "Разбор подготовлен ИИ и проверен на ошибки" : "Быстрый разбор по профилю компании"} · ${allOk ? "<span class='ok'>✓ самопроверка пройдена</span>" : "<span title='Подробности — в блоке «На чём основан вывод»'>самопроверка: есть замечания</span>"}</span></div>
       <span class="ins-actions"><button class="btn ghost small" id="pdfBtn" title="Сохранить разбор в PDF через печать браузера">${ico("doc")} PDF</button><button class="btn ghost small" id="refreshBtn" title="Пересобрать разбор заново">Пересчитать</button></span></div>
@@ -1650,6 +1679,7 @@ function renderInsight(tab) {
   $("#detailToggle").onclick = () => { state.detail = !state.detail; track(state.detail ? "detail_open" : "detail_close", { event_id: state.current }); renderInsight("analysis"); if (!state.detail) $("#insightCol").scrollTop = 0; };
   document.querySelectorAll("[data-tab]").forEach((el) => el.onclick = () => renderInsight(el.dataset.tab));
   bindImpactMap($("#insightPanel"));
+  bindCrumbs($("#insightPanel"));
   const wi = document.getElementById("whatIf");
   if (wi) wi.addEventListener("toggle", () => { if (wi.open && !wi.dataset.ready) { wi.dataset.ready = "1"; initWhatIf(); track("whatif_open", { event_id: state.current }); } });
   document.querySelectorAll("[data-story-ev]").forEach((el) => el.onclick = () => { if (el.dataset.storyEv !== state.current) openInsight(el.dataset.storyEv, false, "story"); });
@@ -1738,7 +1768,7 @@ async function loadTasks() {
   box.innerHTML = tasks.length ? `<div class="card"><div class="eyebrow">В работе · ${open.length}</div>
       ${open.length ? `<ul class="tasks">${open.map(row).join("")}</ul>` : `<p class="muted">Всё сделано.</p>`}</div>
       ${done.length ? `<div class="card"><div class="eyebrow">Сделано · ${done.length}</div><ul class="tasks">${done.map(row).join("")}</ul></div>` : ""}`
-    : `<div class="card"><h3>Пока пусто</h3><p class="muted">Откройте разбор события и нажмите «＋ В мои действия» у шага, который берёте в работу: он появится здесь с исполнителем и сроком. Задачи видны всем пользователям компании.</p>
+    : `<div class="card e-card">${emptyArt("tasks")}<h3>Пока пусто</h3><p class="muted">Откройте разбор события и нажмите «＋ В мои действия» у шага, который берёте в работу: он появится здесь с исполнителем и сроком. Задачи видны всем пользователям компании.</p>
       <button class="btn btn-red small" data-goto2="radar">Открыть ленту</button></div>`;
   box.querySelectorAll("[data-tdone]").forEach((c) => c.onchange = async () => {
     await api(`/api/tasks/${c.dataset.tdone}`, { method: "PATCH", body: JSON.stringify({ company_id: state.company, status: c.checked ? "done" : "open" }) });
