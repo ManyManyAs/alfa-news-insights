@@ -832,7 +832,8 @@ async function loadFeed() {
   const { items, quiet, hidden_count: hiddenCount } = await api(`/api/feed?${q({ company_id: state.company, role: state.role, limit: 40, show_hidden: state.showHidden ? "true" : null })}`);
   $("#showHidden").hidden = !hiddenCount;
   $("#showHidden").textContent = state.showHidden ? "Убрать скрытые" : `Показать скрытые (${hiddenCount})`;
-  state.feed = items; state.feedKey = `${state.company}|${state.role}`; state.rerank = null; state.quiet = quiet;
+  state.feed = capThemes(items); state.feedKey = `${state.company}|${state.role}`; state.rerank = null; state.quiet = quiet;
+  const fl = $("#feedFiltered"); if (fl && fl.open) loadFiltered();
   updateBadge();
   renderWidget();
   renderFocus();
@@ -938,7 +939,20 @@ function renderPulse() {
 }
 
 // ---- фильтры ленты: эффект, фактор, период, поиск, сортировка, «непрочитанные»
-const filters = { effect: "all", factor: "", period: "all", text: "", sort: "recommended", unread: false };
+const filters = { effect: "all", factor: "", period: "all", text: "", sort: "recommended", unread: false, quick: new Set() };
+const isFresh = (it) => it.published_at && (Date.now() - new Date(it.published_at)) / 36e5 <= 24;
+// Быстрые фильтры: новое за сутки, с позицией банка, с деньгами на кону, норма вступает в силу в ближайшие 60 дней
+const QF = { fresh: isFresh, bank: (it) => it.has_bank_view, money: (it) => !!eventMoney(it.event_id), soon: (it) => it.effective && it.effective.days <= 60 };
+// Не больше трёх карточек одной темы в первой десятке: четвёртая про ставку уступает место другому каналу риска
+function capThemes(list, top = 10, per = 3) {
+  const theme = (it) => ((it.reasons || []).find((r) => !["country", "industry", "region", "watch"].includes(r.factor)) || {}).factor || it.event_id;
+  const head = [], rest = [], cnt = {};
+  for (const it of list) {
+    const t = theme(it);
+    if (head.length < top && (cnt[t] || 0) < per) { head.push(it); cnt[t] = (cnt[t] || 0) + 1; } else rest.push(it);
+  }
+  return head.concat(rest);
+}
 function readSet() { try { return new Set(JSON.parse(localStorage.getItem("read:" + state.company) || "[]")); } catch (e) { return new Set(); } }
 function markRead(id) {
   const s = readSet(); s.add(id);
@@ -1009,10 +1023,15 @@ function visibleFeed() {
     && (!filters.factor || it.reasons.some((r) => r.factor === filters.factor))
     && (!days || (now - new Date(it.published_at)) / 864e5 <= days)
     && (!t || (it.title + " " + it.summary).toLowerCase().includes(t))
-    && (!filters.unread || !read.has(it.event_id)));
+    && (!filters.unread || !read.has(it.event_id))
+    && [...filters.quick].every((k) => QF[k](it)));
   if (filters.sort === "date") list = [...list].sort((a, b) => String(b.published_at).localeCompare(String(a.published_at)));
   // «По важности» — строго по шкале; «Рекомендуемые» — порядок сервиса: важность плюс разнообразие тем наверху
   else if (filters.sort === "importance") list = [...list].sort((a, b) => imp(b) - imp(a));
+  else if (filters.sort === "money") {
+    const stake = (it) => { const m = eventMoney(it.event_id); return m ? Math.max(-m.down, m.up) : -1; };
+    list = [...list].sort((a, b) => stake(b) - stake(a) || imp(b) - imp(a));
+  } else list = capThemes(list);
   return list;
 }
 const IMP_RU = ["не касается", "низкая", "средняя", "высокая"];
@@ -1041,7 +1060,10 @@ function renderFeedList(animate = false) {
   const read = readSet(), notes = (state.rerank && state.rerank.notes) || {};
   const reasonText = (it) => it.reasons.slice(0, 2).map((r) => `${r.factor_title}${r.direction && r.direction !== "unknown" ? " " + DIR[r.direction] : ""}`).join(" · ");
   const items = visibleFeed();
-  $("#feedCount").textContent = `${items.length} из ${state.feed.length}`;
+  const fresh = state.feed.filter(isFresh).length;
+  $("#feedCount").textContent = `${items.length} из ${state.feed.length}${fresh ? ` · новых за сутки: ${fresh}` : ""}`;
+  const qn = $("#qfFresh"); if (qn) qn.textContent = fresh ? String(fresh) : "";
+  document.querySelectorAll("[data-qf]").forEach((b) => { const on = filters.quick.has(b.dataset.qf); b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on)); });
   // число событий у фильтров эффекта — как счётчики у вкладок в интернет-банке
   document.querySelectorAll("[data-feff]").forEach((b) => {
     const k = b.dataset.feff, n = k === "all" ? state.feed.length : state.feed.filter((x) => x.effect === k).length;
@@ -1058,7 +1080,7 @@ function renderFeedList(animate = false) {
     day = d;
     return `${head}<div class="feed-item eff-${it.effect} ${read.has(it.event_id) ? "read" : ""} ${it.event_id === state.current ? "active" : ""}" data-ev="${it.event_id}" tabindex="0" role="button">
       ${it.hidden ? `<button class="link-btn unhide" data-unhide="${it.event_id}">Вернуть в ленту</button>` : `<button class="hide-btn" data-hide="${it.event_id}" title="Скрыть из ленты" aria-label="Скрыть из ленты">×</button>`}
-      <div><span class="pill ${it.effect}">${EFFECT[it.effect]}</span>${it.has_bank_view ? `<span class="pill bank">есть позиция банка</span>` : ""}${otherRegionTag(it)}${effectiveTag(it.effective)}</div>
+      <div>${isFresh(it) ? `<span class="pill fresh">новое</span>` : ""}<span class="pill ${it.effect}">${EFFECT[it.effect]}</span>${it.has_bank_view ? `<span class="pill bank">есть позиция банка</span>` : ""}${otherRegionTag(it)}${effectiveTag(it.effective)}</div>
       <div class="title">${read.has(it.event_id) ? "" : `<span class="new-dot" title="Не прочитано"></span>`}${esc(it.title)}${read.has(it.event_id) ? `<span class="read-mark">✓ прочитано</span>` : ""}</div>
       <div class="meta">${fmtDate(it.published_at)} · ${esc([...new Set(it.sources.map((x) => x.source))].join(", "))}${it.sources.length > 1 ? ` · ${it.sources.length} ${plural(it.sources.length, "публикация", "публикации", "публикаций")}` : ""}</div>
       <div class="chips">${entityChips(it)}</div>
@@ -1066,8 +1088,9 @@ function renderFeedList(animate = false) {
       ${personalNote(it)}
       ${(() => { const t = it.imp && it.imp.source === "ai" && it.imp.why ? it.imp.why : n && !(it.imp && it.imp.source === "ai") ? n.why : "";
         return t ? `<details class="ai-note"><summary>${ico("spark")} Комментарий ИИ</summary>${esc(t)}</details>` : ""; })()}
-      ${it.story ? `<div class="story-badge">Сюжет · ${it.story.count} ${plural(it.story.count, "событие", "события", "событий")}: ${esc(fmtDate(it.story.timeline[0].published_at))} → ${esc(fmtDate(it.story.timeline[it.story.timeline.length - 1].published_at))}</div>` : ""}
+      ${it.story ? storyMini(it) : ""}
       ${impBar(it)}
+      <div class="card-foot">${whyMe(it)}${it.hidden ? "" : `<button class="link-btn nfm" data-nfm="${it.event_id}" title="Тема станет ниже в ленте — вернуть можно в профиле">не про меня</button>`}</div>
     </div>`;
   }).join("") || `<div class="empty">${state.feed.length ? "Под фильтры ничего не подошло — сбросьте их." : "Значимых событий нет."}</div>`;
   if (before) for (const el of list.children) {
@@ -1075,6 +1098,45 @@ function renderFeedList(animate = false) {
     if (dy) el.animate([{ transform: `translateY(${dy}px)` }, { transform: "none" }], { duration: 450, easing: "ease-out" });
   }
   bindCards(list);
+}
+// «Почему мне»: из чего сложилась оценка карточки — вклад каждой причины полоской (отрицательный — «другой регион»)
+function whyMe(it) {
+  const rs = (it.reasons || []).filter((r) => r.contribution);
+  if (!rs.length) return "";
+  const max = Math.max(...rs.map((r) => Math.abs(r.contribution)));
+  return `<details class="why-me"><summary>Почему мне</summary><div class="wm-list">${rs.map((r) => `<div class="wm-row" title="${esc(r.why || "")}">
+      <span class="wm-t">${esc(r.factor_title || "")}</span><span class="wm-bar"><i class="${r.contribution < 0 ? "neg" : r.specific ? "sp" : ""}" style="width:${(Math.abs(r.contribution) / max * 100).toFixed(0)}%"></i></span>
+      <span class="wm-w">${esc((r.why || "").slice(0, 120))}${(r.why || "").length > 120 ? "…" : ""}</span></div>`).join("")}</div>
+    <div class="muted small">Длина полоски — вклад в оценку: связь через профиль, граф платежей, регион и ваши настройки. Тёмная — прямая связь с компанией, серая — общий макрофон.</div></details>`;
+}
+// Сюжет на карточке: мини-таймлайн — точки событий по датам, текущее выделено
+function storyMini(it) {
+  const tl = it.story.timeline, last = tl.slice(-6), cur = it.event_id;
+  return `<div class="story-mini" title="Сюжет: ${it.story.count} ${plural(it.story.count, "событие", "события", "событий")} — откройте разбор, чтобы увидеть всю хронологию">
+    <span class="sm-lbl">Сюжет · ${it.story.count}</span><span class="sm-line">${last.map((e) => `<i class="${e.event_id === cur ? "cur" : ""} ${e.direction || ""}" title="${esc(fmtDate(e.published_at) + " · " + e.title)}"></i>`).join("")}</span>
+    <span class="sm-dates">${esc(fmtDate(tl[0].published_at))} → ${esc(fmtDate(tl[tl.length - 1].published_at))}</span></div>`;
+}
+// «Не про меня» с карточки: тема ниже в ленте (вес ×0,6), карточка объясняет, что изменилось
+async function notForMe(id, btn) {
+  btn.disabled = true;
+  try {
+    const r = await api("/api/feedback", { method: "POST", body: JSON.stringify({ event_id: id, company_id: state.company, role: state.role, rating: -1, reason: "not_relevant" }) });
+    const ch = r.changed || [];
+    toast(ch.length ? `Темы ${ch.map((c) => `«${c.title}» — вес ×${String(c.multiplier).replace(".", ",")}`).join(", ")}: такие новости будут ниже. Вернуть — в профиле` : "Спасибо, учтём");
+    await loadFeed(); loadProfile();
+  } catch (e) { btn.disabled = false; toast("Не удалось: " + e.message); }
+}
+// Что сервис не показал: события за 45 дней, не попавшие в ленту, по причинам — с примерами
+async function loadFiltered() {
+  const box = $("#filteredBody");
+  try {
+    const r = await api(`/api/feed/filtered?${q({ company_id: state.company, role: state.role })}`);
+    const total = r.groups.reduce((t, g) => t + g.n, 0);
+    box.className = "";
+    box.innerHTML = `<p class="muted small">За ${r.days} дней сервис разобрал ${r.pool} деловых ${plural(r.pool, "событие", "события", "событий")}, в ленте — ${r.shown}. Ещё ${r.noise} ${plural(r.noise, "новость", "новости", "новостей")} отсеяно при сборе как не деловые (происшествия, спорт, культура).</p>
+      ${r.groups.map((g) => `<div class="fl-g"><div class="fl-h"><b>${g.n}</b><span>${esc(g.title)}</span><span class="fl-bar"><i style="width:${(g.n / Math.max(1, total) * 100).toFixed(1)}%"></i></span></div>
+        <ul>${g.examples.map((e) => `<li><span class="muted">${fmtDate(e.published_at)}</span> ${esc(e.title)}</li>`).join("")}</ul></div>`).join("")}`;
+  } catch (e) { box.textContent = "Не удалось загрузить: " + e.message; }
 }
 function dayTitle(d) {
   if (!d) return "Без даты";
@@ -1102,6 +1164,7 @@ async function hideEvent(id, hidden = true) {
 }
 function bindCards(root) {
   root.querySelectorAll("[data-hide]").forEach((b) => b.onclick = (e) => { e.stopPropagation(); hideEvent(b.dataset.hide); });
+  root.querySelectorAll("[data-nfm]").forEach((b) => b.onclick = (e) => { e.stopPropagation(); notForMe(b.dataset.nfm, b); });
   root.querySelectorAll("[data-unhide]").forEach((b) => b.onclick = (e) => { e.stopPropagation(); hideEvent(b.dataset.unhide, false); });
   root.querySelectorAll("[data-ev]").forEach((el) => {
     const from = root.id === "widgetList" ? "widget" : root.id === "digestBox" ? "digest" : "feed";
@@ -1124,6 +1187,14 @@ function bindFeedControls() {
   $("#fPeriod").onchange = (e) => { filters.period = e.target.value; renderFeedList(); };
   $("#fSort").onchange = (e) => { filters.sort = e.target.value; renderFeedList(); };
   $("#fUnread").onchange = (e) => { filters.unread = e.target.checked; renderFeedList(); };
+  document.querySelectorAll("[data-qf]").forEach((b) => b.onclick = () => {
+    const k = b.dataset.qf;
+    if (filters.quick.has(k)) filters.quick.delete(k); else filters.quick.add(k);
+    track("quick_filter", { meta: { k } });
+    renderFeedList();
+  });
+  const fl = $("#feedFiltered");
+  if (fl) fl.addEventListener("toggle", () => { if (fl.open) loadFiltered(); });
   let t;
   $("#fText").oninput = (e) => { clearTimeout(t); t = setTimeout(() => { filters.text = e.target.value.trim(); renderFeedList(); }, 150); };
 }
@@ -1139,6 +1210,7 @@ async function applyRerank(key) {
   state.rerank = r;
   const pos = new Map(r.order.map((id, i) => [id, i]));
   state.feed.sort((a, b) => (pos.get(a.event_id) ?? 1e9) - (pos.get(b.event_id) ?? 1e9));
+  state.feed = capThemes(state.feed);
   renderFeedList(true);
   renderWidget();
   $("#rerankNote").innerHTML = `${ico("spark")} Порядок уточнён ИИ под ваш профиль`;

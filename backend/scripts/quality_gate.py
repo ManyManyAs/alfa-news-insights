@@ -17,6 +17,7 @@ METRICS = [
     ("relevance.p3", "Лента: P@3", 0.90, 0.05),
     ("relevance.ndcg5", "Лента: nDCG@5", 0.85, 0.05),
     ("relevance.critical_recall10", "Лента: важное в топ-10", 0.85, 0.05),
+    ("relevance.off_target10", "Лента: не по адресу в топ-10 (чужой регион или отрасль; меньше — лучше)", 0.10, None),
     ("golden.in_top10", "Эталонные пары: в топ-10", 0.90, 0.05),
     ("golden.effect_acc", "Эталонные пары: верный эффект", 0.80, 0.05),
     ("retrieval_recall5", "Позиция банка: recall@5", 0.85, 0.05),
@@ -31,6 +32,8 @@ METRICS = [
     ("graph_share", "Объяснено через граф", 0.30, None),
     ("selfcheck_passed", "Разборы прошли самопроверку", 1.0, 0.0),
 ]
+
+LOWER_BETTER = {"relevance.off_target10"}  # метрики, где цель — не больше, а не не меньше
 
 
 def get(d: dict, path: str):
@@ -59,8 +62,11 @@ def main() -> int:
         regress = tol is not None and delta is not None and delta < -tol
         if regress:
             failed.append(f"{title}: {b} → {c}")
-        mark = "❌ падение" if regress else ("✅" if c >= target else "⚠️ ниже цели")
-        lines.append(f"| {title} | {'—' if b is None else b} | {c} | {'—' if delta is None else f'{delta:+.3f}'} | ≥ {target} | {mark} |")
+        low = path in LOWER_BETTER
+        good = c <= target if low else c >= target
+        mark = "❌ падение" if regress else ("✅" if good else ("⚠️ выше цели" if low else "⚠️ ниже цели"))
+        lines.append(f"| {title} | {'—' if b is None else b} | {c} | {'—' if delta is None else f'{delta:+.3f}'} | "
+                     f"{'≤' if low else '≥'} {target} | {mark} |")
     rel = cur.get("relevance", {})
     lines.append("")
     lines.append(f"Разметка: {rel.get('pairs', '?')} пар «профиль — новость», {rel.get('cases', '?')} профилей; "

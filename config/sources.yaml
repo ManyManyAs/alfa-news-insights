@@ -124,6 +124,43 @@ sources:
     url: https://www.cnews.ru/inc/rss/news.xml
     trust: media
 
+  # --- отраслевые (24.10, этап 3 плана улучшений): проверены scripts/probe_feeds.py, доля новостей про экономику 0,51–0,71
+  - id: vedomosti_realty
+    title: Ведомости — недвижимость
+    type: rss
+    url: https://www.vedomosti.ru/rss/rubric/realty
+    trust: media
+  - id: vedomosti_retail
+    title: Ведомости — потребительский рынок
+    type: rss
+    url: https://www.vedomosti.ru/rss/rubric/business/retail
+    trust: media
+  - id: vedomosti_industry
+    title: Ведомости — промышленность
+    type: rss
+    url: https://www.vedomosti.ru/rss/rubric/business/industry
+    trust: media
+  - id: vedomosti_energy
+    title: Ведомости — ТЭК
+    type: rss
+    url: https://www.vedomosti.ru/rss/rubric/business/energy
+    trust: media
+  - id: vedomosti_transport
+    title: Ведомости — транспорт и логистика
+    type: rss
+    url: https://www.vedomosti.ru/rss/rubric/business/transport
+    trust: media
+  - id: vedomosti_agro
+    title: Ведомости — агробизнес
+    type: rss
+    url: https://www.vedomosti.ru/rss/rubric/business/agriculture
+    trust: media
+  - id: stroygaz
+    title: Строительная газета
+    type: rss
+    url: https://www.stroygaz.ru/rss/
+    trust: media
+
   # --- демо
   - id: demo_seed
     title: Демо-набор новостей (data/sample/news_seed.jsonl)

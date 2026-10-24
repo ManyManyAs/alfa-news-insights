@@ -23,7 +23,7 @@
         <p class="login-lead">Тысячи новостей в день. Сервис оставляет те, что касаются именно вашей компании, — и объясняет, <b>что это значит для бизнеса и что делать</b>.</p>
         <ul class="login-points">
           <li><b>85&nbsp;тыс.</b><span>профилей компаний и граф платежей</span></li>
-          <li><b>21</b><span>источник новостей в реальном времени</span></li>
+          <li><b>28</b><span>источников новостей в реальном времени</span></li>
           <li><b>6</b><span>ИИ-моделей: разбор, чат, независимые судьи качества</span></li>
         </ul>
       </div>
@@ -180,13 +180,20 @@
                 <input id="fText" type="search" placeholder="Поиск по ленте" aria-label="Поиск по ленте">
                 <select id="fFactor" aria-label="Фактор"></select>
                 <select id="fPeriod" aria-label="Период"><option value="all">За всё время</option><option value="week">За неделю</option><option value="month">За месяц</option></select>
-                <select id="fSort" aria-label="Сортировка"><option value="recommended">Рекомендуемые</option><option value="importance">По важности</option><option value="date">По дате</option></select>
+                <select id="fSort" aria-label="Сортировка"><option value="recommended">Рекомендуемые</option><option value="importance">По важности</option><option value="money">По деньгам на кону</option><option value="date">По дате</option></select>
                 <label class="chk"><input type="checkbox" id="fUnread"> непрочитанные</label>
                 <button class="link-btn" id="markAllRead" title="Отметить все события ленты прочитанными">прочитать все</button>
+              </div>
+              <div class="qf-row" role="group" aria-label="Быстрые фильтры">
+                <button class="qf" data-qf="fresh" aria-pressed="false">Новое за 24 ч<span class="qf-n" id="qfFresh"></span></button>
+                <button class="qf" data-qf="bank" aria-pressed="false">С позицией банка</button>
+                <button class="qf" data-qf="money" aria-pressed="false">С деньгами на кону</button>
+                <button class="qf" data-qf="soon" aria-pressed="false">Вступает в силу скоро</button>
               </div>
               <div class="tool-row small"><span class="muted" id="feedCount"></span><button class="link-btn" id="showHidden" hidden>Показать скрытые</button><span class="rerank-note" id="rerankNote"></span></div>
             </div>
             <div id="feedList"></div>
+            <details class="filtered" id="feedFiltered"><summary>Что сервис не показал и почему</summary><div id="filteredBody" class="muted small">Загрузка…</div></details>
           </div>
           <div class="insight-col" id="insightCol">
             <div class="m-back"><button class="btn ghost small" id="backToFeed">← К ленте</button></div>
