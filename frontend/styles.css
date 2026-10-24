@@ -1824,3 +1824,8 @@ button.cite { border: 0; font: inherit; cursor: pointer; }
 .tour-prog i { display: block; height: 100%; width: 100%; background: var(--red); transform-origin: left; transform: scaleX(0); }
 @keyframes tourProg { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 .tour-pop .row { flex-wrap: wrap; } .tour-pop .row > span { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* после разбора к событию добавились публикации */
+.news-added { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 12px; padding: 10px 12px; border-radius: var(--radius-s); background: var(--watch-bg); color: var(--ink2); font-size: 13.5px; }
+.news-added > span { flex: 1; min-width: 220px; }
+.news-added .ico { width: 16px; height: 16px; color: var(--watch); flex: none; }

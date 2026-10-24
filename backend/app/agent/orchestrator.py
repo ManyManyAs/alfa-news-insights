@@ -479,6 +479,7 @@ def run_agent(event: Event, profile: CompanyProfile, role: str | None = None, li
     ins = fix_headline(ins, ctx)
     ins.sources = build_sources(ins, ctx)
     ins.trace_id = tracer.trace_id
+    ins.news_seen = [n.id for n in event.news]
     ins.relevance = {"score": scored.score, "reasons": scored.reasons, "focus": p.get("focus")}
     if issues_ := (ctx.memory.get("check_consistency") or {}).get("issues"):
         ins.relevance["consistency_issues"] = issues_

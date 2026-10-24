@@ -13,7 +13,7 @@ import re
 from datetime import UTC, date, datetime
 
 from app.agent.rules import NUM_RE, _num, all_claims, headline_forecast
-from app.agent.schemas import Insight
+from app.agent.schemas import Insight, SourceRef
 from app.knowledge.bank import get_knowledge
 
 BANK_FRESH_DAYS = 90  # материал старше квартала — «позиция могла обновиться» (макропрогноз банк пересматривает раз в квартал)
@@ -170,6 +170,55 @@ def _words(s: str) -> set[str]:
     return {w[:6] for w in re.findall(r"[а-яёa-z]{5,}", (s or "").lower()) if w not in _STOP}
 
 
+# Перепечатка — не подтверждение: «сообщает Интерфакс» в РБК и сам Интерфакс — один первоисточник.
+AGENCIES = {"интерфакс": "Интерфакс", "тасс": "ТАСС", "риа": "РИА Новости", "прайм": "ПРАЙМ",
+            "reuters": "Reuters", "bloomberg": "Bloomberg"}
+_AGENCY_RE = re.compile(r"(?:сообща\w*|переда\w*|по данным|со ссылкой на|пишет|информирует|цитирует)\s+(?:агентств\w+\s+)?[«\"]?"
+                        r"(интерфакс\w*|тасс|риа(?:\s+новост\w*)?|прайм\w*|reuters|bloomberg)", re.I)
+REPRINT_SIM = 0.6  # доля общих слов (Жаккар), при которой два текста считаются одной заметкой
+
+
+def _agency(n) -> str | None:
+    """Чей это материал: агентство-первоисточник по ссылке в тексте или по названию издания."""
+    name = (n.source_title or n.source or "").lower()
+    for k, v in AGENCIES.items():
+        if name.startswith(k):
+            return v
+    m = _AGENCY_RE.search(f"{n.title} {n.text}")
+    if m:
+        w = m.group(1).lower()
+        return next(v for k, v in AGENCIES.items() if w.startswith(k))
+    return None
+
+
+def independent_sources(claim_text: str, news: list) -> int:
+    """Сколько независимых первоисточников подтверждают факт: перепечатки одного агентства и почти одинаковые
+    тексты считаются одним источником."""
+    groups: list[tuple[str | None, set[str]]] = []
+    outlets = set(fact_support(claim_text, news))
+    for n in news:
+        if (n.source_title or n.source) not in outlets:
+            continue
+        ag, words = _agency(n), _words(f"{n.title} {n.text}")
+        same = next((g for g in groups if (ag and g[0] == ag)
+                     or (words and g[1] and len(words & g[1]) / len(words | g[1]) >= REPRINT_SIM)), None)
+        if same is None:
+            groups.append((ag, words))
+        outlets.discard(n.source_title or n.source)
+    return len(groups)
+
+
+def news_added(ins, ev) -> list:
+    """Публикации, которые приклеились к событию после разбора. Старые разборы без news_seen: всё, что вышло
+    позже самой свежей процитированной новости."""
+    if ins.news_seen is not None:
+        seen = set(ins.news_seen)
+        return [n for n in ev.news if n.id not in seen]
+    cited = {s.id.partition(":")[2] for s in ins.sources if s.type == "news"}
+    latest = max((n.published_at or "" for n in ev.news if n.id in cited), default="")
+    return [n for n in ev.news if n.id not in cited and latest and (n.published_at or "") > latest]
+
+
 def fact_support(claim_text: str, news: list) -> list[str]:
     """Издания, в тексте которых есть все числа факта, а без чисел — большая часть его слов."""
     nums = {_num(x) for x in NUM_RE.findall(claim_text)}
@@ -303,6 +352,13 @@ def review(ins: Insight, ev, today: date | None = None) -> Insight:
     for c in ins.what_happened:
         if c.kind == "fact":
             c.support = fact_support(c.text, ev.news)
+            c.independent = independent_sources(c.text, ev.news) if c.support else None
+    added = news_added(ins, ev)
+    ins.news_added = [{"title": n.title, "source": n.source_title or n.source, "url": n.url, "published_at": n.published_at}
+                      for n in added]
+    have = {s.id for s in ins.sources}
+    ins.sources += [SourceRef(id=f"news:{n.id}", type="news", title=n.title, url=n.url, date=n.published_at,
+                              quote=(n.source_title or n.source)) for n in added if f"news:{n.id}" not in have]
     try:
         from app.knowledge.library import usage_map
 

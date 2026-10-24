@@ -1343,7 +1343,10 @@ function supportTag(c) {
   if (c.kind !== "fact" || !c.support) return "";
   const n = c.support.length;
   if (!n) return `<span class="sup none" title="Числа или слова факта не нашлись дословно в тексте новостей — сверьте с первоисточником">сверьте с источником</span>`;
-  return `<span class="sup ${n >= 2 ? "two" : ""}" title="${esc(c.support.join(", "))}">${n >= 2 ? "✓ подтверждают " + n + " " + plural(n, "издание", "издания", "изданий") : "1 источник"}</span>`;
+  // перепечатки одного агентства — один первоисточник: «2 публикации, 1 первоисточник», а не «подтверждают 2»
+  const ind = c.independent ?? n;
+  if (n >= 2 && ind < 2) return `<span class="sup" title="${esc(c.support.join(", "))} — перепечатки одного материала">1 первоисточник · ${n} ${plural(n, "публикация", "публикации", "публикаций")}</span>`;
+  return `<span class="sup ${ind >= 2 ? "two" : ""}" title="${esc(c.support.join(", "))}">${ind >= 2 ? "✓ подтверждают " + ind + " " + plural(ind, "независимых источника", "независимых источника", "независимых источников") : "1 источник"}</span>`;
 }
 // Позиция банка: дата материала; старше квартала — позиция могла обновиться
 function asOfTag(c) {
@@ -1672,6 +1675,7 @@ function renderInsight(tab) {
       <span class="ins-actions"><button class="btn ghost small" id="pdfBtn" title="Сохранить разбор в PDF через печать браузера">${ico("doc")} PDF</button><button class="btn ghost small" id="refreshBtn" title="Пересобрать разбор заново">Пересчитать</button></span></div>
     <h2 style="margin-top:8px">${esc(i.headline)}</h2>
     ${impExplain((state.feed || []).find((x) => x.event_id === state.current))}
+    ${(i.news_added || []).length ? `<div class="news-added">${ico("info")} <span>После разбора к событию добавились ${i.news_added.length} ${plural(i.news_added.length, "публикация", "публикации", "публикаций")}: ${i.news_added.slice(0, 3).map((x) => esc(x.source)).join(", ")}. Они уже в «Источниках», подтверждения фактов пересчитаны. Выводы построены по прежним публикациям.</span> <button class="btn ghost small" data-refresh-ins>Пересчитать разбор</button></div>` : ""}
     ${shortBlock(i)}
     ${divergenceBlock(i)}
     ${state.detail ? storyDelta(i) + numbersBlock(i) : ""}
@@ -1704,6 +1708,7 @@ function renderInsight(tab) {
   document.querySelectorAll("#insightPanel [data-csv]").forEach((el) => el.onclick = () => downloadCalc(i));
   applyNumsToInsight(i);
   $("#refreshBtn").onclick = () => openInsight(state.current, true);
+  document.querySelectorAll("#insightPanel [data-refresh-ins]").forEach((b) => b.onclick = () => openInsight(state.current, true));
   $("#pdfBtn").onclick = () => printDoc("insight");
   document.querySelectorAll("[data-fb]").forEach((el) => el.onclick = () => +el.dataset.fb > 0 ? sendFeedback(1) : ($("#fbReasons").hidden = false));
   document.querySelectorAll("[data-fbr]").forEach((el) => el.onclick = () => sendFeedback(-1, el.dataset.fbr));
