@@ -25,15 +25,19 @@ function renderCalGrids(box, items, todayStr) {
   const byDay = {};
   items.forEach((x) => (byDay[x.date] = byDay[x.date] || []).push(x));
   const t = new Date(todayStr);
-  let off = 0;
+  // открываем на месяце ближайшего события: в пустом текущем месяце смотреть нечего; листать — до последнего события
+  const mIdx = (d) => { const x = new Date(d); return (x.getFullYear() - t.getFullYear()) * 12 + x.getMonth() - t.getMonth(); };
+  const upcoming = items.filter((x) => x.date >= todayStr);
+  const maxOff = Math.max(0, ...items.map((x) => mIdx(x.date) - 1));
+  let off = upcoming.length ? Math.min(Math.max(0, mIdx(upcoming[0].date)), maxOff) : 0;
   const draw = () => {
     const a = new Date(t.getFullYear(), t.getMonth() + off, 1), b = new Date(t.getFullYear(), t.getMonth() + off + 1, 1);
     box.innerHTML = `<div class="cg-nav"><button class="icon-btn sm" data-cgp="-1" aria-label="Предыдущие месяцы" ${off <= 0 ? "disabled" : ""}>‹</button>
         <div class="cg-legend small"><span class="cbr">заседание ЦБ</span><span class="norm">вступает в силу</span><span class="task">моё действие</span></div>
-        <button class="icon-btn sm" data-cgp="1" aria-label="Следующие месяцы" ${off >= 2 ? "disabled" : ""}>›</button></div>
+        <button class="icon-btn sm" data-cgp="1" aria-label="Следующие месяцы" ${off >= maxOff ? "disabled" : ""}>›</button></div>
       <div class="cg-wrap">${monthGrid(a.getFullYear(), a.getMonth(), byDay, todayStr)}${monthGrid(b.getFullYear(), b.getMonth(), byDay, todayStr)}</div>
       <div class="cg-pop" role="tooltip" hidden></div>`;
-    box.querySelectorAll("[data-cgp]").forEach((btn) => btn.onclick = () => { off = Math.max(0, Math.min(2, off + +btn.dataset.cgp)); draw(); });
+    box.querySelectorAll("[data-cgp]").forEach((btn) => btn.onclick = () => { off = Math.max(0, Math.min(maxOff, off + +btn.dataset.cgp)); draw(); });
     const pop = box.querySelector(".cg-pop");
     let hideT = 0;
     const showPop = (el) => {
