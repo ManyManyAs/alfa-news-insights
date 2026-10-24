@@ -21,7 +21,7 @@
   --radius: 20px; --radius-m: 16px; --radius-s: 12px;
   --shadow: 0 1px 2px rgba(16, 18, 22, .04), 0 4px 16px rgba(16, 18, 22, .04);
   --shadow-lift: 0 2px 4px rgba(16, 18, 22, .05), 0 16px 40px rgba(16, 18, 22, .10);
-  --sidebar: #ffffff; --sidebar-ink: #3d424a; --side-strong: #0b0b0d; --side-hover: #f2f3f5; --side-active: #eef0f3; --side-sep: #7a808a;
+  --sidebar: #ffffff; --sidebar-ink: #3d424a; --side-strong: #0b0b0d; --side-hover: #f2f3f5; --side-active: #eef0f3; --side-sep: #646a74;
   --top-bg: rgba(255, 255, 255, .92);
   --font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --display: "Inter Display", "Inter", system-ui, sans-serif;
