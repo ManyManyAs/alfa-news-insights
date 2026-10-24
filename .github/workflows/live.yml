@@ -24,6 +24,10 @@ on:
         description: "warmup: пересобрать уже готовые инсайты (после правки промптов)"
         type: boolean
         default: false
+      ingest:
+        description: "warmup: сначала собрать свежие новости из RSS (живой поток в снапшот — тогда «docker compose up» показывает свежие события)"
+        type: boolean
+        default: false
       interactive:
         description: "warmup: приоритет как у пользователя — для коротких замеров (тратит и из резерва бюджета для пользователей)"
         type: boolean
@@ -98,6 +102,18 @@ jobs:
       - name: Предрасчёт разборов и инсайтов
         if: inputs.task == 'warmup' || inputs.task == 'all'
         run: |
+          if [ "${{ inputs.ingest }}" = "true" ]; then
+            python scripts/manage.py ingest | tee ingest.log | tail -40
+            python - <<'EOF2'
+          import json, re
+          t = open("ingest.log", encoding="utf-8").read()
+          try:
+              d = json.loads(t[t.index("{"):])
+              print(f"::notice title=ingest::новостей {d.get('fetched')}, новых событий {d.get('new_events')}, склеено {d.get('merged')}, шум {d.get('noise')}, ошибок источников {len(d.get('errors', []))}")
+          except Exception as e:
+              print("::warning title=ingest::не удалось разобрать итог сбора:", e)
+          EOF2
+          fi
           ROLES=""; if [ "${{ inputs.roles }}" = "true" ]; then ROLES="--roles"; fi
           REFRESH=""; if [ "${{ inputs.refresh }}" = "true" ]; then REFRESH="--refresh"; fi
           # мягкий лимит 85 мин: job ограничен 120 мин, снапшот должен успеть выгрузиться
