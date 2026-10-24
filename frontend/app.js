@@ -1100,9 +1100,48 @@ function srcTags(ids) {
     return `<span class="src ${esc(kind)}" data-src="${esc(s)}" title="${esc(src ? src.title : s)}">${label}</span>`;
   }).join("");
 }
+// Факт: сколько изданий его подтверждают (сервис сверяет числа и слова факта с текстом каждой новости события)
+function supportTag(c) {
+  if (c.kind !== "fact" || !c.support) return "";
+  const n = c.support.length;
+  if (!n) return `<span class="sup none" title="Числа или слова факта не нашлись дословно в тексте новостей — сверьте с первоисточником">сверьте с источником</span>`;
+  return `<span class="sup ${n >= 2 ? "two" : ""}" title="${esc(c.support.join(", "))}">${n >= 2 ? "✓ подтверждают " + n + " " + plural(n, "издание", "издания", "изданий") : "1 источник"}</span>`;
+}
+// Позиция банка: дата материала; старше квартала — позиция могла обновиться
+function asOfTag(c) {
+  if (c.kind !== "bank_view" || !c.as_of) return "";
+  const d = new Date(c.as_of).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" });
+  return `<span class="asof ${c.stale ? "stale" : ""}" title="${c.stale ? "Материалу больше трёх месяцев: банк мог обновить позицию" : "Дата материала Альфа-Банка"}">материал от ${esc(d)}${c.stale ? " · позиция могла обновиться" : ""}</span>`;
+}
+// Словарь: термин в тексте — с подсказкой по наведению и фокусу (один раз на утверждение)
+const GLOSS = [
+  [/ключев\S* ставк\S*/i, "Ставка Банка России, от которой зависят ставки по кредитам и депозитам"],
+  [/плавающ\S* ставк\S*/i, "Ставка кредита, привязанная к ключевой: меняется вслед за решениями ЦБ"],
+  [/\bФОТ\b/, "Фонд оплаты труда — все расходы компании на зарплаты за период"],
+  [/ковенант\S*/i, "Условия кредитного договора (например, долг не больше 3 прибылей); нарушение даёт банку право требовать досрочного погашения"],
+  [/\bВЭД\b/, "Внешнеэкономическая деятельность: импорт и экспорт компании"],
+  [/хеджир\S*/i, "Защита от колебаний курса или ставки финансовым инструментом (форвард, своп, фиксация ставки)"],
+  [/форвард\S*/i, "Договор о покупке валюты в будущем по курсу, зафиксированному сегодня"],
+  [/факторинг\S*/i, "Финансирование под отсрочку платежа покупателей: банк платит сразу, покупатель — позже"],
+  [/п\.\s?п\./, "Процентный пункт — разница между процентами: ставка 16% → 17% выросла на 1 п.п."],
+  [/маржинальност\S*/i, "Доля прибыли в выручке после прямых затрат"],
+  [/оборотн\S* капитал\S*/i, "Деньги в запасах, дебиторке и расчётах — то, что нужно для ежедневной работы"],
+  [/утильсбор\S*/i, "Сбор при ввозе и продаже машин и техники, платит производитель или импортёр"],
+  [/\bУСН\b/, "Упрощённая система налогообложения для малого бизнеса"],
+  [/\bНДС\b/, "Налог на добавленную стоимость"],
+  [/инфляци\S*/i, "Рост общего уровня цен за год"],
+];
+function gloss(text) {
+  let html = esc(text);
+  for (const [re, tip] of GLOSS) {
+    const m = html.match(re);
+    if (m && !/<[^>]*$/.test(html.slice(0, m.index))) html = html.slice(0, m.index) + `<abbr class="gl" tabindex="0" title="${esc(tip)}">${m[0]}</abbr>` + html.slice(m.index + m[0].length);
+  }
+  return html;
+}
 function claims(list) {
   return (list || []).map((c) => `<div class="claim ${c.kind} ${c.confidence === "low" ? "conf-low" : ""}">
-    <span class="kind">${KIND[c.kind] || c.kind}</span>${esc(c.text)}${c.owner || c.due ? `<div class="act-meta">${c.owner ? `<span class="am-owner">${ico("user")} ${esc(c.owner)}</span>` : ""}${c.due ? `<span class="am-due">${ico("clock")} ${esc(c.due)}</span>` : ""}</div>` : ""}<div>${srcTags(c.sources)}${c.kind !== "fact" ? `<span class="conf ${c.confidence}" title="${esc(CONF_DEF[c.confidence] || "")}">${CONF[c.confidence] || ""}</span>` : ""}</div></div>`).join("") || `<div class="muted small">нет данных</div>`;
+    <span class="kind">${KIND[c.kind] || c.kind}</span>${gloss(c.text)}${c.owner || c.due ? `<div class="act-meta">${c.owner ? `<span class="am-owner">${ico("user")} ${esc(c.owner)}</span>` : ""}${c.due ? `<span class="am-due">${ico("clock")} ${esc(c.due)}</span>` : ""}</div>` : ""}<div>${srcTags(c.sources)}${supportTag(c)}${asOfTag(c)}${c.kind !== "fact" ? `<span class="conf ${c.confidence}" title="${esc(CONF_DEF[c.confidence] || "")}">${CONF[c.confidence] || ""}</span>` : ""}</div></div>`).join("") || `<div class="muted small">нет данных</div>`;
 }
 
 // Первые n утверждений раздела видны сразу, остальные — по кнопке «ещё»: меньше текста на первом экране разбора
@@ -1266,8 +1305,9 @@ function shortBlock(i) {
   return `<div class="takeaway short">
     <div class="sh-head"><span class="claim-kind">КОРОТКО</span>${(() => { const card = (state.feed || []).find((x) => x.event_id === i.event_id); const L = card ? impLevel(card) : i.materiality != null ? { level: i.materiality, label: IMP_RU[i.materiality] } : null;
       return L ? `<span class="sh-mat m${L.level}" title="${esc(i.materiality_why || "")}">важность: ${L.label}</span>` : ""; })()}</div>
+    <div class="sh-lead">${esc(i.takeaway.text)}</div>
     ${fact ? row("Что случилось", esc(fact.text)) : ""}
-    ${row("Что это значит", `${esc(i.takeaway.text)}${moneyLine(i, sc, lo, hi)}`)}
+    ${(i.scenarios || []).length ? row("Деньги", moneyLine(i, sc, lo, hi)) : ""}
     ${act ? row("Что сделать", `${esc(act.text)}${act.owner || act.due ? `<div class="sh-meta">${act.owner ? `${ico("user")} ${esc(act.owner)}` : ""}${act.due ? ` · ${ico("clock")} ${esc(act.due)}` : ""}</div>` : ""}`) : ""}
     <div class="sh-src">${srcTags(i.takeaway.sources)}</div></div>`;
 }
@@ -1289,6 +1329,42 @@ function divergenceBlock(i) {
   return `<div class="diverge"><div class="dv-head">Рынок и Альфа-Банк смотрят по-разному</div>
     ${issues.slice(0, 2).map((x) => `<div class="dv-row">${esc(x)}</div>`).join("")}
     <div class="muted small">Сервис показывает оба взгляда. Вывод в таких местах — мнение модели, а не позиция банка.</div></div>`;
+}
+
+// Проверяемость разбора: тип события и на что разбор обязан ответить, цифры новости рядом с прогнозом банка, что нового в сюжете
+function reviewBlock(i) {
+  const r = i.review || {}, k = r.kind;
+  if (!k) return "";
+  const items = k.items.map((x) => `<li class="${x.ok ? "ok" : "miss"}">${x.ok ? "✓" : "○"} ${esc(x.label)}${x.ok ? "" : ` <span class="muted">— в разборе нет</span>`}</li>`).join("");
+  const facts = (i.what_happened || []).filter((c) => c.kind === "fact" && c.support);
+  const two = facts.filter((c) => c.support.length >= 2).length;
+  return `<div class="review-card">
+    <div class="rv-head"><span class="rv-kind">${esc(k.title)}</span><span class="rv-score ${k.passed === k.items.length ? "ok" : ""}">${k.passed} из ${k.items.length}</span></div>
+    <div class="muted small">Что разбор должен ответить для такого события — проверено сервисом по тексту разбора</div>
+    <ul class="rv-list">${items}</ul>
+    ${facts.length ? `<div class="rv-facts">${ico("doc")} Факты: ${facts.length} · ${two ? `${two} подтверждены двумя и более изданиями` : r.sources_n > 1 ? "каждый — в одном издании" : "событие описано одним изданием"}</div>` : ""}
+  </div>`;
+}
+function numbersBlock(i) {
+  const rows = ((i.review || {}).numbers || []);
+  if (!rows.length) return "";
+  const n = (v) => String(v).replace(".", ",");
+  return `<div class="nums-card"><div class="dv-head">Цифры рядом: новость и Альфа-Банк</div>
+    ${rows.map((x) => `<div class="nm-row"><span class="nm-t">${esc(x.title)}</span>
+      <span class="nm-v"><b>${n(x.news_value)}%</b><i>${esc(x.news_source)}</i></span>
+      <span class="nm-vs">${x.differs ? "≠" : "≈"}</span>
+      <span class="nm-v bank"><b>${n(x.bank_value)}%</b><i>прогноз банка на ${esc(x.bank_period)} г.</i></span></div>
+      ${x.differs ? `<div class="muted small">Расходятся на ${n(Math.abs(x.gap_pp))} п.п. Часто это разные горизонты: в новости — текущее значение или оценка автора, у банка — прогноз на конец года. Сервис показывает оба числа и не выбирает, кто прав.</div>` : ""}`).join("")}
+  </div>`;
+}
+function storyDelta(i) {
+  const d = (i.review || {}).story_delta;
+  if (!d) return "";
+  return `<div class="delta-card"><div class="dv-head">Что изменилось с прошлого события сюжета</div>
+    <div class="dl-row"><span class="dl-k">Раньше · ${fmtDate(d.prev.date)}</span><span>${esc(d.prev.title)}</span></div>
+    <div class="dl-row now"><span class="dl-k">Сейчас${d.days_since_prev != null ? ` · через ${d.days_since_prev} ${plural(d.days_since_prev, "день", "дня", "дней")}` : ""}</span><span>${esc(d.now)}</span></div>
+    ${d.new_numbers.length ? `<div class="dl-new">Новые цифры: ${d.new_numbers.map((x) => `<b>${esc(x)}</b>`).join(" ")}</div>` : ""}
+    <div class="muted small">Событие ${d.position} из ${d.count} в сюжете «${esc(d.story_title || "")}»</div></div>`;
 }
 
 function renderInsight(tab) {
@@ -1316,6 +1392,7 @@ function renderInsight(tab) {
         <div class="bv-card"><div class="bv-head"><span class="bv-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 10 12 4l9 6M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18"/></svg></span><div><b>Позиция Альфа-Банка</b><div class="muted small">тезисы и прогнозы из аналитики банка — со ссылкой на документ и страницу</div></div></div>
         ${(i.bank_view || []).length ? claims(i.bank_view) : `<div class="muted small">В аналитике банка нет материалов по этой теме — сервис не придумывает позицию за банк.</div>`}</div></div>
       <div class="q"><h4><span class="n">6</span>На чём основан вывод</h4>
+        ${reviewBlock(i)}
         <div class="qa-sum"><span class="qa-ring ${allOk ? "ok" : "warn"}">${i.quality.filter((c) => c.passed).length}/${i.quality.length}</span>
           <div><b>${allOk ? "Самопроверка пройдена" : "Самопроверка: есть замечания"}</b><div class="muted small">Каждое утверждение помечено типом и источником · ${i.iterations} ${plural(i.iterations, "проход", "прохода", "проходов")} проверки</div></div></div>
         <details class="qa-details"><summary>Все проверки</summary><ul class="quality">${i.quality.map((c) => `<li class="${c.passed ? "ok" : "bad"}">${c.passed ? "✓" : "✗"} ${esc(CHECK_RU[c.name] || c.name)}${c.passed ? "" : " — " + esc(cleanRefs(c.detail))}</li>`).join("")}</ul>
@@ -1345,6 +1422,7 @@ function renderInsight(tab) {
     <h2 style="margin-top:8px">${esc(i.headline)}</h2>
     ${shortBlock(i)}
     ${divergenceBlock(i)}
+    ${state.detail ? storyDelta(i) + numbersBlock(i) : ""}
     ${state.detail ? `
     ${i.data_gaps.length ? `<div class="notice">Учтены пробелы в данных: ${esc(i.data_gaps.join("; "))}</div>` : ""}
     ${(() => { const f = state.feed.find((x) => x.event_id === state.current); return f && f.story ? `<details class="story" open><summary>Развитие сюжета · ${f.story.count} ${plural(f.story.count, "событие", "события", "событий")}</summary>${storyLine(f.story, state.current)}</details>` : ""; })()}
@@ -1650,7 +1728,8 @@ async function loadDigest() {
 
 // Названия проверок — словами клиента; служебные ссылки в пояснениях не показываем
 const CHECK_RU = { "Ответ на 6 вопросов": "Есть ответы на все 6 вопросов", "Персонализация (не пересказ)": "Вывод опирается на данные компании, а не пересказывает новость",
-  "Нет следов prompt injection": "Текст новости не пытался вмешаться в работу сервиса", "Ссылки на источники корректны": "Все ссылки ведут на реальные источники" };
+  "Нет следов prompt injection": "Текст новости не пытался вмешаться в работу сервиса", "Ссылки на источники корректны": "Все ссылки ведут на реальные источники",
+  "Есть конкретика: цифры и факты": "В объяснении есть цифры и факты, а не общие слова" };
 function cleanRefs(t) { return String(t || "").replace(/\b(?:news|bank|graph|profile|calc|peers):[^\s,;)]+/g, "источник").replace(/(источник)(,\s*источник)+/g, "$1"); }
 
 // ---------------------------------------------------------------- PDF: печать браузера со своими стилями

@@ -657,7 +657,18 @@ def insight(event_id: str, company_id: str, role: str | None = None, refresh: bo
         raise HTTPException(404, "Событие не найдено")
     if refresh or not cached_insight(ev.id, p.uid, role):
         throttle(user, "insight", 12)
-    return get_or_create_insight(ev, p, role, force=refresh)
+    return served(get_or_create_insight(ev, p, role, force=refresh), ev)
+
+
+def served(ins: Insight, ev) -> Insight:
+    """Разбор для выдачи: проверяемые пометки (источники фактов, дата позиции банка, чек-лист типа события)."""
+    from app.agent.review import review
+
+    try:
+        return review(ins, ev)
+    except Exception:  # пометки — дополнение, без них разбор всё равно отдаётся
+        log.exception("Не удалось дополнить разбор проверками")
+        return ins
 
 
 def _sse(obj: dict) -> str:
@@ -681,7 +692,7 @@ def insight_stream(event_id: str, company_id: str, request: Request, role: str |
 
     def gen() -> Iterator[str]:
         if not refresh and (hit := cached_insight(ev.id, p.uid, role)):
-            yield _sse({"type": "done", "cached": True, "insight": hit.model_dump()})
+            yield _sse({"type": "done", "cached": True, "insight": served(hit, ev).model_dump()})
             return
         q: queue.Queue = queue.Queue()
         result: dict = {}
@@ -701,7 +712,7 @@ def insight_stream(event_id: str, company_id: str, request: Request, role: str |
         if "error" in result:
             yield _sse({"type": "error", "detail": result["error"]})
         else:
-            yield _sse({"type": "done", "cached": False, "insight": result["insight"].model_dump()})
+            yield _sse({"type": "done", "cached": False, "insight": served(result["insight"], ev).model_dump()})
 
     return StreamingResponse(gen(), media_type="text/event-stream", headers=SSE_HEADERS)
 

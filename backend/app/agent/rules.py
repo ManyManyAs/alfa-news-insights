@@ -354,6 +354,12 @@ def foreign_profile_sources(ins: Insight, ctx: AgentContext) -> list[str]:
                    if s.startswith(("profile:", "graph:", "peers:")) and s not in allowed})
 
 
+def has_specifics(ins: Insight) -> bool:
+    """В объяснении «почему важно» и последствиях есть хотя бы одно число — иначе вывод читается как общий совет."""
+    claims = ins.why_it_matters + ins.consequences.risks + ins.consequences.opportunities
+    return any(re.search(r"\d", c.text) for c in claims)
+
+
 def _tokens(s: str) -> set[str]:
     return {w for w in re.findall(r"[а-яёa-z0-9]{4,}", (s or "").lower())}
 
@@ -426,6 +432,9 @@ def critique_rules(ins: Insight, ctx: AgentContext) -> tuple[list[QualityCheck],
         check("Числа позиции банка совпадают с материалом", not mism,
               "; ".join(f"«{r}» нет в {', '.join(x for x in c.sources if x.startswith('bank:'))}"
                         + (f" — это число из {alt}" if alt else " — сверьте число или ссылку") for c, r, alt in mism[:3]))
+        check("Есть конкретика: цифры и факты", has_specifics(ins),
+              "в «почему важно» и «последствиях» нет ни одного числа — добавьте число из новости, профиля, графа платежей "
+              "или calc:scenario (ставка, доля, сумма, дата)")
         foreign = foreign_profile_sources(ins, ctx)
         check("Ссылки на профиль — из списка контекста", not foreign,
               f"нет в allowed_sources: {', '.join(foreign[:4])} — используйте id из списка")
