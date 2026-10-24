@@ -1816,3 +1816,4 @@ button.cite { border: 0; font: inherit; cursor: pointer; }
 /* единые скелетоны: ширина строк разная, как у настоящего текста */
 .skeleton.sm { height: 64px; }
 #opsBox:empty::before { content: ""; display: block; height: 180px; border-radius: var(--radius-m); background: linear-gradient(90deg, var(--sk1) 25%, var(--sk2) 50%, var(--sk1) 75%); background-size: 200% 100%; animation: sk 1.2s linear infinite; }
+.cmd-btn { flex: none; min-width: 38px; }
