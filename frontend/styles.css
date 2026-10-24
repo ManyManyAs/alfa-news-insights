@@ -1156,3 +1156,9 @@ h2 { font-size: 22px; font-weight: 750; }
   body:not(.nav-open) .sidebar .nav-item[data-short]::after { content: attr(data-short); }
 }
 .mini-dot { align-self: start; justify-self: start; flex: none; }
+
+/* блок радара: высота по содержимому (лента прогнозов внизу не обрезается), выбор периода не закрывает глобус */
+.hero { height: auto; min-height: clamp(380px, calc(100vh - var(--top-h, 64px) - 240px), 440px); grid-template-rows: minmax(0, 1fr) auto; }
+.hero-globe canvas { top: 56px; height: calc(100% - 56px - 46px); }
+.ticker { align-self: end; flex: none; }
+@media (max-width: 1200px) { .hero { min-height: 0; } .hero-globe canvas { top: 48px; height: calc(100% - 48px - 40px); } }
